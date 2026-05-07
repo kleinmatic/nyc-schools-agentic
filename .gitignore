@@ -1,12 +1,43 @@
+# --- Python ---
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
-.env
-.DS_Store
-school-data/
+.ipynb_checkpoints/
+
+# --- Node / web ---
 node_modules/
 dist/
 build/
 .next/
+
+# --- Secrets & local config ---
+# Anything you don't want in a public AGPL repo goes here. Better still:
+# keep it in a sibling private repo. See README "License & private state".
+.env
+.env.*
+!.env.example
+.envrc
+*.pem
+*.key
+*.p12
+id_rsa*
+secrets/
+credentials/
+private/
+notes/
+local/
+*.local
+*.local.*
+
+# --- Data cache (large; rebuilt by scripts/fetch_data.py) ---
+school-data/
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.log

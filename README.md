@@ -127,6 +127,19 @@ The year column is **`ay`** = academic year start, integer (e.g. `2024` means 20
 
 If a parent visiting the site would never see it, and another data-analysis project could reuse it, it's upstream. Otherwise it's here.
 
+## License & private state
+
+This project is **AGPL-3.0** (matching upstream `nycschools`). Full text in [LICENSE](./LICENSE).
+
+In practice that means:
+- Anyone we share code with — and anyone interacting with a deployed service that runs this code — has the right to obtain the full source, including any modifications. If we deploy a server-side instance (a live API, an admin tool, etc.), it must link to the source.
+- A static-build deployment (the path CLAUDE.md prefers) still ships AGPL'd build tooling, but the deployed artifact is just JSON + JS, so the disclosure obligation is satisfied by keeping this repo public.
+- Any code that imports from this project (or from `nycschools`) has to be AGPL-compatible. Plan dependencies with that in mind.
+
+**Don't commit anything you wouldn't put in a public repo.** Deploy keys, internal notes, vendor credentials, scratch SQL, etc. should either:
+1. Land in `.env`, `secrets/`, `private/`, `notes/`, or any `*.local` file (all gitignored), **or**
+2. Live in a sibling private repo (e.g. `~/Code/nyc-report-card-private/`). Cleaner, harder to leak by accident.
+
 ## Gotchas
 
 - `urllib3 NotOpenSSLWarning: ... LibreSSL 2.8.3` on macOS — benign, comes from system Python's TLS stack. Ignore.
