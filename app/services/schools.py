@@ -612,47 +612,72 @@ def _nysed_for(dbn: str) -> Optional[NysedReport]:
 
 # ----- peer comparison -----
 
-def _compute_peer_rank(
-    dbn: str, df: pd.DataFrame, value_col: str, ascending: bool = False
-) -> Optional[tuple[int, int, str, float]]:
-    """Rank `dbn`'s value in `value_col` against same-school-level peers.
+def _school_level_for(dbn: str) -> Optional[str]:
+    """Latest known school_level for this DBN, or None if missing."""
+    df = data.get_store().demographics
+    latest = df[df["ay"] == df["ay"].max()]
+    rows = latest[latest["dbn"] == dbn]
+    if rows.empty:
+        return None
+    sl = rows.iloc[0].get("school_level")
+    if sl is None or pd.isna(sl):
+        return None
+    return str(sl)
 
-    Returns (rank, total, school_level, value), or None if the school
-    isn't in the dataframe, has no value, has no school_level, or has
-    fewer than 2 same-level peers (no meaningful comparison).
+
+def _nysed_level_for(school_level: str) -> Optional[str]:
+    """Map our school_level to NYSED's EM/HS distinction.
+
+    NYSED tables split into Elementary/Middle ("EM") vs High School ("HS")
+    indicators. Schools spanning both (K-12) get None — skip ranking.
+    """
+    sl = (school_level or "").lower()
+    if any(k in sl for k in ("elementary", "middle", "k-8")):
+        return "EM"
+    if "high" in sl or "secondary" in sl:
+        return "HS"
+    return None
+
+
+def _rank_in_cohort(
+    cohort: pd.DataFrame,
+    key_col: str,
+    key_val,
+    value_col: str,
+    ascending: bool = False,
+) -> Optional[tuple[int, int, float]]:
+    """Find the row where `cohort[key_col] == key_val`, then rank it within
+    `cohort` by `value_col`. Returns (rank, total, value), or None.
 
     By default sorts descending — rank #1 = highest value.
     """
-    rows = df[df["dbn"] == dbn]
-    if rows.empty:
+    matches = cohort[cohort[key_col] == key_val]
+    if matches.empty:
         return None
-    school = rows.iloc[0]
-    school_level = school.get("school_level")
-    val = school.get(value_col)
-    if (
-        school_level is None
-        or pd.isna(school_level)
-        or val is None
-        or pd.isna(val)
-    ):
+    val = matches.iloc[0].get(value_col)
+    if val is None or pd.isna(val):
         return None
-    cohort = df[df["school_level"] == school_level].dropna(subset=[value_col])
+    cohort = cohort.dropna(subset=[value_col])
     if len(cohort) < 2:
         return None
-    cohort_sorted = cohort.sort_values(value_col, ascending=ascending).reset_index(drop=True)
-    matches = cohort_sorted.index[cohort_sorted["dbn"] == dbn].tolist()
-    if not matches:
+    sorted_ = cohort.sort_values(value_col, ascending=ascending).reset_index(drop=True)
+    idx = sorted_.index[sorted_[key_col] == key_val].tolist()
+    if not idx:
         return None
-    return matches[0] + 1, len(cohort_sorted), str(school_level), float(val)
+    return idx[0] + 1, len(sorted_), float(val)
 
 
 def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
+    school_level = _school_level_for(dbn)
+    if school_level is None:
+        return None
     df = data.get_store().demographics
     latest = df[df["ay"] == df["ay"].max()]
-    info = _compute_peer_rank(dbn, latest, "poverty_pct", ascending=False)
+    cohort = latest[latest["school_level"] == school_level]
+    info = _rank_in_cohort(cohort, "dbn", dbn, "poverty_pct", ascending=False)
     if info is None:
         return None
-    rank, total, school_level, value = info
+    rank, total, value = info
     return PeerRank(
         metric_label="Poverty",
         value_display=f"{value * 100:.1f}%",
@@ -663,12 +688,90 @@ def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
     )
 
 
+def _peer_rank_ptr(dbn: str) -> Optional[PeerRank]:
+    school_level = _school_level_for(dbn)
+    if school_level is None:
+        return None
+    store = data.get_store()
+    same_level_dbns = set(
+        store.demographics[
+            (store.demographics["ay"] == store.demographics["ay"].max())
+            & (store.demographics["school_level"] == school_level)
+        ]["dbn"]
+    )
+    ptr = store.ptr
+    latest_year = ptr["ay"].max()
+    cohort = ptr[(ptr["ay"] == latest_year) & (ptr["dbn"].isin(same_level_dbns))]
+    info = _rank_in_cohort(cohort, "dbn", dbn, "ptr", ascending=False)
+    if info is None:
+        return None
+    rank, total, value = info
+    return PeerRank(
+        metric_label="Pupil:teacher ratio",
+        value_display=f"{value:.1f}",
+        caption="students per teacher",
+        rank=rank,
+        total=total,
+        cohort_label=f"{school_level} schools",
+    )
+
+
+def _peer_rank_chronic(dbn: str) -> Optional[PeerRank]:
+    """Chronic-absenteeism rank, All Students subgroup, latest year, against
+    same-school-level NYSED-level peers."""
+    school_level = _school_level_for(dbn)
+    if school_level is None:
+        return None
+    nysed_level = _nysed_level_for(school_level)
+    if nysed_level is None:
+        return None
+    beds = _beds_for(dbn)
+    if beds is None:
+        return None
+
+    store = data.get_store()
+    # Build BEDS code set for same-level peers via demographics → beds.
+    same_level = store.demographics[
+        (store.demographics["ay"] == store.demographics["ay"].max())
+        & (store.demographics["school_level"] == school_level)
+    ]
+    same_level_beds = {
+        f"{int(b):012d}" for b in same_level["beds"].dropna()
+    }
+
+    chronic = store.nysed_chronic
+    latest_year = chronic["YEAR"].max()
+    cohort = chronic[
+        (chronic["YEAR"] == latest_year)
+        & (chronic["LEVEL"] == nysed_level)
+        & (chronic["SUBGROUP_NAME"] == "All Students")
+        & (chronic["ENTITY_CD"].isin(same_level_beds))
+    ]
+    info = _rank_in_cohort(cohort, "ENTITY_CD", beds, "ABSENT_RATE", ascending=False)
+    if info is None:
+        return None
+    rank, total, value = info
+    return PeerRank(
+        metric_label="Chronic absenteeism",
+        value_display=f"{value:.1f}%",
+        caption="absent ≥10% of enrolled days",
+        rank=rank,
+        total=total,
+        cohort_label=f"{school_level} schools",
+    )
+
+
 def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
     """Build the peer_ranks dict. Each metric we add becomes one key."""
     out: dict[str, PeerRank] = {}
-    poverty = _peer_rank_poverty(dbn)
-    if poverty:
-        out["poverty_pct"] = poverty
+    for key, fn in [
+        ("poverty_pct", _peer_rank_poverty),
+        ("ptr", _peer_rank_ptr),
+        ("chronic_absent", _peer_rank_chronic),
+    ]:
+        rank = fn(dbn)
+        if rank:
+            out[key] = rank
     return out
 
 

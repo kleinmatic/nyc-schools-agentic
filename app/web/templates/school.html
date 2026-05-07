@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ school.summary.school_name }} ({{ school.summary.dbn }}){% endblock %}
 
-{% macro card_label(label) %}<dt class="text-xs text-slate-500 uppercase tracking-wide">{{ label }}</dt>{% endmacro %}
+{% macro card_label(label) %}<dt class="text-xs text-slate-500 uppercase tracking-wide">{{ label|safe }}</dt>{% endmacro %}
 {% macro card_value(value) %}<dd class="text-lg font-medium">{{ value }}</dd>{% endmacro %}
 {% macro pct(v) %}{% if v is not none %}{{ "%.1f"|format(v * 100) }}%{% else %}—{% endif %}{% endmacro %}
 {% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}—{% endif %}{% endmacro %}
@@ -15,6 +15,10 @@
   <span class="leading-snug">{{ desc }}</span>
 </div>
 {% endmacro %}
+{# Inline term tooltip: dotted underline + native browser tooltip on hover/focus.
+   Cheap and accessible (screen readers announce the title); on touch devices
+   the title isn't shown by browser, but the term is still readable in context. #}
+{% macro term(label, definition) %}<abbr title="{{ definition }}" class="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">{{ label }}</abbr>{% endmacro %}
 {% macro peer_marker(rank_info) %}
 {% set position_pct = ((rank_info.rank - 1) * 100 / (rank_info.total - 1)) if rank_info.total > 1 else 50 %}
 <div class="bg-white border border-slate-200 rounded-lg p-5 flex flex-col">
@@ -77,9 +81,9 @@
       <div>{{ card_label("Year") }}{{ card_value(latest_demo.ay ~ "-" ~ "%02d"|format((latest_demo.ay+1) % 100)) }}</div>
       <div>{{ card_label("Enrollment") }}{{ card_value(num(latest_demo.total_enrollment)) }}</div>
       <div>{{ card_label("Poverty") }}{{ card_value(pct(latest_demo.poverty_pct)) }}</div>
-      <div>{{ card_label("ENI") }}{{ card_value("%.2f"|format(latest_demo.eni) if latest_demo.eni is not none else "—") }}</div>
-      <div>{{ card_label("ELL") }}{{ card_value(pct(latest_demo.ell_pct)) }}</div>
-      <div>{{ card_label("SWD") }}{{ card_value(pct(latest_demo.swd_pct)) }}</div>
+      <div>{{ card_label(term("ENI", "Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale; 1 = highest need. Computed from students living in temporary housing, eligible for HRA/SNAP, or in low-income census tracts.")) }}{{ card_value("%.2f"|format(latest_demo.eni) if latest_demo.eni is not none else "—") }}</div>
+      <div>{{ card_label(term("ELL", "English Language Learner — students whose home language isn't English and who score below proficient on a NYS English-proficiency screener.")) }}{{ card_value(pct(latest_demo.ell_pct)) }}</div>
+      <div>{{ card_label(term("SWD", "Students With Disabilities — students with an Individualized Education Program (IEP) receiving special-education services.")) }}{{ card_value(pct(latest_demo.swd_pct)) }}</div>
     {% endif %}
     {% if snap and snap.attendance_rate is not none %}
       <div>{{ card_label("Attendance") }}{{ card_value(pct(snap.attendance_rate)) }}</div>
@@ -789,9 +793,9 @@
           <th class="px-4 py-2 text-left">Year</th>
           <th class="px-4 py-2 text-right">Enrollment</th>
           <th class="px-4 py-2 text-right">Poverty</th>
-          <th class="px-4 py-2 text-right">ENI</th>
-          <th class="px-4 py-2 text-right">ELL</th>
-          <th class="px-4 py-2 text-right">SWD</th>
+          <th class="px-4 py-2 text-right">{{ term("ENI", "Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale; 1 = highest need.") }}</th>
+          <th class="px-4 py-2 text-right">{{ term("ELL", "English Language Learner — students whose home language isn't English and who score below proficient on a NYS English screener.") }}</th>
+          <th class="px-4 py-2 text-right">{{ term("SWD", "Students With Disabilities — students with an IEP receiving special-education services.") }}</th>
           <th class="px-4 py-2 text-right">Asian</th>
           <th class="px-4 py-2 text-right">Black</th>
           <th class="px-4 py-2 text-right">Hispanic</th>
