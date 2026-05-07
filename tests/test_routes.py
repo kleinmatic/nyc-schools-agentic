@@ -39,6 +39,23 @@ def test_school_page_renders(client):
     assert "Demographics by year" in r.text
 
 
+def test_school_page_includes_all_sections(client):
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    # Each major section header should be present.
+    for section in (
+        "Quick stats",
+        "School info",
+        "Location",
+        "3&#8211;8 ELA exam",  # &#8211; is the en-dash from the &ndash;-style char
+        "3&#8211;8 Math exam",
+        "Class size",
+        "Demographics by year",
+    ):
+        # Tolerate both en-dash and the literal char depending on Jinja escaping.
+        assert section in r.text or section.replace("&#8211;", "–") in r.text, f"missing section: {section}"
+
+
 def test_school_page_404(client):
     r = client.get("/school/99Z999")
     assert r.status_code == 404
