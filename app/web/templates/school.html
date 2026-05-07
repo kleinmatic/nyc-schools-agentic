@@ -29,10 +29,13 @@
 <button type="button" popovertarget="{{ pid }}" style="anchor-name: --{{ pid }};"
         class="pop-trigger underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">{{ label }}</button>
 <div id="{{ pid }}" popover class="pop-card pop-anchored" style="--anchor: --{{ pid }};">
-  <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{{ label }} in cohort</div>
-  <div class="font-medium leading-tight">{{ extreme.school_name }}</div>
-  <div class="font-mono text-[11px] text-slate-500 mt-0.5">{{ extreme.dbn }}</div>
-  <div class="text-amber-600 font-serif text-2xl mt-2 leading-none">{{ extreme.value_display }}</div>
+  <a href="/school/{{ extreme.dbn }}" class="block -m-3 p-3 rounded hover:bg-slate-50 transition-colors no-underline">
+    <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{{ label }} in cohort</div>
+    <div class="font-medium leading-tight text-slate-900">{{ extreme.school_name }}</div>
+    <div class="font-mono text-[11px] text-slate-500 mt-0.5">{{ extreme.dbn }}</div>
+    <div class="text-amber-600 font-serif text-2xl mt-2 leading-none">{{ extreme.value_display }}</div>
+    <div class="text-[10px] text-blue-600 mt-3">View school &rarr;</div>
+  </a>
 </div>
 {% endmacro %}
 {% macro peer_marker(rank_info) %}

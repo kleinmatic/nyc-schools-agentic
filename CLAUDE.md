@@ -72,6 +72,7 @@ Key entry points in `~/Code/nycschools/nycschools/`:
 
 - **System dep:** `mdbtools` (for NYSED Access database). `brew install mdbtools` on macOS; `apt-get install mdbtools` on Debian/Ubuntu.
 - **DBN is the primary key** everywhere. URLs use it: `/school/15K321`.
+- **ENI is the equity proxy of choice for ranking and peer comparison; poverty_pct is for direct interpretability.** Don't rank schools by poverty_pct — NYC's 2017 CEP transition broke that signal's continuity. Detail in README "ENI vs poverty_pct".
 - **Don't import transport types into `app/services/`.** Functions take primitives and return Pydantic models. The adapter wraps; the service computes.
 - **Don't fork upstream.** Install editable (`uv sync` does this against `../nycschools`) and import.
 - **Don't commit secrets.** `SECRETS.md` is gitignored; deploy keys, vendor info, scratch SQL go there or in a sibling private repo (see README "License & private state").

@@ -138,7 +138,7 @@ So `15K321` = District 15, Brooklyn, school 321 (P.S. 321 William Penn).
 ### Per-dataset notes
 
 **`demographics`** — `schools.load_school_demographics()` → `school-demographics.csv`
-Widest annual coverage in the project. Use this to answer "how has this school changed over time?" Includes total + per-grade enrollment (3K–12), gender (female/male/non-binary as N and pct), 7 race/ethnicity buckets, ELL, SWD, poverty count + pct, and **ENI** (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale). Latest year cached: 2024-25.
+Widest annual coverage in the project. Use this to answer "how has this school changed over time?" Includes total + per-grade enrollment (3K–12), gender (female/male/non-binary as N and pct), 7 race/ethnicity buckets, ELL, SWD, poverty count + pct, and **ENI** (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale). Latest year cached: 2024-25. See "ENI vs poverty_pct" below for which to use as the equity proxy.
 
 **`snapshots`** — `snapshot.load_snapshots()` → `snapshot.feather`
 DOE official school portal snapshot, scraped at one point in time (most rows are dated `ay=2016`). Useful for: principal name + tenure + phone, full address, attendance, chronic absence, official admissions method (Zoned, Screened, etc.), quality review URL + year, teacher-3yr-experience pct, co-location info. **Caveat:** not all DBNs are present (e.g., Midwood `22K405` has no row).
@@ -194,6 +194,32 @@ Filtering: NYSED data covers all of NY State; we filter to NYC public schools by
 #### Suppression and types
 
 Numeric fields in the source Access database are stored as Text. NYSED uses the literal string `"s"` to indicate values suppressed for small-cell privacy (fewer than 5 students in a subgroup). The upstream loader (`nycschools.nysed_src._to_numeric`) coerces these to NaN. Percentages come back in 0–100 units; our service layer divides by 100 to match the rest of the app's 0–1 fraction convention.
+
+### ENI vs poverty_pct — which to use for equity comparisons
+
+The demographics file ships two related signals of school disadvantage. They're not interchangeable; the choice has real implications for any ranking, equity analysis, or "compared to peers" view we build.
+
+**`poverty_pct`** is the share of students "directly certified" — meaning their families are currently enrolled in HRA cash assistance, SNAP, Medicaid, or are in temporary housing. It's a binary count (in or out, on the day NYC DOE pulls it). Historically NYC used Free or Reduced-Price Lunch (FRPL) eligibility, which captured a wider population including the working poor. But in 2017 NYC moved to universal free meals (Community Eligibility Provision), which broke FRPL as a school-poverty signal — every student now gets free lunch regardless of income — so DOE switched to direct certification. The new metric is *stricter* than FRPL was; it misses families who would have qualified for reduced-price meals but aren't actively in social-service programs.
+
+**`eni`** (Economic Need Index, 0–1) is a purpose-built composite that NYC DOE designed specifically to allocate Fair Student Funding. Its components:
+- Students in temporary housing
+- Students whose families receive HRA / public assistance
+- Students living in low-income census tracts (Census ACS data)
+- Recent-arrival ELL students
+- Students directly certified for free meals via SNAP / Medicaid
+
+ENI is the better default for ranking and equity work, for four reasons:
+
+1. **NYC DOE itself uses ENI** to allocate Fair Student Funding to schools. The agency closest to the data thinks ENI is the right measure for resource decisions.
+2. **More dimensions of disadvantage.** A school where 40% of students live in low-income census tracts but only 25% are direct-certified is meaningfully different from one with the reverse — ENI surfaces both.
+3. **More stable across program-eligibility shifts.** When a single program's rules change (CEP transition is the textbook case), a composite metric absorbs the change better than any single indicator.
+4. **Better correlates with achievement gaps.** Research on NYC schools shows ENI predicts academic outcomes more reliably than direct certification alone.
+
+**Where each shows up in this app:**
+- `poverty_pct` is shown in the school page's **Quick stats** card and the **Demographics by year** history table — concrete and directly interpretable for parents who want a literal "% of kids in HRA/SNAP" reading.
+- `eni` drives the **"Compared to peers"** marker, since ranking is where the better signal matters most. Future borough/zone equity views should also default to ENI.
+
+Both are kept in the demographics dataframe, so callers can request either. Don't treat them as redundant.
 
 ### Coverage matrix
 

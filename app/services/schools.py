@@ -677,22 +677,25 @@ def _extreme_from_row(row, name_col: str, dbn_col: str, format_value) -> PeerExt
     )
 
 
-def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
+def _peer_rank_eni(dbn: str) -> Optional[PeerRank]:
+    """ENI rank vs same-school-level peers. ENI is NYC DOE's preferred
+    equity proxy (used for Fair Student Funding) — see README "ENI vs
+    poverty" for why it beats raw poverty_pct as a ranking signal."""
     school_level = _school_level_for(dbn)
     if school_level is None:
         return None
     df = data.get_store().demographics
     latest = df[df["ay"] == df["ay"].max()]
     cohort = latest[latest["school_level"] == school_level]
-    info = _rank_in_cohort(cohort, "dbn", dbn, "poverty_pct", ascending=False)
+    info = _rank_in_cohort(cohort, "dbn", dbn, "eni", ascending=False)
     if info is None:
         return None
     rank, total, value, top, bottom = info
-    fmt = lambda r: f"{r['poverty_pct'] * 100:.1f}%"
+    fmt = lambda r: f"{r['eni']:.2f}"
     return PeerRank(
-        metric_label="Poverty",
-        value_display=f"{value * 100:.1f}%",
-        caption="of students",
+        metric_label="Economic Need Index",
+        value_display=f"{value:.2f}",
+        caption="0–1 scale; 1 = highest need",
         rank=rank,
         total=total,
         cohort_label=f"{school_level} schools",
@@ -783,7 +786,7 @@ def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
     """Build the peer_ranks dict. Each metric we add becomes one key."""
     out: dict[str, PeerRank] = {}
     for key, fn in [
-        ("poverty_pct", _peer_rank_poverty),
+        ("eni", _peer_rank_eni),
         ("ptr", _peer_rank_ptr),
         ("chronic_absent", _peer_rank_chronic),
     ]:
