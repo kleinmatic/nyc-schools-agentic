@@ -13,17 +13,24 @@ from nycschools import schools as ns_schools
 
 from .. import data
 from .models import (
+    BudgetCategory,
+    BudgetSummary,
     ClassSizeRow,
     DemographicsYear,
     ExamRow,
+    HsDirectoryInfo,
+    HsProgram,
     LocationInfo,
     PtrInfo,
+    RegentsRow,
     SchoolDetail,
     SchoolSummary,
+    ShsatYear,
     SnapshotInfo,
 )
 
 DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
+_BUDGET_RE = re.compile(r"[^0-9.\-]")
 
 
 def _opt_int(v) -> Optional[int]:
@@ -64,7 +71,22 @@ def _opt_str(v) -> Optional[str]:
         except (TypeError, ValueError):
             pass
     s = str(v).strip()
+    if s.lower() in ("nan", "none", "<na>"):
+        return None
     return s or None
+
+
+def _parse_budget(v) -> Optional[float]:
+    """Galaxy budgets ship as '$ 187,530'-style strings. Normalize to float.
+    TODO: this currency parsing logically belongs upstream in nycschools."""
+    s = _opt_str(v)
+    if s is None:
+        return None
+    cleaned = _BUDGET_RE.sub("", s)
+    try:
+        return float(cleaned) if cleaned else None
+    except ValueError:
+        return None
 
 
 def _to_summary(row) -> SchoolSummary:
@@ -99,6 +121,8 @@ def search_schools(query: str, limit: int = 10) -> list[SchoolSummary]:
 
     return [_to_summary(row) for _, row in results.head(limit).iterrows()]
 
+
+# ----- per-section helpers -----
 
 def _demographics_for(dbn: str) -> list[DemographicsYear]:
     df = data.get_store().demographics
@@ -188,11 +212,31 @@ def _exam_rows_for(dbn: str, df) -> list[ExamRow]:
         )
 
     def sort_key(x: ExamRow):
-        # Year desc, then "All Grades" first within each year, then numeric grade asc.
         grade_key = -1 if x.grade == "All Grades" else _opt_int(x.grade) or 99
         return (-x.ay, grade_key)
 
     out.sort(key=sort_key)
+    return out
+
+
+def _regents_for(dbn: str) -> list[RegentsRow]:
+    df = data.get_store().regents
+    rows = df[(df["dbn"] == dbn) & (df["category"].fillna("All Students") == "All Students")]
+    out: list[RegentsRow] = []
+    for _, r in rows.iterrows():
+        out.append(
+            RegentsRow(
+                ay=_opt_int(r.get("ay")) or 0,
+                regents_exam=str(r.get("regents_exam", "")),
+                number_tested=_opt_int(r.get("number_tested")),
+                mean_score=_opt_float(r.get("mean_score")),
+                pct_below_65=_opt_float(r.get("below_65_pct")),
+                pct_above_64=_opt_float(r.get("above_64_pct")),
+                pct_above_79=_opt_float(r.get("above_79_pct")),
+                pct_college_ready=_opt_float(r.get("college_ready_pct")),
+            )
+        )
+    out.sort(key=lambda x: (-x.ay, x.regents_exam))
     return out
 
 
@@ -228,6 +272,160 @@ def _ptr_for(dbn: str) -> Optional[PtrInfo]:
     return PtrInfo(ay=_opt_int(latest.get("ay")) or 0, ratio=_opt_float(latest.get("ptr")))
 
 
+def _shsat_for(dbn: str) -> list[ShsatYear]:
+    df = data.get_store().shsat
+    rows = df[df["dbn"] == dbn].sort_values("ay", ascending=False)
+    return [
+        ShsatYear(
+            ay=_opt_int(r.get("ay")) or 0,
+            applicants_n=_opt_int(r.get("hs_applicants_n")),
+            testers_n=_opt_int(r.get("testers_n")),
+            offers_n=_opt_int(r.get("offers_n")),
+            offers_pct=_opt_float(r.get("offers_pct")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _budget_for(dbn: str) -> Optional[BudgetSummary]:
+    df = data.get_store().budgets
+    rows = df[df["dbn"] == dbn].copy()
+    if rows.empty:
+        return None
+    rows["budget_num"] = rows["budget"].apply(_parse_budget)
+    rows = rows.dropna(subset=["budget_num"])
+    if rows.empty:
+        return None
+    latest_ay = _opt_int(rows["ay"].max()) or 0
+    rows = rows[rows["ay"] == rows["ay"].max()]
+
+    grouped = (
+        rows.groupby("category", dropna=False)
+        .agg(total=("budget_num", "sum"), positions=("positions", "sum"))
+        .reset_index()
+        .sort_values("total", ascending=False)
+    )
+
+    by_category = [
+        BudgetCategory(
+            category=_opt_str(r["category"]) or "(uncategorized)",
+            total=float(r["total"]),
+            positions=_opt_float(r.get("positions")),
+        )
+        for _, r in grouped.iterrows()
+    ]
+
+    return BudgetSummary(
+        ay=latest_ay,
+        total=float(rows["budget_num"].sum()),
+        total_positions=_opt_float(rows["positions"].sum() if "positions" in rows.columns else None),
+        by_category=by_category,
+    )
+
+
+def _hs_programs(row) -> list[HsProgram]:
+    """Reshape the wide HS-directory row's program{N} / interest{N} / etc.
+    columns into a list of HsProgram models."""
+    out: list[HsProgram] = []
+    for i in range(1, 13):
+        name = _opt_str(row.get(f"program{i}"))
+        if not name:
+            continue
+        requirements = []
+        for j in range(1, 8):
+            req = _opt_str(row.get(f"requirement_{j}_{i}"))
+            if req:
+                requirements.append(req)
+        out.append(
+            HsProgram(
+                code=_opt_str(row.get(f"code{i}")),
+                name=name,
+                interest=_opt_str(row.get(f"interest{i}")),
+                description=_opt_str(row.get(f"prgdesc{i}")),
+                method=_opt_str(row.get(f"method{i}")),
+                eligibility=_opt_str(row.get(f"eligibility{i}")),
+                seats_9th=_opt_int(row.get(f"seats9ge{i}")),
+                applicants_9th=_opt_int(row.get(f"grade9geapplicants{i}")),
+                applicants_per_seat_9th=_opt_float(row.get(f"grade9geapplicantsperseat{i}")),
+                requirements=requirements,
+                admissions_priority=_opt_str(
+                    row.get(f"admissionspriority1{i}") or row.get(f"admissionspriority2{i}")
+                ),
+            )
+        )
+    return out
+
+
+def _hs_directory_for(dbn: str) -> Optional[HsDirectoryInfo]:
+    df = data.get_store().hs_directory
+    rows = df[df["dbn"] == dbn]
+    if rows.empty:
+        return None
+    r = rows.iloc[0]
+
+    address = _opt_str(r.get("primary_address_line_1"))
+    city = _opt_str(r.get("city"))
+    postcode = _opt_str(r.get("postcode"))
+    full_address = ", ".join(filter(None, [address, f"{city} NY {postcode}".strip() if city or postcode else None]))
+
+    opps = [_opt_str(r.get(f"academicopportunities{i}")) for i in range(1, 7)]
+    opps = [o for o in opps if o]
+
+    div_in_adm = r.get("diversity_in_admissions")
+    if pd.isna(div_in_adm) or div_in_adm is None:
+        div_bool = None
+    else:
+        try:
+            div_bool = bool(float(div_in_adm))
+        except (TypeError, ValueError):
+            div_bool = None
+
+    return HsDirectoryInfo(
+        ay=_opt_int(r.get("ay")) or 2021,
+        overview=_opt_str(r.get("overview_paragraph")),
+        total_students=_opt_int(r.get("total_students")),
+        attendance_rate=_opt_float(r.get("attendance_rate")),
+        graduation_rate=_opt_float(r.get("graduation_rate")),
+        college_career_rate=_opt_float(r.get("college_career_rate")),
+        pct_students_safe=_opt_float(r.get("pct_stu_safe")),
+        pct_students_enough_variety=_opt_float(r.get("pct_stu_enough_variety")),
+        school_accessibility=_opt_str(r.get("school_accessibility")),
+        neighborhood=_opt_str(r.get("neighborhood")),
+        address=full_address or None,
+        phone=_opt_str(r.get("phone_number")),
+        fax=_opt_str(r.get("fax_number")),
+        email=_opt_str(r.get("school_email")),
+        website=_opt_str(r.get("website")),
+        sqr_website=_opt_str(r.get("sqr_website")),
+        recruitment_website=_opt_str(r.get("recruitment_website")),
+        subway=_opt_str(r.get("subway")),
+        bus=_opt_str(r.get("bus")),
+        start_time=_opt_str(r.get("start_time")),
+        end_time=_opt_str(r.get("end_time")),
+        advanced_placement_courses=_opt_str(r.get("advancedplacement_courses")),
+        language_classes=_opt_str(r.get("language_classes")),
+        psal_sports_boys=_opt_str(r.get("psal_sports_boys")),
+        psal_sports_girls=_opt_str(r.get("psal_sports_girls")),
+        psal_sports_coed=_opt_str(r.get("psal_sports_coed")),
+        diploma_endorsements=_opt_str(r.get("diplomaendorsements")),
+        diversity_in_admissions=div_bool,
+        diversity_details=_opt_str(r.get("diadetails")),
+        school_10th_seats=_opt_str(r.get("school_10th_seats")),
+        ell_programs=_opt_str(r.get("ell_programs")),
+        school_sports=_opt_str(r.get("school_sports")),
+        online_ap_courses=_opt_str(r.get("online_ap_courses")),
+        online_language_courses=_opt_str(r.get("online_language_courses")),
+        summer_session=_opt_str(r.get("summer_session")),
+        extracurricular_activities=_opt_str(r.get("extracurricular_activities")),
+        addtl_info=_opt_str(r.get("addtl_info1")),
+        grades_served=_opt_str(r.get("finalgrades")) or _opt_str(r.get("gradespan")),
+        campus_name=_opt_str(r.get("campus_name")),
+        building_code=_opt_str(r.get("building_code")),
+        academic_opportunities=opps,
+        programs=_hs_programs(r),
+    )
+
+
 def get_school(dbn: str) -> Optional[SchoolDetail]:
     """Return the full report card for a DBN, or None if not found.
 
@@ -251,7 +449,11 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         location=_location_for(dbn),
         ela=_exam_rows_for(dbn, store.ela),
         math=_exam_rows_for(dbn, store.math),
+        regents=_regents_for(dbn),
         class_size=class_size_rows,
         class_size_year=class_size_year,
         ptr=_ptr_for(dbn),
+        shsat=_shsat_for(dbn),
+        budget=_budget_for(dbn),
+        hs_directory=_hs_directory_for(dbn),
     )

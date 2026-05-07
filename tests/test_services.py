@@ -108,3 +108,58 @@ def test_school_detail_includes_ptr():
     assert detail is not None
     assert detail.ptr is not None
     assert detail.ptr.ratio is not None and 1 < detail.ptr.ratio < 50
+
+
+def test_high_school_includes_regents():
+    detail = get_school("22K405")  # Midwood, a high school
+    assert detail is not None
+    assert len(detail.regents) > 0
+    # Regents rows are sorted year desc.
+    years = [r.ay for r in detail.regents]
+    assert years == sorted(years, reverse=True)
+    # Spot-check that we got real exam names.
+    exams = {r.regents_exam for r in detail.regents}
+    assert any("English" in e or "Algebra" in e or "Geometry" in e for e in exams)
+
+
+def test_high_school_includes_hs_directory():
+    detail = get_school("22K405")
+    assert detail is not None
+    hs = detail.hs_directory
+    assert hs is not None
+    assert hs.total_students and hs.total_students > 1000
+    assert hs.graduation_rate is not None
+    assert hs.subway and "Brooklyn College" in hs.subway
+    # Programs got reshaped into a list with at least one entry.
+    assert len(hs.programs) >= 1
+    p = hs.programs[0]
+    assert p.name
+
+
+def test_elementary_school_no_regents_or_hs_dir():
+    detail = get_school("15K321")  # PS 321, elementary
+    assert detail is not None
+    assert detail.regents == []
+    assert detail.hs_directory is None
+
+
+def test_school_detail_includes_budget():
+    detail = get_school("15K321")
+    assert detail is not None
+    b = detail.budget
+    assert b is not None
+    assert b.total > 1_000_000  # PS 321 has a multi-million-dollar budget
+    assert b.by_category, "expected at least one budget category"
+    # Largest category ranks first
+    totals = [c.total for c in b.by_category]
+    assert totals == sorted(totals, reverse=True)
+
+
+def test_middle_or_high_school_has_shsat_or_empty():
+    # SHSAT data is only meaningful for middle schools (8th-graders).
+    # PS 321 is elementary — likely no SHSAT data, but if present the model
+    # should validate.
+    detail = get_school("15K321")
+    assert detail is not None
+    for r in detail.shsat:
+        assert r.ay > 2000

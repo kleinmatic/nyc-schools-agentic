@@ -5,11 +5,16 @@
 {% macro card_value(value) %}<dd class="text-lg font-medium">{{ value }}</dd>{% endmacro %}
 {% macro pct(v) %}{% if v is not none %}{{ "%.1f"|format(v * 100) }}%{% else %}—{% endif %}{% endmacro %}
 {% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}—{% endif %}{% endmacro %}
+{% macro money(v) %}{% if v is not none %}${{ "{:,.0f}".format(v) }}{% else %}—{% endif %}{% endmacro %}
+{% macro chip(label, value) %}
+{% if value %}<div class="inline-flex flex-col gap-0.5 mr-4 mb-3"><span class="text-xs text-slate-500 uppercase tracking-wide">{{ label }}</span><span class="text-sm">{{ value }}</span></div>{% endif %}
+{% endmacro %}
 
 {% block content %}
 {% set s = school.summary %}
 {% set snap = school.snapshot %}
 {% set loc = school.location %}
+{% set hs = school.hs_directory %}
 {% set latest_demo = school.demographics_by_year[-1] if school.demographics_by_year else none %}
 
 <div class="mb-8">
@@ -38,6 +43,8 @@
     {% endif %}
     {% if snap and snap.attendance_rate is not none %}
       <div>{{ card_label("Attendance") }}{{ card_value(pct(snap.attendance_rate)) }}</div>
+    {% elif hs and hs.attendance_rate is not none %}
+      <div>{{ card_label("Attendance") }}{{ card_value(pct(hs.attendance_rate)) }}</div>
     {% endif %}
     {% if snap and snap.student_chronic_absent %}
       <div>{{ card_label("Chronic absent") }}{{ card_value(snap.student_chronic_absent) }}</div>
@@ -45,8 +52,136 @@
     {% if school.ptr and school.ptr.ratio is not none %}
       <div>{{ card_label("Pupil:teacher (" ~ school.ptr.ay ~ ")") }}{{ card_value("%.1f"|format(school.ptr.ratio)) }}</div>
     {% endif %}
+    {% if hs and hs.graduation_rate is not none %}
+      <div>{{ card_label("4-yr grad rate") }}{{ card_value(pct(hs.graduation_rate)) }}</div>
+    {% endif %}
+    {% if hs and hs.college_career_rate is not none %}
+      <div>{{ card_label("College/career") }}{{ card_value(pct(hs.college_career_rate)) }}</div>
+    {% endif %}
   </dl>
 </section>
+
+{# ---------- HS directory overview ---------- #}
+{% if hs %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">High school directory ({{ hs.ay }})</h2>
+  {% if hs.overview %}
+    <div class="bg-white border border-slate-200 rounded-lg p-5 mb-4 text-sm leading-relaxed">{{ hs.overview }}</div>
+  {% endif %}
+  <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm flex flex-wrap">
+    {{ chip("Total students", hs.total_students) }}
+    {{ chip("Grades", hs.grades_served) }}
+    {{ chip("Hours", (hs.start_time ~ " – " ~ hs.end_time) if hs.start_time and hs.end_time else none) }}
+    {{ chip("Neighborhood", hs.neighborhood) }}
+    {{ chip("Campus", hs.campus_name) }}
+    {{ chip("Building", hs.building_code) }}
+    {{ chip("Accessibility", hs.school_accessibility) }}
+    {{ chip("Address", hs.address) }}
+    {{ chip("Phone", hs.phone) }}
+    {{ chip("Email", hs.email) }}
+    {{ chip("Subway", hs.subway) }}
+    {{ chip("Bus", hs.bus) }}
+  </dl>
+  {% if hs.website or hs.sqr_website or hs.recruitment_website %}
+  <p class="mt-3 text-sm text-slate-600">
+    {% if hs.website %}<a class="underline mr-4" href="https://{{ hs.website }}">school site</a>{% endif %}
+    {% if hs.sqr_website %}<a class="underline mr-4" href="{{ hs.sqr_website }}">school quality report</a>{% endif %}
+    {% if hs.recruitment_website %}<a class="underline" href="{{ hs.recruitment_website }}">recruitment</a>{% endif %}
+  </p>
+  {% endif %}
+</section>
+
+{# ---------- HS performance ---------- #}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Performance</h2>
+  <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
+    {% if hs.graduation_rate is not none %}<div>{{ card_label("4-yr graduation") }}{{ card_value(pct(hs.graduation_rate)) }}</div>{% endif %}
+    {% if hs.college_career_rate is not none %}<div>{{ card_label("College/career-ready") }}{{ card_value(pct(hs.college_career_rate)) }}</div>{% endif %}
+    {% if hs.attendance_rate is not none %}<div>{{ card_label("Attendance") }}{{ card_value(pct(hs.attendance_rate)) }}</div>{% endif %}
+    {% if hs.pct_students_safe is not none %}<div>{{ card_label("Students feel safe") }}{{ card_value(pct(hs.pct_students_safe)) }}</div>{% endif %}
+    {% if hs.pct_students_enough_variety is not none %}<div>{{ card_label("Enough course variety") }}{{ card_value(pct(hs.pct_students_enough_variety)) }}</div>{% endif %}
+  </dl>
+</section>
+
+{# ---------- HS programs ---------- #}
+{% if hs.programs %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Admissions programs</h2>
+  <p class="text-xs text-slate-400 mb-3">Each program is a distinct application path with its own seats and requirements.</p>
+  <div class="space-y-3">
+    {% for p in hs.programs %}
+    <div class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
+      <div class="flex items-baseline justify-between gap-4 mb-1">
+        <h3 class="font-medium">{{ p.name }}{% if p.code %} <span class="text-xs text-slate-500 font-mono">({{ p.code }})</span>{% endif %}</h3>
+        {% if p.method %}<span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ p.method }}</span>{% endif %}
+      </div>
+      {% if p.interest %}<div class="text-xs text-slate-500 mb-2">{{ p.interest }}</div>{% endif %}
+      {% if p.description %}<p class="text-slate-700 mb-3">{{ p.description }}</p>{% endif %}
+      <div class="flex flex-wrap text-xs gap-x-6 gap-y-1 text-slate-600">
+        {% if p.seats_9th is not none %}<span><strong>{{ p.seats_9th }}</strong> seats (9th)</span>{% endif %}
+        {% if p.applicants_9th is not none %}<span><strong>{{ "{:,}".format(p.applicants_9th) }}</strong> applicants</span>{% endif %}
+        {% if p.applicants_per_seat_9th is not none %}<span><strong>{{ "%.1f"|format(p.applicants_per_seat_9th) }}</strong> per seat</span>{% endif %}
+      </div>
+      {% if p.eligibility %}<p class="text-xs text-slate-500 mt-2"><span class="uppercase tracking-wide">Eligibility:</span> {{ p.eligibility }}</p>{% endif %}
+      {% if p.admissions_priority %}<p class="text-xs text-slate-500 mt-1"><span class="uppercase tracking-wide">Priority:</span> {{ p.admissions_priority }}</p>{% endif %}
+      {% if p.requirements %}
+        <ul class="text-xs text-slate-500 mt-2 list-disc list-inside">
+          {% for r in p.requirements %}<li>{{ r }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ---------- HS academic offerings ---------- #}
+{% if hs.advanced_placement_courses or hs.language_classes or hs.academic_opportunities or hs.diploma_endorsements or hs.ell_programs %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Academic offerings</h2>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    {% if hs.advanced_placement_courses %}<div><dt class="text-slate-500 mb-1">AP courses</dt><dd>{{ hs.advanced_placement_courses }}</dd></div>{% endif %}
+    {% if hs.language_classes %}<div><dt class="text-slate-500 mb-1">Languages</dt><dd>{{ hs.language_classes }}</dd></div>{% endif %}
+    {% if hs.diploma_endorsements %}<div><dt class="text-slate-500 mb-1">Diploma endorsements</dt><dd>{{ hs.diploma_endorsements }}</dd></div>{% endif %}
+    {% if hs.ell_programs %}<div><dt class="text-slate-500 mb-1">ELL programs</dt><dd>{{ hs.ell_programs }}</dd></div>{% endif %}
+    {% if hs.online_ap_courses %}<div><dt class="text-slate-500 mb-1">Online AP</dt><dd>{{ hs.online_ap_courses }}</dd></div>{% endif %}
+    {% if hs.online_language_courses %}<div><dt class="text-slate-500 mb-1">Online language</dt><dd>{{ hs.online_language_courses }}</dd></div>{% endif %}
+    {% if hs.summer_session %}<div><dt class="text-slate-500 mb-1">Summer session</dt><dd>{{ hs.summer_session }}</dd></div>{% endif %}
+    {% if hs.extracurricular_activities %}<div><dt class="text-slate-500 mb-1">Extracurriculars</dt><dd>{{ hs.extracurricular_activities }}</dd></div>{% endif %}
+    {% if hs.addtl_info %}<div class="sm:col-span-2"><dt class="text-slate-500 mb-1">Additional info</dt><dd>{{ hs.addtl_info }}</dd></div>{% endif %}
+    {% if hs.academic_opportunities %}
+      <div class="sm:col-span-2"><dt class="text-slate-500 mb-1">Academic opportunities</dt>
+      <dd><ul class="list-disc list-inside space-y-1">{% for o in hs.academic_opportunities %}<li>{{ o }}</li>{% endfor %}</ul></dd></div>
+    {% endif %}
+  </dl>
+</section>
+{% endif %}
+
+{# ---------- HS sports ---------- #}
+{% if hs.psal_sports_boys or hs.psal_sports_girls or hs.psal_sports_coed or hs.school_sports %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Athletics</h2>
+  <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    {% if hs.psal_sports_boys %}<div><dt class="text-slate-500 mb-1">PSAL boys</dt><dd>{{ hs.psal_sports_boys }}</dd></div>{% endif %}
+    {% if hs.psal_sports_girls %}<div><dt class="text-slate-500 mb-1">PSAL girls</dt><dd>{{ hs.psal_sports_girls }}</dd></div>{% endif %}
+    {% if hs.psal_sports_coed %}<div><dt class="text-slate-500 mb-1">PSAL coed</dt><dd>{{ hs.psal_sports_coed }}</dd></div>{% endif %}
+    {% if hs.school_sports %}<div class="sm:col-span-3"><dt class="text-slate-500 mb-1">Other sports</dt><dd>{{ hs.school_sports }}</dd></div>{% endif %}
+  </dl>
+</section>
+{% endif %}
+
+{# ---------- HS admissions extras ---------- #}
+{% if hs and (hs.diversity_in_admissions is not none or hs.diversity_details or hs.school_10th_seats) %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Admissions notes</h2>
+  <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm flex flex-wrap">
+    {% if hs.diversity_in_admissions is not none %}{{ chip("Diversity in admissions", "Yes" if hs.diversity_in_admissions else "No") }}{% endif %}
+    {% if hs.school_10th_seats %}{{ chip("10th-grade seats", hs.school_10th_seats) }}{% endif %}
+    {% if hs.diversity_details %}<div class="w-full mt-2 text-slate-700">{{ hs.diversity_details }}</div>{% endif %}
+  </dl>
+</section>
+{% endif %}
+{% endif %}
 
 {# ---------- DOE snapshot ---------- #}
 {% if snap %}
@@ -165,6 +300,43 @@
 </section>
 {% endif %}
 
+{# ---------- Regents ---------- #}
+{% if school.regents %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Regents exams — All Students</h2>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Exam</th>
+          <th class="px-4 py-2 text-right">Tested</th>
+          <th class="px-4 py-2 text-right">Mean</th>
+          <th class="px-4 py-2 text-right">% &lt; 65</th>
+          <th class="px-4 py-2 text-right">% ≥ 65</th>
+          <th class="px-4 py-2 text-right">% ≥ 80</th>
+          <th class="px-4 py-2 text-right">% college-ready</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.regents %}
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2">{{ r.regents_exam }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.mean_score is not none %}{{ "%.1f"|format(r.mean_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_below_65) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_64) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_79) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_college_ready) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 {# ---------- Class size ---------- #}
 {% if school.class_size %}
 <section class="mb-10">
@@ -194,6 +366,74 @@
           <td class="px-4 py-2 text-right">{% if r.avg_class_size is not none %}{{ "%.1f"|format(r.avg_class_size) }}{% else %}—{% endif %}</td>
           <td class="px-4 py-2 text-right">{{ num(r.min_class_size) }}</td>
           <td class="px-4 py-2 text-right">{{ num(r.max_class_size) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- SHSAT ---------- #}
+{% if school.shsat %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">SHSAT applicants &amp; offers</h2>
+  <p class="text-xs text-slate-400 mb-3">8th-graders from this school applying to specialized high schools.</p>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-right">Applicants</th>
+          <th class="px-4 py-2 text-right">Testers</th>
+          <th class="px-4 py-2 text-right">Offers</th>
+          <th class="px-4 py-2 text-right">% offered</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.shsat %}
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.applicants_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.testers_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.offers_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.offers_pct) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- Galaxy budget ---------- #}
+{% if school.budget %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Galaxy budget ({{ school.budget.ay }}-{{ "%02d"|format((school.budget.ay+1) % 100) }})</h2>
+  <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-white border border-slate-200 rounded-lg p-5 mb-4">
+    <div>{{ card_label("Total budget") }}{{ card_value(money(school.budget.total)) }}</div>
+    {% if school.budget.total_positions is not none %}
+      <div>{{ card_label("Total positions") }}{{ card_value("%.1f"|format(school.budget.total_positions)) }}</div>
+    {% endif %}
+    <div>{{ card_label("Categories") }}{{ card_value(school.budget.by_category|length) }}</div>
+  </dl>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Category</th>
+          <th class="px-4 py-2 text-right">Positions</th>
+          <th class="px-4 py-2 text-right">Total</th>
+          <th class="px-4 py-2 text-right">% of budget</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for c in school.budget.by_category %}
+        <tr>
+          <td class="px-4 py-2">{{ c.category }}</td>
+          <td class="px-4 py-2 text-right">{% if c.positions is not none %}{{ "%.1f"|format(c.positions) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ money(c.total) }}</td>
+          <td class="px-4 py-2 text-right">{{ "%.1f"|format(c.total / school.budget.total * 100) }}%</td>
         </tr>
         {% endfor %}
       </tbody>

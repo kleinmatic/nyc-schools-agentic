@@ -42,18 +42,32 @@ def test_school_page_renders(client):
 def test_school_page_includes_all_sections(client):
     r = client.get("/school/15K321")
     assert r.status_code == 200
-    # Each major section header should be present.
+    # Each major section header expected for an elementary school like PS 321.
     for section in (
         "Quick stats",
         "School info",
         "Location",
-        "3&#8211;8 ELA exam",  # &#8211; is the en-dash from the &ndash;-style char
+        "3&#8211;8 ELA exam",
         "3&#8211;8 Math exam",
         "Class size",
+        "Galaxy budget",
         "Demographics by year",
     ):
-        # Tolerate both en-dash and the literal char depending on Jinja escaping.
         assert section in r.text or section.replace("&#8211;", "–") in r.text, f"missing section: {section}"
+
+
+def test_high_school_page_includes_hs_only_sections(client):
+    r = client.get("/school/22K405")  # Midwood
+    assert r.status_code == 200
+    for section in (
+        "High school directory",
+        "Performance",
+        "Admissions programs",
+        "Academic offerings",
+        "Athletics",
+        "Regents exams",
+    ):
+        assert section in r.text, f"missing HS-only section: {section}"
 
 
 def test_school_page_404(client):

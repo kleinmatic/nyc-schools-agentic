@@ -80,6 +80,18 @@ class ExamRow(BaseModel):
     pct_proficient: Optional[float] = None  # level_3 + level_4
 
 
+class RegentsRow(BaseModel):
+    """One year × exam slice of a Regents exam, All Students."""
+    ay: int
+    regents_exam: str
+    number_tested: Optional[int] = None
+    mean_score: Optional[float] = None
+    pct_below_65: Optional[float] = None
+    pct_above_64: Optional[float] = None
+    pct_above_79: Optional[float] = None
+    pct_college_ready: Optional[float] = None
+
+
 class ClassSizeRow(BaseModel):
     grade: str
     program_type: Optional[str] = None
@@ -96,6 +108,91 @@ class PtrInfo(BaseModel):
     ratio: Optional[float] = None
 
 
+class ShsatYear(BaseModel):
+    """How many of this school's 8th-graders took / got offers for the SHSAT."""
+    ay: int
+    applicants_n: Optional[int] = None
+    testers_n: Optional[int] = None
+    offers_n: Optional[int] = None
+    offers_pct: Optional[float] = None
+
+
+class BudgetCategory(BaseModel):
+    category: str
+    total: float
+    positions: Optional[float] = None
+
+
+class BudgetSummary(BaseModel):
+    """Galaxy budget summary for the latest cached year."""
+    ay: int
+    total: float
+    total_positions: Optional[float] = None
+    by_category: list[BudgetCategory] = []
+
+
+class HsProgram(BaseModel):
+    """One admissions program at a high school (HS Directory)."""
+    code: Optional[str] = None
+    name: Optional[str] = None
+    interest: Optional[str] = None
+    description: Optional[str] = None
+    method: Optional[str] = None
+    eligibility: Optional[str] = None
+    seats_9th: Optional[int] = None
+    applicants_9th: Optional[int] = None
+    applicants_per_seat_9th: Optional[float] = None
+    requirements: list[str] = []
+    admissions_priority: Optional[str] = None
+
+
+class HsDirectoryInfo(BaseModel):
+    """A high school's directory entry. Only populated for high schools that
+    appear in the academic-year-2021 directory dataset."""
+    ay: int
+    overview: Optional[str] = None
+    total_students: Optional[int] = None
+    attendance_rate: Optional[float] = None
+    graduation_rate: Optional[float] = None
+    college_career_rate: Optional[float] = None
+    pct_students_safe: Optional[float] = None
+    pct_students_enough_variety: Optional[float] = None
+    school_accessibility: Optional[str] = None
+    neighborhood: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    fax: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    sqr_website: Optional[str] = None
+    recruitment_website: Optional[str] = None
+    subway: Optional[str] = None
+    bus: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    advanced_placement_courses: Optional[str] = None
+    language_classes: Optional[str] = None
+    psal_sports_boys: Optional[str] = None
+    psal_sports_girls: Optional[str] = None
+    psal_sports_coed: Optional[str] = None
+    diploma_endorsements: Optional[str] = None
+    diversity_in_admissions: Optional[bool] = None
+    diversity_details: Optional[str] = None
+    school_10th_seats: Optional[str] = None
+    ell_programs: Optional[str] = None
+    school_sports: Optional[str] = None
+    online_ap_courses: Optional[str] = None
+    online_language_courses: Optional[str] = None
+    summer_session: Optional[str] = None
+    extracurricular_activities: Optional[str] = None
+    addtl_info: Optional[str] = None
+    grades_served: Optional[str] = None
+    campus_name: Optional[str] = None
+    building_code: Optional[str] = None
+    academic_opportunities: list[str] = []
+    programs: list[HsProgram] = []
+
+
 class SchoolDetail(BaseModel):
     summary: SchoolSummary
     demographics_by_year: list[DemographicsYear]
@@ -103,6 +200,10 @@ class SchoolDetail(BaseModel):
     location: Optional[LocationInfo] = None
     ela: list[ExamRow] = []
     math: list[ExamRow] = []
+    regents: list[RegentsRow] = []
     class_size: list[ClassSizeRow] = []
     class_size_year: Optional[int] = None
     ptr: Optional[PtrInfo] = None
+    shsat: list[ShsatYear] = []
+    budget: Optional[BudgetSummary] = None
+    hs_directory: Optional[HsDirectoryInfo] = None

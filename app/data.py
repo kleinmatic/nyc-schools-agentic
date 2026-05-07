@@ -4,6 +4,7 @@ Loaded once at FastAPI startup via lifespan; queried by services/schools.py.
 This is the only module that imports nycschools loaders directly.
 """
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import geopandas as gpd
@@ -18,9 +19,13 @@ class DataStore:
     snapshots: pd.DataFrame
     ela: pd.DataFrame
     math: pd.DataFrame
+    regents: pd.DataFrame
     class_size: pd.DataFrame
     ptr: pd.DataFrame
     locations: gpd.GeoDataFrame
+    shsat: pd.DataFrame
+    budgets: pd.DataFrame
+    hs_directory: pd.DataFrame  # academic year 2021
 
 
 _store: Optional[DataStore] = None
@@ -36,22 +41,49 @@ def is_loaded() -> bool:
     return _store is not None
 
 
+def _load_hs_directory(ay: int = 2021) -> pd.DataFrame:
+    """HS directory isn't in data.mixi.nyc, so we cache it locally to feather
+    after the first NYC-Open-Data fetch. scripts/fetch_data.py also primes
+    this cache, so a freshly-bootstrapped repo never hits the network here."""
+    cache_path: Path = config.DATA_DIR / f"hs-directory-{ay}.feather"
+    if cache_path.exists():
+        return pd.read_feather(cache_path)
+    from nycschools import schools as ns_schools
+
+    df = ns_schools.load_hs_directory(ay=ay).reset_index(drop=True)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_feather(cache_path)
+    return df
+
+
 def load() -> DataStore:
     """Load all dataframes from the on-disk cache. Idempotent."""
     global _store
     if _store is not None:
         return _store
 
-    from nycschools import schools, snapshot, exams, class_size, geo
+    from nycschools import (
+        schools,
+        snapshot,
+        exams,
+        class_size,
+        geo,
+        shsat,
+        budgets,
+    )
 
     _store = DataStore(
         demographics=schools.load_school_demographics(),
         snapshots=snapshot.load_snapshots(),
         ela=exams.load_ela(),
         math=exams.load_math(),
+        regents=exams.load_regents(),
         class_size=class_size.load_class_size(),
         ptr=class_size.load_ptr(),
         locations=geo.load_school_locations(),
+        shsat=shsat.load_admission_offers(),
+        budgets=budgets.load_galaxy_budgets(),
+        hs_directory=_load_hs_directory(2021),
     )
     return _store
 
@@ -61,7 +93,7 @@ def summary() -> str:
         return "(unloaded)"
     return (
         f"demo={len(_store.demographics):,} snap={len(_store.snapshots):,} "
-        f"ela={len(_store.ela):,} math={len(_store.math):,} "
-        f"cs={len(_store.class_size):,} ptr={len(_store.ptr):,} "
-        f"loc={len(_store.locations):,}"
+        f"ela={len(_store.ela):,} math={len(_store.math):,} reg={len(_store.regents):,} "
+        f"cs={len(_store.class_size):,} ptr={len(_store.ptr):,} loc={len(_store.locations):,} "
+        f"shsat={len(_store.shsat):,} budgets={len(_store.budgets):,} hs_dir={len(_store.hs_directory):,}"
     )
