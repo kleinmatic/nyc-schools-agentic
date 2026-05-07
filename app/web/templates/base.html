@@ -7,6 +7,30 @@
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+  <style>
+    /* Popover trigger that looks like inline text. */
+    button.pop-trigger {
+      background: transparent; border: 0; padding: 0; margin: 0;
+      font: inherit; color: inherit; cursor: help;
+    }
+    /* Popover styling — clears browser defaults and adds the card look. */
+    [popover].pop-card {
+      margin: 0; padding: 0.75rem 1rem; max-width: 22rem;
+      border: 1px solid rgb(226 232 240); border-radius: 0.5rem;
+      background: white; color: rgb(51 65 85);
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1);
+      font-size: .875rem; line-height: 1.5;
+    }
+    /* CSS anchor positioning (Chrome 125+, Safari 17.4+). Browsers without it
+       fall back to default centered placement — content still readable. */
+    @supports (anchor-name: --x) {
+      [popover].pop-anchored {
+        position-anchor: var(--anchor);
+        top: anchor(bottom); left: anchor(center);
+        translate: -50% .5rem;
+      }
+    }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
   <header class="bg-white border-b border-slate-200">

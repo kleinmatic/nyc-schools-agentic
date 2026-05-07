@@ -15,12 +15,30 @@
   <span class="leading-snug">{{ desc }}</span>
 </div>
 {% endmacro %}
-{# Inline term tooltip: dotted underline + native browser tooltip on hover/focus.
-   Cheap and accessible (screen readers announce the title); on touch devices
-   the title isn't shown by browser, but the term is still readable in context. #}
-{% macro term(label, definition) %}<abbr title="{{ definition }}" class="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">{{ label }}</abbr>{% endmacro %}
+{# Inline term: dotted underline + tap/click popover. Uses the HTML5 popover
+   attribute so it works on mobile (touch can't trigger hover). CSS anchor
+   positioning places the popover under the trigger where supported. #}
+{% macro term(label, definition) %}
+{% set pid = uid("term") %}
+<button type="button" popovertarget="{{ pid }}" style="anchor-name: --{{ pid }};"
+        class="pop-trigger underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">{{ label }}</button>
+<div id="{{ pid }}" popover class="pop-card pop-anchored" style="--anchor: --{{ pid }};">{{ definition }}</div>
+{% endmacro %}
+{% macro _extreme_popover(extreme, label) %}
+{% set pid = uid("ext") %}
+<button type="button" popovertarget="{{ pid }}" style="anchor-name: --{{ pid }};"
+        class="pop-trigger underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">{{ label }}</button>
+<div id="{{ pid }}" popover class="pop-card pop-anchored" style="--anchor: --{{ pid }};">
+  <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{{ label }} in cohort</div>
+  <div class="font-medium leading-tight">{{ extreme.school_name }}</div>
+  <div class="font-mono text-[11px] text-slate-500 mt-0.5">{{ extreme.dbn }}</div>
+  <div class="text-amber-600 font-serif text-2xl mt-2 leading-none">{{ extreme.value_display }}</div>
+</div>
+{% endmacro %}
 {% macro peer_marker(rank_info) %}
-{% set position_pct = ((rank_info.rank - 1) * 100 / (rank_info.total - 1)) if rank_info.total > 1 else 50 %}
+{# Position triangle on a number-line axis: low value → left, high value → right.
+   With rank #1 = highest, position = (total - rank) / (total - 1) measured from left. #}
+{% set position_pct = ((rank_info.total - rank_info.rank) * 100 / (rank_info.total - 1)) if rank_info.total > 1 else 50 %}
 <div class="bg-white border border-slate-200 rounded-lg p-5 flex flex-col">
   <div class="text-sm text-slate-700 font-medium">{{ rank_info.metric_label }}</div>
   <div class="text-4xl font-serif text-amber-600 leading-none mt-1">{{ rank_info.value_display }}</div>
@@ -30,8 +48,8 @@
       <div class="absolute bottom-0 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-slate-500" style="left: {{ "%.2f"|format(position_pct) }}%"></div>
     </div>
     <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-400 mt-1">
-      <span>HIGH</span>
-      <span>LOW</span>
+      <span>{% if rank_info.extreme_low %}{{ _extreme_popover(rank_info.extreme_low, "LOW") }}{% else %}LOW{% endif %}</span>
+      <span>{% if rank_info.extreme_high %}{{ _extreme_popover(rank_info.extreme_high, "HIGH") }}{% else %}HIGH{% endif %}</span>
     </div>
   </div>
   <div class="text-xs text-slate-600 mt-3">Rank #{{ "{:,}".format(rank_info.rank) }} of {{ "{:,}".format(rank_info.total) }} {{ rank_info.cohort_label }}</div>

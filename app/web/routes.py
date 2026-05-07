@@ -1,4 +1,6 @@
 """HTML routes. Thin adapters over services/schools.py — no business logic here."""
+import itertools
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -12,6 +14,16 @@ templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 
 def _is_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
+
+
+def _make_uid():
+    """Return a per-request callable that produces unique element IDs.
+
+    Templates use it to create stable popovertarget references without
+    needing a hash filter or page-wide stateful counter.
+    """
+    counter = itertools.count()
+    return lambda prefix="id": f"{prefix}-{next(counter)}"
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -34,4 +46,6 @@ async def school_page(request: Request, dbn: str):
             content=f"<h1>School not found</h1><p>No school with DBN <code>{dbn}</code>.</p>",
             status_code=404,
         )
-    return templates.TemplateResponse(request, "school.html", {"school": detail})
+    return templates.TemplateResponse(
+        request, "school.html", {"school": detail, "uid": _make_uid()}
+    )

@@ -28,6 +28,7 @@ from .models import (
     LocationInfo,
     NysedReport,
     OutOfCertYear,
+    PeerExtreme,
     PeerRank,
     PtrInfo,
     RegentsRow,
@@ -645,11 +646,12 @@ def _rank_in_cohort(
     key_val,
     value_col: str,
     ascending: bool = False,
-) -> Optional[tuple[int, int, float]]:
+) -> Optional[tuple[int, int, float, "pd.Series", "pd.Series"]]:
     """Find the row where `cohort[key_col] == key_val`, then rank it within
-    `cohort` by `value_col`. Returns (rank, total, value), or None.
+    `cohort` by `value_col`. Returns (rank, total, value, top_row, bottom_row).
 
-    By default sorts descending — rank #1 = highest value.
+    By default sorts descending — rank #1 = highest value, top_row = highest,
+    bottom_row = lowest.
     """
     matches = cohort[cohort[key_col] == key_val]
     if matches.empty:
@@ -664,7 +666,15 @@ def _rank_in_cohort(
     idx = sorted_.index[sorted_[key_col] == key_val].tolist()
     if not idx:
         return None
-    return idx[0] + 1, len(sorted_), float(val)
+    return idx[0] + 1, len(sorted_), float(val), sorted_.iloc[0], sorted_.iloc[-1]
+
+
+def _extreme_from_row(row, name_col: str, dbn_col: str, format_value) -> PeerExtreme:
+    return PeerExtreme(
+        school_name=str(row.get(name_col, "")),
+        dbn=str(row.get(dbn_col, "")),
+        value_display=format_value(row),
+    )
 
 
 def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
@@ -677,7 +687,8 @@ def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
     info = _rank_in_cohort(cohort, "dbn", dbn, "poverty_pct", ascending=False)
     if info is None:
         return None
-    rank, total, value = info
+    rank, total, value, top, bottom = info
+    fmt = lambda r: f"{r['poverty_pct'] * 100:.1f}%"
     return PeerRank(
         metric_label="Poverty",
         value_display=f"{value * 100:.1f}%",
@@ -685,6 +696,8 @@ def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
         rank=rank,
         total=total,
         cohort_label=f"{school_level} schools",
+        extreme_high=_extreme_from_row(top, "school_name", "dbn", fmt),
+        extreme_low=_extreme_from_row(bottom, "school_name", "dbn", fmt),
     )
 
 
@@ -705,7 +718,8 @@ def _peer_rank_ptr(dbn: str) -> Optional[PeerRank]:
     info = _rank_in_cohort(cohort, "dbn", dbn, "ptr", ascending=False)
     if info is None:
         return None
-    rank, total, value = info
+    rank, total, value, top, bottom = info
+    fmt = lambda r: f"{r['ptr']:.1f}"
     return PeerRank(
         metric_label="Pupil:teacher ratio",
         value_display=f"{value:.1f}",
@@ -713,6 +727,8 @@ def _peer_rank_ptr(dbn: str) -> Optional[PeerRank]:
         rank=rank,
         total=total,
         cohort_label=f"{school_level} schools",
+        extreme_high=_extreme_from_row(top, "school_name", "dbn", fmt),
+        extreme_low=_extreme_from_row(bottom, "school_name", "dbn", fmt),
     )
 
 
@@ -730,7 +746,6 @@ def _peer_rank_chronic(dbn: str) -> Optional[PeerRank]:
         return None
 
     store = data.get_store()
-    # Build BEDS code set for same-level peers via demographics → beds.
     same_level = store.demographics[
         (store.demographics["ay"] == store.demographics["ay"].max())
         & (store.demographics["school_level"] == school_level)
@@ -750,7 +765,8 @@ def _peer_rank_chronic(dbn: str) -> Optional[PeerRank]:
     info = _rank_in_cohort(cohort, "ENTITY_CD", beds, "ABSENT_RATE", ascending=False)
     if info is None:
         return None
-    rank, total, value = info
+    rank, total, value, top, bottom = info
+    fmt = lambda r: f"{float(r['ABSENT_RATE']):.1f}%"
     return PeerRank(
         metric_label="Chronic absenteeism",
         value_display=f"{value:.1f}%",
@@ -758,6 +774,8 @@ def _peer_rank_chronic(dbn: str) -> Optional[PeerRank]:
         rank=rank,
         total=total,
         cohort_label=f"{school_level} schools",
+        extreme_high=_extreme_from_row(top, "ENTITY_NAME", "ENTITY_CD", fmt),
+        extreme_low=_extreme_from_row(bottom, "ENTITY_NAME", "ENTITY_CD", fmt),
     )
 
 

@@ -274,12 +274,20 @@ class NysedReport(BaseModel):
     hs_cccr: list[CccrRow] = []
 
 
+class PeerExtreme(BaseModel):
+    """The extreme (top or bottom) school in a peer cohort, surfaced under
+    the LOW / HIGH labels of a peer_marker for hover/tap context."""
+    school_name: str
+    dbn: str
+    value_display: str
+
+
 class PeerRank(BaseModel):
     """Where this school's value falls in a cohort distribution.
 
-    Convention: rank #1 = HIGHEST value (cohort sorted descending).
-    Triangle in the UI is positioned (rank-1)/(total-1) from the left,
-    so HIGH = left, LOW = right (regardless of whether high is "good").
+    Convention: rank #1 = HIGHEST value (cohort sorted descending). The
+    UI flips the axis so LOW is on the left, HIGH on the right (number-
+    line direction), independent of rank semantics.
     """
     metric_label: str        # "Poverty"
     value_display: str       # "83.4%" — pre-formatted
@@ -287,6 +295,8 @@ class PeerRank(BaseModel):
     rank: int                # 1-based; #1 = highest in cohort
     total: int               # cohort size (≥ 2)
     cohort_label: str        # "elementary schools"
+    extreme_high: Optional[PeerExtreme] = None  # rank #1 in cohort
+    extreme_low: Optional[PeerExtreme] = None   # rank #total in cohort
 
 
 class SchoolDetail(BaseModel):
