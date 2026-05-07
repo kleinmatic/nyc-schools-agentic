@@ -42,27 +42,30 @@ def test_school_page_renders(client):
 def test_school_page_includes_all_sections(client):
     r = client.get("/school/15K321")
     assert r.status_code == 200
-    # Each major section header expected for an elementary school like PS 321.
-    for section in (
+    # Distinctive substrings rather than full headers — heading text is now
+    # broken up by inline term() popover triggers (e.g. "NYS <btn>ESSA</btn>
+    # accountability").
+    for fragment in (
         "Quick stats",
-        "NYS ESSA accountability",
+        ">ESSA</button>",
         "Chronic absenteeism",
-        "Spending &amp; staffing",
+        "Spending",
+        "staffing",
         "School info",
         "Location",
-        "3&#8211;8 ELA exam",
-        "3&#8211;8 Math exam",
+        "ELA exam",
+        "Math exam",
         "Class size",
         "Galaxy budget",
         "Demographics by year",
     ):
-        assert section in r.text or section.replace("&#8211;", "–") in r.text, f"missing section: {section}"
+        assert fragment in r.text, f"missing section fragment: {fragment}"
 
 
 def test_high_school_page_includes_hs_only_sections(client):
     r = client.get("/school/22K405")  # Midwood
     assert r.status_code == 200
-    for section in (
+    for fragment in (
         "High school directory",
         "Performance",
         "Admissions programs",
@@ -70,9 +73,15 @@ def test_high_school_page_includes_hs_only_sections(client):
         "Athletics",
         "Regents exams",
         "HS graduation rate",
-        "College/Career/Civic Readiness",
+        "Civic Readiness",
     ):
-        assert section in r.text, f"missing HS-only section: {section}"
+        assert fragment in r.text, f"missing HS-only section fragment: {fragment}"
+
+
+def test_insideschools_link_present(client):
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    assert 'href="https://insideschools.org/school/15K321"' in r.text
 
 
 def test_school_page_404(client):

@@ -81,12 +81,21 @@
 <div class="mb-8">
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
   <h1 class="text-3xl font-semibold mt-2">{{ s.school_name }}</h1>
-  <div class="text-sm text-slate-500 mt-2 font-mono">{{ s.dbn }}</div>
+  <div class="text-sm text-slate-500 mt-2">
+    {{ term("DBN", "District-Borough-Number — NYC's primary key for schools, formatted as <district><borough letter><school number>. Borough letters: M Manhattan, X Bronx, K Brooklyn, Q Queens, R Staten Island.") }}: <span class="font-mono">{{ s.dbn }}</span>
+  </div>
   <div class="text-sm text-slate-600 mt-1">
     {% if s.boro %}{{ s.boro }}{% endif %}
     {% if s.district %} · District {{ s.district }}{% endif %}
     {% if s.school_level %} · {{ s.school_level }}{% endif %}
     {% if s.zip %} · {{ s.zip }}{% endif %}
+  </div>
+  <div class="mt-3">
+    <a href="https://insideschools.org/school/{{ s.dbn }}" target="_blank" rel="noopener"
+       class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 underline decoration-blue-200 hover:decoration-blue-600 underline-offset-2">
+      View on InsideSchools.org
+      <span class="text-xs">&#8599;</span>
+    </a>
   </div>
 </div>
 
@@ -145,7 +154,7 @@
 {# ---------- NYSED ESSA accountability (universal) ---------- #}
 {% if ny and ny.essa_status %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">NYS ESSA accountability</h2>
+  <h2 class="text-lg font-semibold mb-3">NYS {{ term("ESSA", "Every Student Succeeds Act — the federal education accountability law (2015) that replaced No Child Left Behind. NY computes designations under it annually.") }} accountability</h2>
   {{ provenance(
     ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
     "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI."
@@ -228,7 +237,7 @@
 {# ---------- NYSED expenditures + teacher quality ---------- #}
 {% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Spending &amp; staffing (NYSED)</h2>
+  <h2 class="text-lg font-semibold mb-3">Spending &amp; staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-expenditures-per-pupil.feather", "nysed-src-2025-inexperienced-teachers-and-principals.feather", "nysed-src-2025-teachers-teaching-out-of-certification.feather"],
     "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area."
@@ -413,9 +422,9 @@
     "PSAL (Public Schools Athletic League) teams and any non-PSAL school sports. Boys / girls / coed divisions per HS directory."
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
-    {% if hs.psal_sports_boys %}<div><dt class="text-slate-500 mb-1">PSAL boys</dt><dd>{{ hs.psal_sports_boys }}</dd></div>{% endif %}
-    {% if hs.psal_sports_girls %}<div><dt class="text-slate-500 mb-1">PSAL girls</dt><dd>{{ hs.psal_sports_girls }}</dd></div>{% endif %}
-    {% if hs.psal_sports_coed %}<div><dt class="text-slate-500 mb-1">PSAL coed</dt><dd>{{ hs.psal_sports_coed }}</dd></div>{% endif %}
+    {% if hs.psal_sports_boys %}<div><dt class="text-slate-500 mb-1">{{ term("PSAL", "Public Schools Athletic League — NYC DOE's interscholastic athletics program. Schools register teams here for competitive play across the city.") }} boys</dt><dd>{{ hs.psal_sports_boys }}</dd></div>{% endif %}
+    {% if hs.psal_sports_girls %}<div><dt class="text-slate-500 mb-1">{{ term("PSAL", "Public Schools Athletic League — NYC DOE's interscholastic athletics program.") }} girls</dt><dd>{{ hs.psal_sports_girls }}</dd></div>{% endif %}
+    {% if hs.psal_sports_coed %}<div><dt class="text-slate-500 mb-1">{{ term("PSAL", "Public Schools Athletic League — NYC DOE's interscholastic athletics program.") }} coed</dt><dd>{{ hs.psal_sports_coed }}</dd></div>{% endif %}
     {% if hs.school_sports %}<div class="sm:col-span-3"><dt class="text-slate-500 mb-1">Other sports</dt><dd>{{ hs.school_sports }}</dd></div>{% endif %}
   </dl>
 </section>
@@ -469,7 +478,7 @@
     "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
-    {% if loc.nta_name %}<div><dt class="text-slate-500">Neighborhood</dt><dd>{{ loc.nta_name }}</dd></div>{% endif %}
+    {% if loc.nta_name %}<div><dt class="text-slate-500">{{ term("Neighborhood (NTA)", "Neighborhood Tabulation Area — NYC's official 195-area neighborhood definitions, used for Census reporting and city planning. Loosely follows colloquial neighborhood names but with formal boundaries.") }}</dt><dd>{{ loc.nta_name }}</dd></div>{% endif %}
     {% if loc.council_district %}<div><dt class="text-slate-500">Council district</dt><dd>{{ loc.council_district }}</dd></div>{% endif %}
     {% if loc.community_district %}<div><dt class="text-slate-500">Community district</dt><dd>{{ loc.community_district|int }}</dd></div>{% endif %}
     {% if loc.open_year %}<div><dt class="text-slate-500">Open since</dt><dd>{{ loc.open_year }}</dd></div>{% endif %}
@@ -614,7 +623,7 @@
 {# ---------- NYSED HS Graduation Rate ---------- #}
 {% if ny and ny.hs_graduation %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">HS graduation rate (NYSED)</h2>
+  <h2 class="text-lg font-semibold mb-3">HS graduation rate ({{ term("NYSED", "New York State Education Department.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-acc-hs-graduation-rate.feather"],
     "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts."
@@ -651,7 +660,7 @@
 {# ---------- NYSED HS CCCR ---------- #}
 {% if ny and ny.hs_cccr %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">College/Career/Civic Readiness (NYSED)</h2>
+  <h2 class="text-lg font-semibold mb-3">{{ term("CCCR", "College/Career/Civic Readiness — a NYSED accountability indicator weighting graduates by credential earned (Advanced Regents > Regents > local > IEP, with bonuses for AP/IB/CTE/biliteracy seal).") }} ({{ term("NYSED", "New York State Education Department.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-acc-hs-cccr.feather"],
     "NYSED ESSA accountability indicator. The index weights graduates by credential earned (Advanced Regents > Regents > local > IEP), with extra credit for AP/IB scores, CTE certifications, and the NYS Seal of Biliteracy. Level 1-4 maps to the school's ESSA accountability tier (4 = highest)."
@@ -691,6 +700,15 @@
     ["school-class-size.csv"],
     "NYC DOE average class size by (grade × subject × program type) from the InfoHub 2022-23 release. Program types break out Gen Ed, ICT (integrated co-teaching), and self-contained classrooms. Currently only the latest year is loaded."
   ) }}
+  {% call explainer("Program type glossary") %}
+    <p>The Program column uses NYC DOE's special-education classroom typology:</p>
+    <ul class="list-disc list-inside ml-2">
+      <li><strong>Gen Ed</strong> — General Education classroom, no special-education service model.</li>
+      <li><strong>ICT</strong> — Integrated Co-Teaching: one general-education teacher and one special-education teacher in the same room. Students with and without IEPs learn together.</li>
+      <li><strong>Self-contained</strong> — special-education-only classroom with a smaller student count (typically 12-15) and a special-education teacher.</li>
+      <li><strong>SETSS</strong> (if shown) — Special Education Teacher Support Services: a specialist pulls students out for additional instruction during part of the day.</li>
+    </ul>
+  {% endcall %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -727,7 +745,7 @@
 {# ---------- SHSAT ---------- #}
 {% if school.shsat %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">SHSAT applicants &amp; offers</h2>
+  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} applicants &amp; offers</h2>
   {{ provenance(
     ["shsat-applicants.csv"],
     "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2."
@@ -767,6 +785,18 @@
     ["galaxy-budget.csv"],
     "Scraped from the NYC DOE Galaxy budget portal — line-item budget per (school × academic year). Currently 2022-23 only. Note: the dollar column ships as currency strings ('$ 187,530') in upstream; we parse to floats client-side. The category breakdown shows where each school's allocation goes."
   ) }}
+  {% call explainer("Budget category glossary") %}
+    <p>NYC DOE budget categories use a few opaque acronyms:</p>
+    <ul class="list-disc list-inside ml-2">
+      <li><strong>OTPS</strong> — Other Than Personal Services: everything that isn't salaries — supplies, contracts, software, per-pupil licenses, instructional materials.</li>
+      <li><strong>SBST</strong> — School-Based Support Team: staff (psychologist, social worker, special-ed evaluator) who assess students for special-ed services and develop IEPs.</li>
+      <li><strong>Per Diem</strong> — daily pay for substitute teachers and other temporary staff.</li>
+      <li><strong>Per Session — After/Before School</strong>, <strong>— Professional Development</strong>, <strong>— Miscellaneous</strong> — extra hourly pay for teachers working outside their regular schedule (tutoring, training, club coaching, etc.).</li>
+      <li><strong>Paraprofessionals</strong> — classroom aides, often supporting students with IEPs in ICT or self-contained classrooms.</li>
+      <li><strong>School Site</strong> — facilities/maintenance allocation for the building itself.</li>
+      <li><strong>Special Needs - Support Services</strong> — services beyond a teacher's classroom (speech, OT, counseling) for students with IEPs.</li>
+    </ul>
+  {% endcall %}
   <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-white border border-slate-200 rounded-lg p-5 mb-4">
     <div>{{ card_label("Total budget") }}{{ card_value(money(school.budget.total)) }}</div>
     {% if school.budget.total_positions is not none %}
