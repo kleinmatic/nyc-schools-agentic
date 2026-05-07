@@ -9,6 +9,12 @@
 {% macro chip(label, value) %}
 {% if value %}<div class="inline-flex flex-col gap-0.5 mr-4 mb-3"><span class="text-xs text-slate-500 uppercase tracking-wide">{{ label }}</span><span class="text-sm">{{ value }}</span></div>{% endif %}
 {% endmacro %}
+{% macro provenance(files, desc) %}
+<div class="text-xs text-slate-500 -mt-2 mb-3 flex flex-wrap items-start gap-x-2 gap-y-1">
+  {% for f in files %}<code class="font-mono text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded shrink-0">{{ f }}</code>{% endfor %}
+  <span class="leading-snug">{{ desc }}</span>
+</div>
+{% endmacro %}
 
 {% block content %}
 {% set s = school.summary %}
@@ -33,6 +39,10 @@
 {# ---------- Quick stats ---------- #}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Quick stats</h2>
+  {{ provenance(
+    ["school-demographics.csv", "snapshot.feather", "ptr.csv", "hs-directory-2021.feather"],
+    "Roll-up of latest-year metrics from multiple sources — NYC DOE demographic snapshot (2024-25), DOE official snapshot (~2016 vintage), pupil:teacher ratio (2022-23), and HS directory (AY 2021) for graduation/college-career figures on high schools."
+  ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if latest_demo %}
       <div>{{ card_label("Year") }}{{ card_value(latest_demo.ay ~ "-" ~ "%02d"|format((latest_demo.ay+1) % 100)) }}</div>
@@ -66,7 +76,10 @@
 {% if ny and ny.essa_status %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">NYS ESSA accountability</h2>
-  <p class="text-xs text-slate-400 mb-3">From the NYSED School Report Card. Status reflects the next school year's designation (e.g. 2025 row = 2025-26 designation based on 2024-25 results).</p>
+  {{ provenance(
+    ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
+    "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI."
+  ) }}
   <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% for s_row in ny.essa_status %}
       {% set is_flagged = "Local Support" not in s_row.overall_status %}
@@ -97,7 +110,10 @@
 {% if ny and ny.chronic_absenteeism %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Chronic absenteeism</h2>
-  <p class="text-xs text-slate-400 mb-3">% of students absent ≥10% of enrolled days. NYSED counts a row for each demographic subgroup.</p>
+  {{ provenance(
+    ["nysed-src-2025-acc-em-chronic-absenteeism.feather", "nysed-src-2025-acc-hs-chronic-absenteeism.feather"],
+    "NYSED ESSA chronic absenteeism — students absent ≥10% of enrolled days. Each row is one (year × school level × demographic subgroup). Schools spanning grades may report both EM (elementary/middle) and HS rows."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -131,6 +147,10 @@
 {% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Spending &amp; staffing (NYSED)</h2>
+  {{ provenance(
+    ["nysed-src-2025-expenditures-per-pupil.feather", "nysed-src-2025-inexperienced-teachers-and-principals.feather", "nysed-src-2025-teachers-teaching-out-of-certification.feather"],
+    "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area."
+  ) }}
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     {% if ny.expenditures %}
     <div class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
@@ -195,6 +215,10 @@
 {% if hs %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">High school directory ({{ hs.ay }})</h2>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "NYC DOE High School Directory, the source for the 8th-grader-facing admissions guide. Pulled from NYC Open Data (resource 8b6c-7uty). 442 schools × 449 columns covering programs, AP courses, sports, transit, etc. AY 2021 is the latest cached year."
+  ) }}
   {% if hs.overview %}
     <div class="bg-white border border-slate-200 rounded-lg p-5 mb-4 text-sm leading-relaxed">{{ hs.overview }}</div>
   {% endif %}
@@ -224,6 +248,10 @@
 {# ---------- HS performance ---------- #}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Performance</h2>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "Same HS directory dataset (AY 2021). Graduation rate is the 4-year cohort rate. College-career-ready combines AP/IB/SAT thresholds, Regents passing, and CTE certifications. 'Students feel safe' is from the NYC School Survey."
+  ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if hs.graduation_rate is not none %}<div>{{ card_label("4-yr graduation") }}{{ card_value(pct(hs.graduation_rate)) }}</div>{% endif %}
     {% if hs.college_career_rate is not none %}<div>{{ card_label("College/career-ready") }}{{ card_value(pct(hs.college_career_rate)) }}</div>{% endif %}
@@ -237,7 +265,10 @@
 {% if hs.programs %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Admissions programs</h2>
-  <p class="text-xs text-slate-400 mb-3">Each program is a distinct application path with its own seats and requirements.</p>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "Each program is a distinct application path with its own seats, applicants, and admissions criteria. Reshaped from the directory's wide-format columns (program{N}, eligibility{N}, seats9ge{N}, requirement_{j}_{N}, etc.) into a list."
+  ) }}
   <div class="space-y-3">
     {% for p in hs.programs %}
     <div class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
@@ -269,6 +300,10 @@
 {% if hs.advanced_placement_courses or hs.language_classes or hs.academic_opportunities or hs.diploma_endorsements or hs.ell_programs %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Academic offerings</h2>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "AP courses, language classes, ELL programs, diploma endorsements, and academic opportunities published in the directory. Comma-separated strings as supplied by the DOE — we don't normalize."
+  ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if hs.advanced_placement_courses %}<div><dt class="text-slate-500 mb-1">AP courses</dt><dd>{{ hs.advanced_placement_courses }}</dd></div>{% endif %}
     {% if hs.language_classes %}<div><dt class="text-slate-500 mb-1">Languages</dt><dd>{{ hs.language_classes }}</dd></div>{% endif %}
@@ -291,6 +326,10 @@
 {% if hs.psal_sports_boys or hs.psal_sports_girls or hs.psal_sports_coed or hs.school_sports %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Athletics</h2>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "PSAL (Public Schools Athletic League) teams and any non-PSAL school sports. Boys / girls / coed divisions per HS directory."
+  ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if hs.psal_sports_boys %}<div><dt class="text-slate-500 mb-1">PSAL boys</dt><dd>{{ hs.psal_sports_boys }}</dd></div>{% endif %}
     {% if hs.psal_sports_girls %}<div><dt class="text-slate-500 mb-1">PSAL girls</dt><dd>{{ hs.psal_sports_girls }}</dd></div>{% endif %}
@@ -304,6 +343,10 @@
 {% if hs and (hs.diversity_in_admissions is not none or hs.diversity_details or hs.school_10th_seats) %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Admissions notes</h2>
+  {{ provenance(
+    ["hs-directory-2021.feather"],
+    "Diversity-in-admissions priority and 10th-grade seat availability flags."
+  ) }}
   <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm flex flex-wrap">
     {% if hs.diversity_in_admissions is not none %}{{ chip("Diversity in admissions", "Yes" if hs.diversity_in_admissions else "No") }}{% endif %}
     {% if hs.school_10th_seats %}{{ chip("10th-grade seats", hs.school_10th_seats) }}{% endif %}
@@ -317,7 +360,10 @@
 {% if snap %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">School info</h2>
-  <p class="text-xs text-slate-400 mb-2">From the DOE official snapshot{% if snap.ay %}, {{ snap.ay }}-{{ "%02d"|format((snap.ay+1) % 100) }}{% endif %}.</p>
+  {{ provenance(
+    ["snapshot.feather"],
+    "Scraped from the NYC DOE per-school portal pages. Most rows are dated to 2016 in the upstream cache, so this section is older than NYSED data — useful for principal name, admissions method, and quality-review URL but stale for performance metrics."
+  ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if snap.address %}<div><dt class="text-slate-500">Address</dt><dd>{{ snap.address }}{% if snap.city_state_zip %}, {{ snap.city_state_zip }}{% endif %}</dd></div>{% endif %}
     {% if snap.principal_name %}<div><dt class="text-slate-500">Principal</dt><dd>{{ snap.principal_name }}{% if snap.principal_years is not none %} · {{ "%g"|format(snap.principal_years) }} years{% endif %}{% if snap.principal_phone %} · <a class="underline" href="tel:{{ snap.principal_phone }}">{{ snap.principal_phone }}</a>{% endif %}</dd></div>{% endif %}
@@ -336,6 +382,10 @@
 {% if loc %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Location &amp; neighborhood</h2>
+  {{ provenance(
+    ["school_locations.geojson"],
+    "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
+  ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if loc.nta_name %}<div><dt class="text-slate-500">Neighborhood</dt><dd>{{ loc.nta_name }}</dd></div>{% endif %}
     {% if loc.council_district %}<div><dt class="text-slate-500">Council district</dt><dd>{{ loc.council_district }}</dd></div>{% endif %}
@@ -356,6 +406,10 @@
 {% if school.ela %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">3–8 ELA exam — All Students</h2>
+  {{ provenance(
+    ["nyc-ela.csv"],
+    "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -395,6 +449,10 @@
 {% if school.math %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">3–8 Math exam — All Students</h2>
+  {{ provenance(
+    ["nyc-math.csv"],
+    "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -434,6 +492,10 @@
 {% if school.regents %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Regents exams — All Students</h2>
+  {{ provenance(
+    ["nyc-regents.csv"],
+    "NYS Regents exam results, from NYC DOE InfoHub. Years 2014-2022. Score thresholds: 65 = passing; 80 = mastery (Advanced Designation eligibility). College-ready cutoffs vary by exam."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -471,7 +533,10 @@
 {% if ny and ny.hs_graduation %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">HS graduation rate (NYSED)</h2>
-  <p class="text-xs text-slate-400 mb-3">By cohort (4-year = on-time; 5-yr/6-yr include late-graduating students). One row per (year, subgroup, cohort).</p>
+  {{ provenance(
+    ["nysed-src-2025-acc-hs-graduation-rate.feather"],
+    "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -505,7 +570,10 @@
 {% if ny and ny.hs_cccr %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">College/Career/Civic Readiness (NYSED)</h2>
-  <p class="text-xs text-slate-400 mb-3">A weighted-average index where a higher score indicates more students earning advanced credentials. Level is the school's accountability tier (1 lowest, 4 highest).</p>
+  {{ provenance(
+    ["nysed-src-2025-acc-hs-cccr.feather"],
+    "NYSED ESSA accountability indicator. The index weights graduates by credential earned (Advanced Regents > Regents > local > IEP), with extra credit for AP/IB scores, CTE certifications, and the NYS Seal of Biliteracy. Level 1-4 maps to the school's ESSA accountability tier (4 = highest)."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -537,6 +605,10 @@
 {% if school.class_size %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Class size{% if school.class_size_year %} ({{ school.class_size_year }}-{{ "%02d"|format((school.class_size_year+1) % 100) }}){% endif %}</h2>
+  {{ provenance(
+    ["school-class-size.csv"],
+    "NYC DOE average class size by (grade × subject × program type) from the InfoHub 2022-23 release. Program types break out Gen Ed, ICT (integrated co-teaching), and self-contained classrooms. Currently only the latest year is loaded."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -574,7 +646,10 @@
 {% if school.shsat %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">SHSAT applicants &amp; offers</h2>
-  <p class="text-xs text-slate-400 mb-3">8th-graders from this school applying to specialized high schools.</p>
+  {{ provenance(
+    ["shsat-applicants.csv"],
+    "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -606,6 +681,10 @@
 {% if school.budget %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Galaxy budget ({{ school.budget.ay }}-{{ "%02d"|format((school.budget.ay+1) % 100) }})</h2>
+  {{ provenance(
+    ["galaxy-budget.csv"],
+    "Scraped from the NYC DOE Galaxy budget portal — line-item budget per (school × academic year). Currently 2022-23 only. Note: the dollar column ships as currency strings ('$ 187,530') in upstream; we parse to floats client-side. The category breakdown shows where each school's allocation goes."
+  ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-white border border-slate-200 rounded-lg p-5 mb-4">
     <div>{{ card_label("Total budget") }}{{ card_value(money(school.budget.total)) }}</div>
     {% if school.budget.total_positions is not none %}
@@ -642,6 +721,10 @@
 {% if school.demographics_by_year %}
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Demographics by year</h2>
+  {{ provenance(
+    ["school-demographics.csv"],
+    "NYC DOE Demographic Snapshot. Annual roll-up per (school × year) covering total enrollment, race/ethnicity, gender, ELL, SWD, poverty count, and ENI (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0-1 scale). Years 2005-2024."
+  ) }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
