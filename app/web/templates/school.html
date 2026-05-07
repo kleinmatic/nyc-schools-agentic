@@ -15,6 +15,17 @@
   <span class="leading-snug">{{ desc }}</span>
 </div>
 {% endmacro %}
+{% macro explainer(label="Explanation") %}
+<details class="group mb-3">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium select-none">
+    <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+    {{ label }}
+  </summary>
+  <div class="mt-2 p-4 bg-blue-50/40 border border-blue-200 rounded-lg text-sm text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_li]:mb-1.5">
+    {{ caller() }}
+  </div>
+</details>
+{% endmacro %}
 
 {% block content %}
 {% set s = school.summary %}
@@ -80,6 +91,18 @@
     ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
     "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI."
   ) }}
+  {% call explainer() %}
+    <p><strong>ESSA</strong> = the federal Every Student Succeeds Act (2015), which replaced No Child Left Behind. It tells each state to identify schools needing extra support based on multiple performance indicators — test scores, growth, English-learner progress, attendance, graduation rate. NYSED computes the designation annually for every NY public school.</p>
+    <p>Four tiers, best to worst:</p>
+    <ul class="list-disc list-inside ml-2">
+      <li><strong>Local Support and Improvement (LSI)</strong> — the default, good-standing tier. The school is meeting its accountability targets across all indicators and demographic subgroups. No federal flag. The name sounds ominous but it just means the school handles its own continuous improvement <em>locally</em>, with no state or federal intervention required. ~80%+ of NY schools sit here.</li>
+      <li><strong>Targeted Support and Improvement (TSI)</strong> — at least one demographic subgroup (students with disabilities, English-language learners, a racial group, etc.) is performing in the bottom tier. The school must write a subgroup-focused improvement plan.</li>
+      <li><strong>Additional Targeted Support and Improvement (ATSI)</strong> — a TSI school where the flagged subgroup's performance is so low it would qualify as Comprehensive if it were the whole school. Stronger intervention required.</li>
+      <li><strong>Comprehensive Support and Improvement (CSI)</strong> — the lowest tier. Triggered by being in the bottom 5% of Title I schools statewide, having a 4-year graduation rate ≤ 67% for two consecutive years, or being ATSI for three years without improvement. State-level support plus a mandatory improvement plan.</li>
+    </ul>
+    <p><strong>Year column:</strong> the <code>2024-25</code> row is the designation that applies <em>during</em> the 2024-25 school year, computed from 2023-24 results. The <code>2025-26</code> row is next year's designation, from 2024-25 results. NYSED publishes the designation about a year ahead so families and schools have notice.</p>
+    <p>When a school <em>is</em> flagged, the row is rendered in amber with a "flagged" pill, and a separate "Subgroups flagged" callout below lists which subgroups triggered TSI/ATSI.</p>
+  {% endcall %}
   <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% for s_row in ny.essa_status %}
       {% set is_flagged = "Local Support" not in s_row.overall_status %}
