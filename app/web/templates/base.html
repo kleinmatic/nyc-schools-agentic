@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NYC Schools{% endblock %}</title>
+  <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-4xl mx-auto px-6 py-4 flex items-baseline justify-between">
+      <a href="/" class="text-xl font-semibold tracking-tight">NYC Schools</a>
+      <nav class="text-sm text-slate-500">
+        <a href="https://github.com/kleinmatic/nyc-schools-agentic" class="hover:text-slate-900">source</a>
+      </nav>
+    </div>
+  </header>
+  <main class="max-w-4xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="max-w-4xl mx-auto px-6 py-8 text-xs text-slate-400">
+    Data via <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> (AGPL-3.0).
+    This service is also AGPL-3.0; <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic">corresponding source</a>.
+  </footer>
+</body>
+</html>

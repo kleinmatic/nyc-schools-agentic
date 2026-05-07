@@ -1,0 +1,23 @@
+{% if query and not results %}
+  <p class="text-slate-500">No schools matched <code class="text-slate-700">{{ query }}</code>.</p>
+{% elif results %}
+  <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg">
+  {% for s in results %}
+    <li class="px-4 py-3 hover:bg-slate-50">
+      <a href="/school/{{ s.dbn }}" class="block">
+        <div class="flex items-baseline justify-between gap-4">
+          <span class="font-medium">{{ s.school_name }}</span>
+          <span class="text-xs text-slate-500 font-mono">{{ s.dbn }}</span>
+        </div>
+        <div class="text-xs text-slate-500 mt-0.5">
+          {% if s.short_name %}{{ s.short_name }} · {% endif %}
+          {% if s.boro %}{{ s.boro }}{% endif %}
+          {% if s.district %} · District {{ s.district }}{% endif %}
+          {% if s.school_level %} · {{ s.school_level }}{% endif %}
+          {% if s.total_enrollment %} · {{ "{:,}".format(s.total_enrollment) }} students{% endif %}
+        </div>
+      </a>
+    </li>
+  {% endfor %}
+  </ul>
+{% endif %}

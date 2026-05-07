@@ -1,8 +1,8 @@
-# NYC Schools Report Card
+# NYC Schools Agentic
 
-Parent-facing site that produces a "report card" for any NYC public school, keyed by **DBN** (e.g. `15K321`).
+Interactive site/server for NYC public school data, keyed by **DBN** (e.g. `15K321`). Serves HTML pages to humans and (planned) MCP/A2A/ACP surfaces to agents — the service layer is designed so a single function powers all of them.
 
-This repo is the **app** (per-school assembler, future API, frontend, deployment). It consumes the upstream [`nycschools`](https://github.com/adelphi-ed-tech/nycschools) Python package as a read-only data layer. See [CLAUDE.md](./CLAUDE.md) for the full repo-boundary policy.
+This repo is the **app** (FastAPI server, service layer, frontend, future agentic surfaces, deployment). It consumes the upstream [`nycschools`](https://github.com/adelphi-ed-tech/nycschools) Python package as a read-only data layer. See [CLAUDE.md](./CLAUDE.md) for architecture and repo-boundary policy.
 
 ## Prerequisites
 
@@ -47,9 +47,34 @@ Upstream's bootstrap downloads a single `.7z` archive from a Google Drive link. 
 
 We bypass it. The package's own `dataloader.load()` already has a per-file fallback to `https://data.mixi.nyc/<filename>` — that host is alive and serves all the cleaned files individually. `scripts/fetch_data.py` just calls each loader once to pre-warm the cache via that fallback.
 
+## Run the site locally
+
+```bash
+uv run uvicorn app.main:app --reload
+# → http://localhost:8000
+```
+
+Cold start takes ~5s while the dataframes load into memory; you'll see a "Data loaded: ..." log line. After that, `--reload` watches Python files and restarts on save.
+
+Routes you'll have:
+- `/` — search page (htmx live results as you type)
+- `/search?q=...` — same search, also returns htmx partial when called with `HX-Request: true`
+- `/school/{dbn}` — school detail (e.g. `/school/15K321`)
+- `/healthz` — liveness check
+- `/docs` — auto-generated OpenAPI / Swagger UI (FastAPI default)
+
+### Run the tests
+
+```bash
+uv run pytest          # full suite, ~2s after the dataframes load
+uv run pytest -k routes
+```
+
+Tests use FastAPI's `TestClient` and load the real on-disk data once per session. If you haven't run `scripts/fetch_data.py` yet, tests will fail with "Data not loaded."
+
 ## Exploring the data
 
-Two CLIs:
+Two CLIs (independent of the web server):
 
 ```bash
 # Find a school's DBN. Accepts full names, short names, or partial DBNs.
@@ -102,15 +127,28 @@ The year column is **`ay`** = academic year start, integer (e.g. `2024` means 20
 
 ```
 .
-├── pyproject.toml          # uv-managed; nycschools is the only declared dep
-├── uv.lock                 # committed; reproducible installs
-├── .env                    # NYC_SCHOOLS_DATA_DIR=./school-data (gitignored)
-├── school-data/            # cached data files, 150ish MB (gitignored)
+├── pyproject.toml         # uv-managed; FastAPI + nycschools (editable @ ../nycschools)
+├── uv.lock                # committed; reproducible installs
+├── .env                   # NYC_SCHOOLS_DATA_DIR=./school-data (gitignored)
+├── school-data/           # cached data files, ~150 MB (gitignored)
+├── app/
+│   ├── main.py            # FastAPI app, lifespan-loaded data
+│   ├── config.py          # .env loading, NYC_SCHOOLS_DATA_DIR resolution
+│   ├── data.py            # in-memory dataframes (loaded once at startup)
+│   ├── services/          # transport-agnostic data-access functions
+│   │   ├── models.py      # Pydantic schemas (the cross-surface contract)
+│   │   └── schools.py     # search_schools, get_school
+│   └── web/               # thin Jinja-rendering adapters
+│       ├── routes.py
+│       └── templates/     # base, search, school, partials/
+├── tests/
+│   ├── test_services.py
+│   └── test_routes.py
 ├── scripts/
-│   ├── fetch_data.py       # pre-warm ./school-data/ from data.mixi.nyc
-│   ├── find_school.py      # name → DBN lookup
-│   └── inspect_school.py   # everything we know about one DBN
-├── CLAUDE.md               # architecture & repo-boundary policy
+│   ├── fetch_data.py      # pre-warm ./school-data/ from data.mixi.nyc
+│   ├── find_school.py     # name → DBN lookup
+│   └── inspect_school.py  # everything we know about one DBN
+├── CLAUDE.md              # architecture & repo-boundary policy
 └── README.md
 ```
 
@@ -120,12 +158,14 @@ The year column is **`ay`** = academic year start, integer (e.g. `2024` means 20
 
 | Goes in `~/Code/nycschools/` | Goes here |
 |---|---|
-| New data loaders, schema fixes, dataset modules | Per-DBN report assembler |
-| Bug fixes in existing loaders | API server / static JSON build |
-| New tests for the data layer | Frontend (school search, report page) |
-| Documentation for the package | Deployment, infra, project notes |
+| New data loaders, schema fixes, dataset modules | New service-layer functions over existing data |
+| Bug fixes in existing loaders | HTTP / MCP / A2A / ACP route adapters |
+| New tests for the data layer | Tests for the service & route layers |
+| Documentation for the package | Site templates, frontend, deploy, project notes |
 
-If a parent visiting the site would never see it, and another data-analysis project could reuse it, it's upstream. Otherwise it's here.
+If another data-analysis project could reuse it, it's upstream. Otherwise it's here.
+
+**Adding a new operation:** define it once in `app/services/schools.py` returning a Pydantic model from `app/services/models.py`. It's automatically available to every surface (HTML, JSON API, future MCP/A2A/ACP). Adapters wrap; services compute. Don't import `Request`, `Context`, or other transport types into `services/`.
 
 ## License & private state
 

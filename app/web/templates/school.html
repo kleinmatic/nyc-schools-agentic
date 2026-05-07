@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ school.summary.school_name }} ({{ school.summary.dbn }}){% endblock %}
+{% block content %}
+{% set s = school.summary %}
+<div class="mb-8">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <h1 class="text-3xl font-semibold mt-2">{{ s.school_name }}</h1>
+  <div class="text-sm text-slate-500 mt-2 font-mono">{{ s.dbn }}</div>
+  <div class="text-sm text-slate-600 mt-1">
+    {% if s.boro %}{{ s.boro }}{% endif %}
+    {% if s.district %} · District {{ s.district }}{% endif %}
+    {% if s.school_level %} · {{ s.school_level }}{% endif %}
+    {% if s.zip %} · {{ s.zip }}{% endif %}
+  </div>
+</div>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Latest snapshot</h2>
+  {% set latest = school.demographics_by_year[-1] %}
+  <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">Year</dt><dd class="text-lg font-medium">{{ latest.ay }}-{{ "%02d"|format(latest.ay+1 % 100) }}</dd></div>
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">Enrollment</dt><dd class="text-lg font-medium">{% if latest.total_enrollment %}{{ "{:,}".format(latest.total_enrollment) }}{% else %}—{% endif %}</dd></div>
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">Poverty</dt><dd class="text-lg font-medium">{% if latest.poverty_pct is not none %}{{ "%.1f"|format(latest.poverty_pct * 100) }}%{% else %}—{% endif %}</dd></div>
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">ENI</dt><dd class="text-lg font-medium">{% if latest.eni is not none %}{{ "%.2f"|format(latest.eni) }}{% else %}—{% endif %}</dd></div>
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">ELL</dt><dd class="text-lg font-medium">{% if latest.ell_pct is not none %}{{ "%.1f"|format(latest.ell_pct * 100) }}%{% else %}—{% endif %}</dd></div>
+    <div><dt class="text-xs text-slate-500 uppercase tracking-wide">SWD</dt><dd class="text-lg font-medium">{% if latest.swd_pct is not none %}{{ "%.1f"|format(latest.swd_pct * 100) }}%{% else %}—{% endif %}</dd></div>
+  </dl>
+</section>
+
+<section>
+  <h2 class="text-lg font-semibold mb-3">Demographics by year</h2>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-right">Enrollment</th>
+          <th class="px-4 py-2 text-right">Poverty %</th>
+          <th class="px-4 py-2 text-right">ENI</th>
+          <th class="px-4 py-2 text-right">ELL %</th>
+          <th class="px-4 py-2 text-right">SWD %</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for y in school.demographics_by_year %}
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">{{ y.ay }}</td>
+          <td class="px-4 py-2 text-right">{% if y.total_enrollment %}{{ "{:,}".format(y.total_enrollment) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{% if y.poverty_pct is not none %}{{ "%.1f"|format(y.poverty_pct * 100) }}%{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{% if y.eni is not none %}{{ "%.2f"|format(y.eni) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{% if y.ell_pct is not none %}{{ "%.1f"|format(y.ell_pct * 100) }}%{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{% if y.swd_pct is not none %}{{ "%.1f"|format(y.swd_pct * 100) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="mt-6 text-xs text-slate-400">More sections coming: snapshot (attendance, principal), exams (3-8 ELA/math), class size, location.</p>
+{% endblock %}
