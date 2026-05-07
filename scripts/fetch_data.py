@@ -2,8 +2,13 @@
 
 The upstream package's `dataloader.load()` lazily fetches each file from
 data.mixi.nyc on first call and caches it under NYC_SCHOOLS_DATA_DIR. This
-script just kicks off the loaders we know we'll need so the cache is full
-and offline-ready. Re-run any time; cached files are reused.
+script kicks off the loaders we know we'll need so the cache is full and
+offline-ready. Re-run any time; cached files are reused.
+
+Includes the NYSED School Report Card Database loader (nysed_src) which
+downloads SRC{year}.zip (~370 MB), extracts the Group3 .mdb (~1.5 GB), and
+materializes one feather per accountability/assessment table. Requires
+mdbtools to be installed (`brew install mdbtools` on macOS).
 
 The bulk Google Drive .7z archive (referenced in nycschools/datasets.py) is
 404 as of 2026 — we deliberately bypass it.
@@ -18,7 +23,7 @@ DATA_DIR = REPO_ROOT / "school-data"
 DATA_DIR.mkdir(exist_ok=True)
 os.environ["NYC_SCHOOLS_DATA_DIR"] = str(DATA_DIR)
 
-from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat
+from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat, nysed_src
 
 
 def fetch_hs_directory(ay: int = 2021):
@@ -31,6 +36,13 @@ def fetch_hs_directory(ay: int = 2021):
     df = schools.load_hs_directory(ay=ay)
     df.reset_index(drop=True).to_feather(cache_path)
     return df
+
+
+def fetch_nysed_src(year: int = 2025):
+    """Download the NYSED SRC database and extract every NYC-only feather we use."""
+    nysed_src.warm_cache(year=year)
+    # Return a representative table so the LOADERS log line has a row count.
+    return nysed_src.load_essa_status(year=year, nyc_only=True)
 
 
 LOADERS = [
@@ -47,6 +59,7 @@ LOADERS = [
     ("shsat_offers", shsat.load_admission_offers),
     ("galaxy_budgets", budgets.load_galaxy_budgets),
     ("hs_directory_2021", fetch_hs_directory),
+    ("nysed_src_2025", fetch_nysed_src),
 ]
 
 failures = []
@@ -69,3 +82,7 @@ if failures:
         print(f"\n--- {name} ---")
         traceback.print_exception(type(e), e, e.__traceback__)
     sys.exit(1)
+
+print()
+print("Tip: after the NYSED feathers are extracted, you can reclaim ~1.5 GB by")
+print("deleting school-data/SRC2025_Group3.mdb (re-extracts from the zip if needed).")

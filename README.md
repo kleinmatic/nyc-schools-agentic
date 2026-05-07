@@ -8,14 +8,15 @@ This repo is the **app** (FastAPI server, service layer, frontend, future agenti
 
 - **macOS or Linux** (Windows untested)
 - **[uv](https://docs.astral.sh/uv/)** — `brew install uv`
-- **unixODBC** — `brew install unixodbc` (one of upstream's deps, `pyodbc`, fails to build without it; we never actually call ODBC at runtime)
+- **unixODBC** — `brew install unixodbc` (upstream pulls `pyodbc`, which won't build without it; we never call ODBC at runtime)
+- **mdbtools** — `brew install mdbtools` (used to read NYSED's Microsoft Access database; without it, the NYSED loader is the only loader that fails)
 - **The upstream `nycschools` repo cloned as a sibling**:
   ```
   ~/Code/
     nycschools/        # https://github.com/adelphi-ed-tech/nycschools
     nyc-report-card/   # this repo
   ```
-  `pyproject.toml` references it as `../nycschools` (editable install).
+  `pyproject.toml` references it as `../nycschools` (editable install). Note: this project depends on the `nysed_src` module, which lives on the [`nysed-src-loader` branch of the kleinmatic fork](https://github.com/kleinmatic/nycschools/tree/nysed-src-loader) pending PR back to upstream.
 
 ## Bootstrap
 
@@ -29,11 +30,12 @@ cd nyc-report-card
 # 2. Install (creates .venv/, populates uv.lock)
 uv sync
 
-# 3. Pre-warm the local data cache (~250 MB, a couple of minutes)
+# 3. Pre-warm the local data cache (~600 MB total — includes the 367 MB
+#    NYSED SRC zip and the 1.5 GB extracted .mdb. Several minutes on first run.)
 uv run scripts/fetch_data.py
 ```
 
-That's it. After step 3, `./school-data/` contains 13 cleaned datasets — see [Data inventory](#data-inventory) below for the full breakdown.
+That's it. After step 3, `./school-data/` contains 13 nycschools datasets plus 16 NYSED Report Card tables — see [Data inventory](#data-inventory) for the full breakdown. Once the NYSED feathers are extracted, the 1.5 GB `SRC2025_Group3.mdb` can be safely deleted to reclaim disk; the loaders read the per-table feathers directly.
 
 The `.env` file (gitignored) sets `NYC_SCHOOLS_DATA_DIR=./school-data`. If you want to use the data from a different working directory, set the env var explicitly:
 
@@ -170,6 +172,29 @@ The 8th-grader-facing High School Directory data. **442 schools × 449 columns.*
 **`zipcodes` / `neighborhoods`** — `geo.load_zipcodes()` / `load_neighborhoods()`
 Boundary polygons (zipcodes) and labeled points (neighborhoods). Loaded for future borough/zone pages; not currently surfaced on the school page.
 
+### NYSED School Report Card Database (SRC 2025)
+
+Layered on top of the nycschools data, we also pull NYSED's annual ESSA Report Card Database. This is the **freshest data we have** (April 30, 2026 release; covers 2024-25 results and 2025-26 designations). It's downloaded as a Microsoft Access (`.mdb`) inside a 367 MB ZIP from `https://data.nysed.gov/files/essa/24-25/SRC2025.zip`, extracted via `mdbtools`, and persisted as one feather per table under `school-data/nysed-src-2025-*.feather`.
+
+Filtering: NYSED data covers all of NY State; we filter to NYC public schools by joining on `ENTITY_CD` (12-digit BEDS code) with prefix in `("31", "32", "33", "34", "35")` — one prefix per borough.
+
+| NYSED dataset | Granularity | Year | Notable fields |
+|---|---|---|---|
+| `nysed_essa_status` | school × year | 2024, 2025 | OVERALL_STATUS (CSI/TSI/ATSI/Local Support) |
+| `nysed_essa_subgroup` | school × year × subgroup | 2024, 2025 | which subgroups triggered TSI/ATSI |
+| `nysed_chronic` | school × year × level × subgroup | 2024, 2025 | enrollment, absent count, absent rate |
+| `nysed_expenditures` | school × year | 2024, 2025 | per-pupil federal, state/local, combined |
+| `nysed_inexp_teachers` | school × year | 2024, 2025 | num + pct of inexperienced teachers/principals |
+| `nysed_out_of_cert` | school × year | 2024, 2025 | num + pct of teachers teaching out of certification |
+| `nysed_hs_grad` | HS × year × subgroup × cohort | 2024, 2025 | 4-yr / 5-yr / 6-yr / Combined cohort grad rates |
+| `nysed_hs_cccr` | HS × year × subgroup | 2024, 2025 | College/Career/Civic Readiness index + level (1–4) |
+
+(Plus 8 additional NYSED tables — Annual EM ELA/Math/Science, Annual Regents, Total Cohort Regents, Accountability Levels, Institution Grouping — extracted to feathers and ready to use, but not currently surfaced on the school page since the older nycschools versions of these still drive the existing exam tables.)
+
+#### Suppression and types
+
+Numeric fields in the source Access database are stored as Text. NYSED uses the literal string `"s"` to indicate values suppressed for small-cell privacy (fewer than 5 students in a subgroup). The upstream loader (`nycschools.nysed_src._to_numeric`) coerces these to NaN. Percentages come back in 0–100 units; our service layer divides by 100 to match the rest of the app's 0–1 fraction convention.
+
 ### Coverage matrix
 
 Which datasets have meaningful per-DBN data for which school types:
@@ -185,6 +210,8 @@ Which datasets have meaningful per-DBN data for which school types:
 | SHSAT | — | ✓ | — |
 | budgets | ✓ | ✓ | ✓ |
 | HS directory | — | — | ✓ |
+| NYSED ESSA + chronic + expenditures + teacher-quality | ✓ | ✓ | ✓ |
+| NYSED HS grad rate + CCCR | — | — | ✓ |
 
 The school page (`/school/{dbn}`) renders each section conditionally on data presence — an elementary school gets ~8 sections, a high school gets ~12.
 

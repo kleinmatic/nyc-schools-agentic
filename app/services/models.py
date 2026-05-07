@@ -193,6 +193,87 @@ class HsDirectoryInfo(BaseModel):
     programs: list[HsProgram] = []
 
 
+class EssaStatus(BaseModel):
+    """Top-line ESSA accountability designation for a single year."""
+    year: int
+    overall_status: str  # "Local Support and Improvement" | "TSI" | "ATSI" | "CSI"
+
+
+class SubgroupStatus(BaseModel):
+    """ESSA accountability designation for one demographic subgroup-year."""
+    year: int
+    school_type: Optional[str] = None  # "EM" or "HS"
+    subgroup: str
+    overall_status: str
+
+
+class ChronicAbsenteeismRow(BaseModel):
+    year: int
+    level: Optional[str] = None  # "EM" | "HS"
+    subgroup: str
+    enrollment: Optional[int] = None
+    absent_count: Optional[int] = None
+    absent_rate: Optional[float] = None  # fraction in [0, 1]
+
+
+class ExpenditureYear(BaseModel):
+    year: int
+    pupil_count: Optional[int] = None
+    federal_total: Optional[float] = None
+    state_local_total: Optional[float] = None
+    combined_total: Optional[float] = None
+    per_pupil_federal: Optional[float] = None
+    per_pupil_state_local: Optional[float] = None
+    per_pupil_combined: Optional[float] = None
+
+
+class TeacherQualityYear(BaseModel):
+    year: int
+    num_teachers: Optional[int] = None
+    num_inexp_teachers: Optional[int] = None
+    pct_inexp_teachers: Optional[float] = None  # fraction in [0, 1]
+    num_principals: Optional[int] = None
+    num_inexp_principals: Optional[int] = None
+    pct_inexp_principals: Optional[float] = None
+
+
+class OutOfCertYear(BaseModel):
+    year: int
+    num_teachers: Optional[int] = None
+    num_out_of_cert: Optional[int] = None
+    pct_out_of_cert: Optional[float] = None  # fraction in [0, 1]
+
+
+class GraduationRow(BaseModel):
+    year: int
+    subgroup: str
+    cohort: str  # "4-Year" | "5-Year" | "6-Year" | "Combined"
+    cohort_count: Optional[int] = None
+    grad_count: Optional[int] = None
+    grad_rate: Optional[float] = None  # fraction in [0, 1]
+
+
+class CccrRow(BaseModel):
+    """College/Career/Civic Readiness — HS accountability indicator."""
+    year: int
+    subgroup: str
+    cohort_size: Optional[int] = None
+    index_score: Optional[float] = None
+    level: Optional[int] = None  # 1-4 (4 highest)
+
+
+class NysedReport(BaseModel):
+    """NYSED School Report Card Database aggregations for a single school."""
+    essa_status: list[EssaStatus] = []
+    essa_status_by_subgroup: list[SubgroupStatus] = []
+    chronic_absenteeism: list[ChronicAbsenteeismRow] = []
+    expenditures: list[ExpenditureYear] = []
+    teacher_quality: list[TeacherQualityYear] = []
+    out_of_cert: list[OutOfCertYear] = []
+    hs_graduation: list[GraduationRow] = []
+    hs_cccr: list[CccrRow] = []
+
+
 class SchoolDetail(BaseModel):
     summary: SchoolSummary
     demographics_by_year: list[DemographicsYear]
@@ -207,3 +288,4 @@ class SchoolDetail(BaseModel):
     shsat: list[ShsatYear] = []
     budget: Optional[BudgetSummary] = None
     hs_directory: Optional[HsDirectoryInfo] = None
+    nysed: Optional[NysedReport] = None

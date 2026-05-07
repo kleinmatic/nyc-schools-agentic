@@ -45,6 +45,9 @@ def test_school_page_includes_all_sections(client):
     # Each major section header expected for an elementary school like PS 321.
     for section in (
         "Quick stats",
+        "NYS ESSA accountability",
+        "Chronic absenteeism",
+        "Spending &amp; staffing",
         "School info",
         "Location",
         "3&#8211;8 ELA exam",
@@ -66,6 +69,8 @@ def test_high_school_page_includes_hs_only_sections(client):
         "Academic offerings",
         "Athletics",
         "Regents exams",
+        "HS graduation rate",
+        "College/Career/Civic Readiness",
     ):
         assert section in r.text, f"missing HS-only section: {section}"
 

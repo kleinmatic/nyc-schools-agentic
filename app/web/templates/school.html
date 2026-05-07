@@ -15,6 +15,7 @@
 {% set snap = school.snapshot %}
 {% set loc = school.location %}
 {% set hs = school.hs_directory %}
+{% set ny = school.nysed %}
 {% set latest_demo = school.demographics_by_year[-1] if school.demographics_by_year else none %}
 
 <div class="mb-8">
@@ -60,6 +61,135 @@
     {% endif %}
   </dl>
 </section>
+
+{# ---------- NYSED ESSA accountability (universal) ---------- #}
+{% if ny and ny.essa_status %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">NYS ESSA accountability</h2>
+  <p class="text-xs text-slate-400 mb-3">From the NYSED School Report Card. Status reflects the next school year's designation (e.g. 2025 row = 2025-26 designation based on 2024-25 results).</p>
+  <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    {% for s_row in ny.essa_status %}
+      {% set is_flagged = "Local Support" not in s_row.overall_status %}
+      <div class="flex items-baseline gap-4 py-1">
+        <dt class="text-slate-500 font-mono text-xs w-20">{{ s_row.year }}-{{ "%02d"|format((s_row.year+1) % 100) }}</dt>
+        <dd class="font-medium {% if is_flagged %}text-amber-700{% endif %}">
+          {{ s_row.overall_status }}
+          {% if is_flagged %}<span class="ml-2 inline-block text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">flagged</span>{% endif %}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+  {% set flagged_subgroups = ny.essa_status_by_subgroup | selectattr("overall_status", "ne", "Local Support and Improvement") | list %}
+  {% if flagged_subgroups %}
+    <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+      <h3 class="font-medium text-amber-900 mb-2">Subgroups flagged</h3>
+      <ul class="list-disc list-inside text-amber-800 space-y-1">
+        {% for sg in flagged_subgroups %}
+          <li>{{ sg.year }}-{{ "%02d"|format((sg.year+1) % 100) }}{% if sg.school_type %} ({{ sg.school_type }}){% endif %}: <strong>{{ sg.subgroup }}</strong> — {{ sg.overall_status }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ---------- NYSED chronic absenteeism ---------- #}
+{% if ny and ny.chronic_absenteeism %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Chronic absenteeism</h2>
+  <p class="text-xs text-slate-400 mb-3">% of students absent ≥10% of enrolled days. NYSED counts a row for each demographic subgroup.</p>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Level</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-right">Enrollment</th>
+          <th class="px-4 py-2 text-right">Absent</th>
+          <th class="px-4 py-2 text-right">% chronic</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.chronic_absenteeism %}
+        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2 text-xs">{{ r.level or "—" }}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.enrollment) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.absent_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.absent_rate) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- NYSED expenditures + teacher quality ---------- #}
+{% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Spending &amp; staffing (NYSED)</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {% if ny.expenditures %}
+    <div class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
+      <h3 class="font-medium mb-3">Per-pupil expenditures</h3>
+      <table class="min-w-full text-sm">
+        <thead class="text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="py-1 text-left">Year</th>
+            <th class="py-1 text-right">Pupils</th>
+            <th class="py-1 text-right">Federal</th>
+            <th class="py-1 text-right">State+local</th>
+            <th class="py-1 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for e in ny.expenditures %}
+          <tr>
+            <td class="py-1 font-mono text-xs">{{ e.year }}</td>
+            <td class="py-1 text-right">{{ num(e.pupil_count) }}</td>
+            <td class="py-1 text-right">{{ money(e.per_pupil_federal) }}</td>
+            <td class="py-1 text-right">{{ money(e.per_pupil_state_local) }}</td>
+            <td class="py-1 text-right font-medium">{{ money(e.per_pupil_combined) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if ny.teacher_quality or ny.out_of_cert %}
+    <div class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
+      <h3 class="font-medium mb-3">Teacher &amp; principal experience</h3>
+      <table class="min-w-full text-sm">
+        <thead class="text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="py-1 text-left">Year</th>
+            <th class="py-1 text-right">Teachers</th>
+            <th class="py-1 text-right">% inexp</th>
+            <th class="py-1 text-right">% out-of-cert</th>
+            <th class="py-1 text-right">% princ inexp</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for tq in ny.teacher_quality %}
+          {% set oc = (ny.out_of_cert | selectattr("year", "eq", tq.year) | list)[0] if (ny.out_of_cert | selectattr("year", "eq", tq.year) | list) else none %}
+          <tr>
+            <td class="py-1 font-mono text-xs">{{ tq.year }}</td>
+            <td class="py-1 text-right">{{ num(tq.num_teachers) }}</td>
+            <td class="py-1 text-right">{{ pct(tq.pct_inexp_teachers) }}</td>
+            <td class="py-1 text-right">{{ pct(oc.pct_out_of_cert) if oc else "—" }}</td>
+            <td class="py-1 text-right">{{ pct(tq.pct_inexp_principals) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
 
 {# ---------- HS directory overview ---------- #}
 {% if hs %}
@@ -329,6 +459,72 @@
           <td class="px-4 py-2 text-right">{{ pct(r.pct_above_64) }}</td>
           <td class="px-4 py-2 text-right">{{ pct(r.pct_above_79) }}</td>
           <td class="px-4 py-2 text-right">{{ pct(r.pct_college_ready) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- NYSED HS Graduation Rate ---------- #}
+{% if ny and ny.hs_graduation %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">HS graduation rate (NYSED)</h2>
+  <p class="text-xs text-slate-400 mb-3">By cohort (4-year = on-time; 5-yr/6-yr include late-graduating students). One row per (year, subgroup, cohort).</p>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-left">Cohort</th>
+          <th class="px-4 py-2 text-right">Cohort size</th>
+          <th class="px-4 py-2 text-right">Graduates</th>
+          <th class="px-4 py-2 text-right">% grad</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.hs_graduation %}
+        <tr class="{% if r.subgroup == 'All Students' and r.cohort == '4-Year' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2">{{ r.cohort }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.cohort_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.grad_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.grad_rate) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ---------- NYSED HS CCCR ---------- #}
+{% if ny and ny.hs_cccr %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">College/Career/Civic Readiness (NYSED)</h2>
+  <p class="text-xs text-slate-400 mb-3">A weighted-average index where a higher score indicates more students earning advanced credentials. Level is the school's accountability tier (1 lowest, 4 highest).</p>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-right">Cohort size</th>
+          <th class="px-4 py-2 text-right">Index</th>
+          <th class="px-4 py-2 text-right">Level</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.hs_cccr %}
+        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.cohort_size) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.index_score is not none %}{{ "%.1f"|format(r.index_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ r.level if r.level is not none else "—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

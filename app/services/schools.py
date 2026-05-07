@@ -15,18 +15,27 @@ from .. import data
 from .models import (
     BudgetCategory,
     BudgetSummary,
+    CccrRow,
+    ChronicAbsenteeismRow,
     ClassSizeRow,
     DemographicsYear,
+    EssaStatus,
     ExamRow,
+    ExpenditureYear,
+    GraduationRow,
     HsDirectoryInfo,
     HsProgram,
     LocationInfo,
+    NysedReport,
+    OutOfCertYear,
     PtrInfo,
     RegentsRow,
     SchoolDetail,
     SchoolSummary,
     ShsatYear,
     SnapshotInfo,
+    SubgroupStatus,
+    TeacherQualityYear,
 )
 
 DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
@@ -87,6 +96,13 @@ def _parse_budget(v) -> Optional[float]:
         return float(cleaned) if cleaned else None
     except ValueError:
         return None
+
+
+def _opt_pct(v) -> Optional[float]:
+    """NYSED stores percentages in 0–100 units; the rest of the app treats
+    fractions in 0–1. Convert by dividing by 100."""
+    f = _opt_float(v)
+    return f / 100 if f is not None else None
 
 
 def _to_summary(row) -> SchoolSummary:
@@ -426,6 +442,175 @@ def _hs_directory_for(dbn: str) -> Optional[HsDirectoryInfo]:
     )
 
 
+# ----- NYSED helpers (joined on BEDS code) -----
+
+def _beds_for(dbn: str) -> Optional[str]:
+    """Resolve the 12-digit BEDS code from our demographics table for a DBN.
+    NYSED's ENTITY_CD is the same code stored as a 12-char string."""
+    df = data.get_store().demographics
+    rows = df[df["dbn"] == dbn]
+    if rows.empty:
+        return None
+    beds = rows.iloc[-1].get("beds")
+    if beds is None or pd.isna(beds):
+        return None
+    try:
+        return f"{int(beds):012d}"
+    except (TypeError, ValueError):
+        s = str(beds).strip()
+        return s if s else None
+
+
+def _essa_status_for(beds: str) -> list[EssaStatus]:
+    df = data.get_store().nysed_essa_status
+    rows = df[df["ENTITY_CD"] == beds].sort_values("YEAR")
+    return [
+        EssaStatus(
+            year=_opt_int(r.get("YEAR")) or 0,
+            overall_status=_opt_str(r.get("OVERALL_STATUS")) or "Unknown",
+        )
+        for _, r in rows.iterrows()
+        if _opt_str(r.get("OVERALL_STATUS"))
+    ]
+
+
+def _essa_subgroup_for(beds: str) -> list[SubgroupStatus]:
+    df = data.get_store().nysed_essa_subgroup
+    rows = df[df["ENTITY_CD"] == beds].sort_values(["YEAR", "SUBGROUP_NAME"])
+    return [
+        SubgroupStatus(
+            year=_opt_int(r.get("YEAR")) or 0,
+            school_type=_opt_str(r.get("SCHOOL_TYPE")),
+            subgroup=_opt_str(r.get("SUBGROUP_NAME")) or "Unknown",
+            overall_status=_opt_str(r.get("OVERALL_STATUS")) or "Unknown",
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _chronic_for(beds: str) -> list[ChronicAbsenteeismRow]:
+    df = data.get_store().nysed_chronic
+    rows = df[df["ENTITY_CD"] == beds].sort_values(["YEAR", "LEVEL", "SUBGROUP_NAME"])
+    return [
+        ChronicAbsenteeismRow(
+            year=_opt_int(r.get("YEAR")) or 0,
+            level=_opt_str(r.get("LEVEL")),
+            subgroup=_opt_str(r.get("SUBGROUP_NAME")) or "Unknown",
+            enrollment=_opt_int(r.get("ENROLLMENT")),
+            absent_count=_opt_int(r.get("ABSENT_COUNT")),
+            absent_rate=_opt_pct(r.get("ABSENT_RATE")),
+        )
+        for _, r in rows.iterrows()
+        if _opt_str(r.get("SUBGROUP_NAME"))
+    ]
+
+
+def _expenditures_for(beds: str) -> list[ExpenditureYear]:
+    df = data.get_store().nysed_expenditures
+    rows = df[df["ENTITY_CD"] == beds].sort_values("YEAR")
+    return [
+        ExpenditureYear(
+            year=_opt_int(r.get("YEAR")) or 0,
+            pupil_count=_opt_int(r.get("PUPIL_COUNT_TOT")),
+            federal_total=_opt_float(r.get("FEDERAL_EXP")),
+            state_local_total=_opt_float(r.get("STATE_LOCAL_EXP")),
+            combined_total=_opt_float(r.get("FED_STATE_LOCAL_EXP")),
+            per_pupil_federal=_opt_float(r.get("PER_FEDERAL_EXP")),
+            per_pupil_state_local=_opt_float(r.get("PER_STATE_LOCAL_EXP")),
+            per_pupil_combined=_opt_float(r.get("PER_FED_STATE_LOCAL_EXP")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _teacher_quality_for(beds: str) -> list[TeacherQualityYear]:
+    df = data.get_store().nysed_inexp_teachers
+    rows = df[df["ENTITY_CD"] == beds].sort_values("YEAR")
+    return [
+        TeacherQualityYear(
+            year=_opt_int(r.get("YEAR")) or 0,
+            num_teachers=_opt_int(r.get("NUM_TEACH")),
+            num_inexp_teachers=_opt_int(r.get("NUM_TEACH_INEXP")),
+            pct_inexp_teachers=_opt_pct(r.get("PER_TEACH_INEXP")),
+            num_principals=_opt_int(r.get("NUM_PRINC")),
+            num_inexp_principals=_opt_int(r.get("NUM_PRINC_INEXP")),
+            pct_inexp_principals=_opt_pct(r.get("PER_PRINC_INEXP")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _out_of_cert_for(beds: str) -> list[OutOfCertYear]:
+    df = data.get_store().nysed_out_of_cert
+    rows = df[df["ENTITY_CD"] == beds].sort_values("YEAR")
+    return [
+        OutOfCertYear(
+            year=_opt_int(r.get("YEAR")) or 0,
+            num_teachers=_opt_int(r.get("NUM_TEACH_OC")),
+            num_out_of_cert=_opt_int(r.get("NUM_OUT_CERT")),
+            pct_out_of_cert=_opt_pct(r.get("PER_OUT_CERT")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _hs_grad_for(beds: str) -> list[GraduationRow]:
+    df = data.get_store().nysed_hs_grad
+    rows = df[df["ENTITY_CD"] == beds].sort_values(["YEAR", "SUBGROUP_NAME", "COHORT"])
+    return [
+        GraduationRow(
+            year=_opt_int(r.get("YEAR")) or 0,
+            subgroup=_opt_str(r.get("SUBGROUP_NAME")) or "Unknown",
+            cohort=_opt_str(r.get("COHORT")) or "Unknown",
+            cohort_count=_opt_int(r.get("COHORT_COUNT")),
+            grad_count=_opt_int(r.get("GRAD_COUNT")),
+            grad_rate=_opt_pct(r.get("GRAD_RATE")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _hs_cccr_for(beds: str) -> list[CccrRow]:
+    df = data.get_store().nysed_hs_cccr
+    rows = df[df["ENTITY_CD"] == beds].sort_values(["YEAR", "SUBGROUP_NAME"])
+    return [
+        CccrRow(
+            year=_opt_int(r.get("YEAR")) or 0,
+            subgroup=_opt_str(r.get("SUBGROUP_NAME")) or "Unknown",
+            cohort_size=_opt_int(r.get("COHORT")),
+            index_score=_opt_float(r.get("INDEX")),
+            level=_opt_int(r.get("LEVEL")),
+        )
+        for _, r in rows.iterrows()
+    ]
+
+
+def _nysed_for(dbn: str) -> Optional[NysedReport]:
+    beds = _beds_for(dbn)
+    if not beds:
+        return None
+    report = NysedReport(
+        essa_status=_essa_status_for(beds),
+        essa_status_by_subgroup=_essa_subgroup_for(beds),
+        chronic_absenteeism=_chronic_for(beds),
+        expenditures=_expenditures_for(beds),
+        teacher_quality=_teacher_quality_for(beds),
+        out_of_cert=_out_of_cert_for(beds),
+        hs_graduation=_hs_grad_for(beds),
+        hs_cccr=_hs_cccr_for(beds),
+    )
+    # If every section is empty, signal "no NYSED data" by returning None.
+    if not any((
+        report.essa_status, report.essa_status_by_subgroup, report.chronic_absenteeism,
+        report.expenditures, report.teacher_quality, report.out_of_cert,
+        report.hs_graduation, report.hs_cccr,
+    )):
+        return None
+    return report
+
+
+# ----- top-level -----
+
 def get_school(dbn: str) -> Optional[SchoolDetail]:
     """Return the full report card for a DBN, or None if not found.
 
@@ -456,4 +641,5 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         shsat=_shsat_for(dbn),
         budget=_budget_for(dbn),
         hs_directory=_hs_directory_for(dbn),
+        nysed=_nysed_for(dbn),
     )

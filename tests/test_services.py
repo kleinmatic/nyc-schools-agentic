@@ -155,6 +155,64 @@ def test_school_detail_includes_budget():
     assert totals == sorted(totals, reverse=True)
 
 
+def test_school_includes_nysed_essa_status():
+    detail = get_school("15K321")
+    assert detail is not None and detail.nysed is not None
+    statuses = detail.nysed.essa_status
+    assert len(statuses) >= 1
+    # Each status row has a year and a non-empty status text.
+    for s in statuses:
+        assert s.year >= 2024
+        assert s.overall_status
+
+
+def test_school_includes_nysed_chronic_absenteeism():
+    detail = get_school("15K321")
+    assert detail is not None and detail.nysed is not None
+    rows = detail.nysed.chronic_absenteeism
+    assert any(r.subgroup == "All Students" for r in rows)
+    # Rates are stored as 0-1 fractions, not 0-100 units.
+    rates = [r.absent_rate for r in rows if r.absent_rate is not None]
+    assert all(0 <= r <= 1 for r in rates)
+
+
+def test_school_includes_nysed_expenditures():
+    detail = get_school("15K321")
+    assert detail is not None and detail.nysed is not None
+    exps = detail.nysed.expenditures
+    assert exps, "expected at least one expenditure year for PS 321"
+    e = exps[-1]
+    # Sanity-check: NYC public school per-pupil totals are ~$15-50k.
+    assert e.per_pupil_combined and 5_000 < e.per_pupil_combined < 100_000
+
+
+def test_high_school_includes_grad_rate_and_cccr():
+    detail = get_school("22K405")  # Midwood
+    assert detail is not None and detail.nysed is not None
+    grad_4yr_all = next(
+        (r.grad_rate for r in detail.nysed.hs_graduation
+         if r.year == 2025 and r.subgroup == "All Students" and r.cohort == "4-Year"),
+        None,
+    )
+    assert grad_4yr_all and 0.5 < grad_4yr_all <= 1.0
+    cccr_all = next(
+        ((r.index_score, r.level) for r in detail.nysed.hs_cccr
+         if r.year == 2025 and r.subgroup == "All Students"),
+        None,
+    )
+    assert cccr_all is not None
+    score, level = cccr_all
+    assert score and score > 50
+    assert level in (1, 2, 3, 4)
+
+
+def test_stuyvesant_picked_up_from_manhattan_beds_prefix():
+    """Regression: BEDS prefix '31' (Manhattan) must be considered NYC, not just '33'."""
+    detail = get_school("02M475")
+    assert detail is not None and detail.nysed is not None
+    assert detail.nysed.essa_status, "Stuyvesant must have NYSED data"
+
+
 def test_middle_or_high_school_has_shsat_or_empty():
     # SHSAT data is only meaningful for middle schools (8th-graders).
     # PS 321 is elementary — likely no SHSAT data, but if present the model

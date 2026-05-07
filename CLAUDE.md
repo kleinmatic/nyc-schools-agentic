@@ -66,9 +66,11 @@ Key entry points in `~/Code/nycschools/nycschools/`:
 - `geo.load_*` — locations, district/zip/neighborhood boundaries
 - `schools.load_hs_directory(ay)` — HS programs and admissions criteria
 - Data root: env var `NYC_SCHOOLS_DATA_DIR`. The upstream bulk-archive Drive URL is dead; we lazy-fetch per file from `data.mixi.nyc` instead — see `scripts/fetch_data.py`.
+- `nysed_src.load_*()` (on the `nysed-src-loader` branch of the kleinmatic fork, pending PR back upstream) — NYSED School Report Card Database. ESSA accountability, chronic absenteeism, per-pupil expenditures, teacher quality, HS graduation rate, CCCR. Joins on `ENTITY_CD` = 12-digit BEDS code (column `beds` in our existing data). NYC schools have BEDS prefix in `("31","32","33","34","35")` — one per borough.
 
 ## Conventions
 
+- **System dep:** `mdbtools` (for NYSED Access database). `brew install mdbtools` on macOS; `apt-get install mdbtools` on Debian/Ubuntu.
 - **DBN is the primary key** everywhere. URLs use it: `/school/15K321`.
 - **Don't import transport types into `app/services/`.** Functions take primitives and return Pydantic models. The adapter wraps; the service computes.
 - **Don't fork upstream.** Install editable (`uv sync` does this against `../nycschools`) and import.
