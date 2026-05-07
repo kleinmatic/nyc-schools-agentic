@@ -28,6 +28,7 @@ from .models import (
     LocationInfo,
     NysedReport,
     OutOfCertYear,
+    PeerRank,
     PtrInfo,
     RegentsRow,
     SchoolDetail,
@@ -609,6 +610,68 @@ def _nysed_for(dbn: str) -> Optional[NysedReport]:
     return report
 
 
+# ----- peer comparison -----
+
+def _compute_peer_rank(
+    dbn: str, df: pd.DataFrame, value_col: str, ascending: bool = False
+) -> Optional[tuple[int, int, str, float]]:
+    """Rank `dbn`'s value in `value_col` against same-school-level peers.
+
+    Returns (rank, total, school_level, value), or None if the school
+    isn't in the dataframe, has no value, has no school_level, or has
+    fewer than 2 same-level peers (no meaningful comparison).
+
+    By default sorts descending — rank #1 = highest value.
+    """
+    rows = df[df["dbn"] == dbn]
+    if rows.empty:
+        return None
+    school = rows.iloc[0]
+    school_level = school.get("school_level")
+    val = school.get(value_col)
+    if (
+        school_level is None
+        or pd.isna(school_level)
+        or val is None
+        or pd.isna(val)
+    ):
+        return None
+    cohort = df[df["school_level"] == school_level].dropna(subset=[value_col])
+    if len(cohort) < 2:
+        return None
+    cohort_sorted = cohort.sort_values(value_col, ascending=ascending).reset_index(drop=True)
+    matches = cohort_sorted.index[cohort_sorted["dbn"] == dbn].tolist()
+    if not matches:
+        return None
+    return matches[0] + 1, len(cohort_sorted), str(school_level), float(val)
+
+
+def _peer_rank_poverty(dbn: str) -> Optional[PeerRank]:
+    df = data.get_store().demographics
+    latest = df[df["ay"] == df["ay"].max()]
+    info = _compute_peer_rank(dbn, latest, "poverty_pct", ascending=False)
+    if info is None:
+        return None
+    rank, total, school_level, value = info
+    return PeerRank(
+        metric_label="Poverty",
+        value_display=f"{value * 100:.1f}%",
+        caption="of students",
+        rank=rank,
+        total=total,
+        cohort_label=f"{school_level} schools",
+    )
+
+
+def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
+    """Build the peer_ranks dict. Each metric we add becomes one key."""
+    out: dict[str, PeerRank] = {}
+    poverty = _peer_rank_poverty(dbn)
+    if poverty:
+        out["poverty_pct"] = poverty
+    return out
+
+
 # ----- top-level -----
 
 def get_school(dbn: str) -> Optional[SchoolDetail]:
@@ -642,4 +705,5 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         budget=_budget_for(dbn),
         hs_directory=_hs_directory_for(dbn),
         nysed=_nysed_for(dbn),
+        peer_ranks=_peer_ranks_for(dbn),
     )

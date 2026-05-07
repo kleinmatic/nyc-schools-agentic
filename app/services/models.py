@@ -274,6 +274,21 @@ class NysedReport(BaseModel):
     hs_cccr: list[CccrRow] = []
 
 
+class PeerRank(BaseModel):
+    """Where this school's value falls in a cohort distribution.
+
+    Convention: rank #1 = HIGHEST value (cohort sorted descending).
+    Triangle in the UI is positioned (rank-1)/(total-1) from the left,
+    so HIGH = left, LOW = right (regardless of whether high is "good").
+    """
+    metric_label: str        # "Poverty"
+    value_display: str       # "83.4%" — pre-formatted
+    caption: str             # "of students"
+    rank: int                # 1-based; #1 = highest in cohort
+    total: int               # cohort size (≥ 2)
+    cohort_label: str        # "elementary schools"
+
+
 class SchoolDetail(BaseModel):
     summary: SchoolSummary
     demographics_by_year: list[DemographicsYear]
@@ -289,3 +304,4 @@ class SchoolDetail(BaseModel):
     budget: Optional[BudgetSummary] = None
     hs_directory: Optional[HsDirectoryInfo] = None
     nysed: Optional[NysedReport] = None
+    peer_ranks: dict[str, PeerRank] = {}

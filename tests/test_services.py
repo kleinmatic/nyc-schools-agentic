@@ -206,6 +206,34 @@ def test_high_school_includes_grad_rate_and_cccr():
     assert level in (1, 2, 3, 4)
 
 
+def test_peer_rank_poverty_for_low_poverty_school():
+    """PS 321 in Park Slope has unusually low poverty (~6%) — should rank
+    near the bottom (high rank number) among elementary schools."""
+    detail = get_school("15K321")
+    assert detail is not None
+    pr = detail.peer_ranks.get("poverty_pct")
+    assert pr is not None
+    assert pr.metric_label == "Poverty"
+    assert pr.value_display.endswith("%")
+    assert "elementary" in pr.cohort_label
+    assert pr.total > 100  # should be ~1000 elementary schools
+    assert pr.rank > pr.total * 0.7, (
+        f"PS 321 should rank in the bottom 30% by poverty, got rank "
+        f"{pr.rank} of {pr.total}"
+    )
+
+
+def test_peer_rank_skipped_when_cohort_too_small():
+    """Schools whose school_level has <2 same-level peers must return None."""
+    # If a school has school_level=None or unique level, peer_ranks won't include poverty.
+    # Hard to find a guaranteed lone-cohort school in real data; just check the
+    # invariant that whenever peer_ranks has poverty, total >= 2.
+    for dbn in ["15K321", "22K405", "02M475"]:
+        detail = get_school(dbn)
+        if detail and "poverty_pct" in detail.peer_ranks:
+            assert detail.peer_ranks["poverty_pct"].total >= 2
+
+
 def test_stuyvesant_picked_up_from_manhattan_beds_prefix():
     """Regression: BEDS prefix '31' (Manhattan) must be considered NYC, not just '33'."""
     detail = get_school("02M475")

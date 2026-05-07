@@ -15,6 +15,24 @@
   <span class="leading-snug">{{ desc }}</span>
 </div>
 {% endmacro %}
+{% macro peer_marker(rank_info) %}
+{% set position_pct = ((rank_info.rank - 1) * 100 / (rank_info.total - 1)) if rank_info.total > 1 else 50 %}
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex flex-col">
+  <div class="text-sm text-slate-700 font-medium">{{ rank_info.metric_label }}</div>
+  <div class="text-4xl font-serif text-amber-600 leading-none mt-1">{{ rank_info.value_display }}</div>
+  <div class="text-xs text-slate-500 mt-2">{{ rank_info.caption }}</div>
+  <div class="mt-6">
+    <div class="relative h-px bg-slate-300 w-full">
+      <div class="absolute -top-[7px] -translate-x-1/2 text-slate-500 leading-none text-[14px] select-none" style="left: {{ "%.2f"|format(position_pct) }}%">▼</div>
+    </div>
+    <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-400 mt-1">
+      <span>HIGH</span>
+      <span>LOW</span>
+    </div>
+  </div>
+  <div class="text-xs text-slate-600 mt-3">Rank #{{ "{:,}".format(rank_info.rank) }} of {{ "{:,}".format(rank_info.total) }} {{ rank_info.cohort_label }}</div>
+</div>
+{% endmacro %}
 {% macro explainer(label="Explanation") %}
 <details class="group mb-3">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium select-none">
@@ -82,6 +100,22 @@
     {% endif %}
   </dl>
 </section>
+
+{# ---------- Peer comparison ---------- #}
+{% if school.peer_ranks %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Compared to peers</h2>
+  {{ provenance(
+    ["school-demographics.csv"],
+    "Where this school's value falls among same-school-level peers (e.g. all NYC elementary schools, all middle schools, or all high schools). The triangle shows position from HIGH (left) to LOW (right) of the cohort distribution; rank #1 = highest value. Cohort will become user-selectable (district / borough / geofence) once those views land."
+  ) }}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for key, rank_info in school.peer_ranks.items() %}
+      {{ peer_marker(rank_info) }}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 {# ---------- NYSED ESSA accountability (universal) ---------- #}
 {% if ny and ny.essa_status %}
