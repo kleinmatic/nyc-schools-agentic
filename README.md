@@ -151,6 +151,30 @@ asyncio.run(main())
 
 `r.data` is a parsed Pydantic model — same shape the HTML site renders against.
 
+### Connect from Claude Code
+
+One command from any terminal — adds the server to your **user-scope** Claude Code config (so it's available in every `claude` session you start, anywhere on your machine):
+
+```bash
+claude mcp add --transport http --scope user nyc-schools https://nycschools.fly.dev/mcp/
+```
+
+Verify and use it:
+
+```bash
+claude mcp list                   # confirms 'nyc-schools' is registered
+claude mcp get nyc-schools        # full details for the server
+```
+
+Then start `claude` and ask something the tools can answer — "tell me about the schools in Park Slope", "what's the highest-graduating high school in Queens?", etc. Type `/mcp` inside the session to see the server status and the tools it exposes.
+
+Scope choices (the `-s` / `--scope` flag):
+- `user` — available in every `claude` session on this machine (recommended for personal use, what we showed above)
+- `local` — *default*; only this terminal's working directory
+- `project` — writes to `.mcp.json` in the current repo, intended to be checked in for teammates
+
+To remove: `claude mcp remove nyc-schools` (add `--scope user` if that's where you added it).
+
 ### Connect from LibreChat
 
 Add to `librechat.yaml`:
