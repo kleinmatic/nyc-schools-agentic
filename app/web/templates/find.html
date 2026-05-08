@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Find zoned schools{% endblock %}
+{% block content %}
+
+<div class="mb-8">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <h1 class="text-3xl font-semibold mt-2">Schools your address is zoned for</h1>
+</div>
+
+<form action="/find" method="get" class="mb-10">
+  <label class="block text-xs text-slate-500 uppercase tracking-wide mb-2">Address</label>
+  <input
+    type="text"
+    name="address"
+    value="{{ address }}"
+    autocomplete="street-address"
+    autofocus
+    placeholder="e.g. 180 7th Avenue, Brooklyn"
+    class="w-full px-4 py-3 border border-slate-300 rounded-lg shadow-sm focus:border-slate-500 focus:outline-none"
+  >
+  <button type="submit" class="mt-3 px-4 py-2 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-700">Find zoned schools &rarr;</button>
+</form>
+
+{% if address and not geo %}
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+    Couldn&rsquo;t resolve <code>{{ address }}</code> as a NYC address. Try including the borough or zip code.
+  </div>
+{% endif %}
+
+{% if geo %}
+  <div class="mb-8 bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm">
+    <div class="text-xs text-slate-500 uppercase tracking-wide mb-1">Resolved address</div>
+    <div class="font-medium">{{ geo.label }}</div>
+    <div class="text-xs text-slate-500 mt-1 font-mono">{{ "%.5f"|format(geo.lat) }}, {{ "%.5f"|format(geo.lon) }}</div>
+  </div>
+{% endif %}
+
+{% if result %}
+  {% set has_es = result.elementary|length > 0 %}
+  {% set has_ms = result.middle|length > 0 %}
+
+  {# ---------- Elementary ---------- #}
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-3">
+      Elementary{% if result.es_district %} <span class="text-slate-500 font-normal">— District {{ result.es_district }}</span>{% endif %}
+    </h2>
+    {% if has_es %}
+      <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg">
+        {% for sch in result.elementary %}
+          <li class="px-4 py-3 hover:bg-slate-50">
+            <a href="/school/{{ sch.dbn }}" class="block">
+              <div class="flex items-baseline justify-between gap-4">
+                <span class="font-medium">{{ sch.school_name }}</span>
+                <span class="text-xs text-slate-500 font-mono">{{ sch.dbn }}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {% if sch.zone_label %}Zone {{ sch.zone_label }} · {% endif %}
+                {% if sch.boro %}{{ sch.boro }}{% endif %}
+                {% if sch.district %} · District {{ sch.district }}{% endif %}
+                {% if sch.school_level %} · {{ sch.school_level }}{% endif %}
+                {% if sch.total_enrollment %} · {{ "{:,}".format(sch.total_enrollment) }} students{% endif %}
+              </div>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-4">
+        {% if result.es_district in (1, 7) %}
+          District {{ result.es_district }} is unzoned for elementary &mdash; families apply to any school in the district through a choice process.
+        {% else %}
+          No zoned elementary school found for this address. The address may fall in an unzoned district, or the zone polygon for this year may not be published yet.
+        {% endif %}
+      </p>
+    {% endif %}
+  </section>
+
+  {# ---------- Middle ---------- #}
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold mb-3">
+      Middle{% if result.ms_district %} <span class="text-slate-500 font-normal">— District {{ result.ms_district }}</span>{% endif %}
+    </h2>
+    {% if has_ms %}
+      <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg">
+        {% for sch in result.middle %}
+          <li class="px-4 py-3 hover:bg-slate-50">
+            <a href="/school/{{ sch.dbn }}" class="block">
+              <div class="flex items-baseline justify-between gap-4">
+                <span class="font-medium">{{ sch.school_name }}</span>
+                <span class="text-xs text-slate-500 font-mono">{{ sch.dbn }}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {% if sch.zone_label %}Zone {{ sch.zone_label }} · {% endif %}
+                {% if sch.boro %}{{ sch.boro }}{% endif %}
+                {% if sch.district %} · District {{ sch.district }}{% endif %}
+                {% if sch.total_enrollment %} · {{ "{:,}".format(sch.total_enrollment) }} students{% endif %}
+              </div>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-4">
+        {% set choice_districts = (2, 3, 15) %}
+        {% if result.es_district in choice_districts %}
+          District {{ result.es_district }} uses choice-based admissions for middle school &mdash; there&rsquo;s no zoned middle school for any address. Families rank preferences across all middle schools in the district.
+        {% else %}
+          No zoned middle school found for this address. The district may use choice-based admissions, or the zone polygon for this year may not be published yet.
+        {% endif %}
+      </p>
+    {% endif %}
+  </section>
+
+  {# ---------- Disclaimer: other options ---------- #}
+  <section class="mb-10 bg-blue-50/40 border border-blue-200 rounded-lg p-5 text-sm text-slate-700 leading-relaxed">
+    <h2 class="text-base font-semibold text-slate-900 mb-3">Other options worth knowing about</h2>
+    <p>The list above shows schools your address is <em>zoned</em> for &mdash; guaranteed-seat schools. Your child likely has more options:</p>
+    <ul class="list-disc list-inside mt-2 space-y-1.5">
+      <li><strong>Charter schools</strong> &mdash; citywide, lottery-based admission. Not tied to your address.</li>
+      <li><strong>Gifted &amp; Talented (G&amp;T) programs</strong> &mdash; citywide, test-based admission for K-5.</li>
+      <li><strong>Magnet schools and choice districts</strong> &mdash; District 1 (Lower East Side) and District 7 (South Bronx) are entirely unzoned for elementary; Districts 2, 3, 15 use choice-based admissions for middle school.</li>
+      <li><strong>Pre-K and 3-K</strong> &mdash; separate citywide enrollment, not tied to elementary zoning.</li>
+    </ul>
+    <p class="mt-3 mb-1 text-slate-600">For older students on alternative paths (not relevant if you&rsquo;re searching for an elementary or middle school):</p>
+    <ul class="list-disc list-inside space-y-1.5">
+      <li><strong>Transfer high schools</strong> &mdash; admit by interview/referral; serve over-age, under-credited HS students.</li>
+      <li><strong>District 79</strong> (Alternative Schools and Programs) &mdash; GED/HSE prep, <strong>Pathways to Graduation (P2G)</strong>, programs at Rikers and youth facilities, LYFE for student parents.</li>
+    </ul>
+    <p class="mt-3">
+      The official application portal is
+      <a class="underline" href="https://www.myschools.nyc" target="_blank" rel="noopener">MySchools</a>;
+      directory and admissions detail are at
+      <a class="underline" href="https://schools.nyc.gov" target="_blank" rel="noopener">schools.nyc.gov</a>.
+    </p>
+  </section>
+{% endif %}
+
+{% endblock %}

@@ -45,6 +45,27 @@ def fetch_nysed_src(year: int = 2025):
     return nysed_src.load_essa_status(year=year, nyc_only=True)
 
 
+# NYC Open Data Socrata resources for school zone polygons (2024-25).
+ZONE_RESOURCES = {
+    "es": "cmjf-yawu",  # School Zones 2024-2025 (Elementary School)
+    "ms": "t26j-jbq7",  # School Zones 2024-2025 (Middle School)
+}
+
+
+def fetch_zone_polygons(level: str, year: int = 2024):
+    """Pull the appropriate ES or MS zone GeoJSON if not already cached."""
+    import requests
+    cache_path = DATA_DIR / f"nyc-school-zones-{level}-{year}.geojson"
+    if not cache_path.exists():
+        rid = ZONE_RESOURCES[level]
+        url = f"https://data.cityofnewyork.us/api/geospatial/{rid}?method=export&format=GeoJSON"
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        cache_path.write_bytes(r.content)
+    import geopandas as gpd
+    return gpd.read_file(cache_path)
+
+
 LOADERS = [
     ("demographics", schools.load_school_demographics),
     ("snapshots", snapshot.load_snapshots),
@@ -60,6 +81,8 @@ LOADERS = [
     ("galaxy_budgets", budgets.load_galaxy_budgets),
     ("hs_directory_2021", fetch_hs_directory),
     ("nysed_src_2025", fetch_nysed_src),
+    ("es_zones_2024", lambda: fetch_zone_polygons("es", 2024)),
+    ("ms_zones_2024", lambda: fetch_zone_polygons("ms", 2024)),
 ]
 
 failures = []

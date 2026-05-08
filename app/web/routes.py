@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import config
 from ..services.schools import get_school, search_schools
+from ..services.zoning import find_zoned_schools, geocode
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
@@ -36,6 +37,22 @@ async def search(request: Request, q: str = ""):
     results = search_schools(q)
     template = "partials/results.html" if _is_htmx(request) else "search.html"
     return templates.TemplateResponse(request, template, {"results": results, "query": q})
+
+
+@router.get("/find", response_class=HTMLResponse)
+async def find_by_address(request: Request, address: str = ""):
+    geo = await geocode(address) if address.strip() else None
+    result = find_zoned_schools(geo.lat, geo.lon) if geo else None
+    return templates.TemplateResponse(
+        request,
+        "find.html",
+        {
+            "address": address,
+            "geo": geo,
+            "result": result,
+            "uid": _make_uid(),
+        },
+    )
 
 
 @router.get("/school/{dbn}", response_class=HTMLResponse)

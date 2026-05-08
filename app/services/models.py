@@ -299,6 +299,34 @@ class PeerRank(BaseModel):
     extreme_low: Optional[PeerExtreme] = None   # rank #total in cohort
 
 
+class GeocodingResult(BaseModel):
+    """A single best-match for an address from NYC's GeoSearch API."""
+    label: str             # canonical address as resolved
+    lat: float
+    lon: float
+    borough: Optional[str] = None
+    bbl: Optional[str] = None
+
+
+class ZonedSchoolMatch(BaseModel):
+    """One school whose attendance zone polygon contains a given point."""
+    dbn: str
+    school_name: str
+    school_level: Optional[str] = None
+    boro: Optional[str] = None
+    district: Optional[int] = None
+    total_enrollment: Optional[int] = None
+    zone_label: Optional[str] = None  # e.g. "503" — the ES zone identifier
+
+
+class ZonedSearchResult(BaseModel):
+    """Results of a "what schools is this address zoned for" query."""
+    elementary: list[ZonedSchoolMatch] = []
+    middle: list[ZonedSchoolMatch] = []
+    es_district: Optional[int] = None
+    ms_district: Optional[int] = None
+
+
 class SchoolDetail(BaseModel):
     summary: SchoolSummary
     demographics_by_year: list[DemographicsYear]

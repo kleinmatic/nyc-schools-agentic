@@ -35,6 +35,9 @@ class DataStore:
     nysed_out_of_cert: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_hs_grad: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_hs_cccr: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # Zone polygons for address-based search (NYC Open Data, AY 2024-25).
+    es_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
+    ms_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
 
 
 _store: Optional[DataStore] = None
@@ -48,6 +51,17 @@ def get_store() -> DataStore:
 
 def is_loaded() -> bool:
     return _store is not None
+
+
+def _load_zones(level: str, year: int = 2024) -> gpd.GeoDataFrame:
+    """Load NYC ES or MS zone polygons. Files are pre-fetched by
+    scripts/fetch_data.py. If missing, raises a helpful error."""
+    path: Path = config.DATA_DIR / f"nyc-school-zones-{level}-{year}.geojson"
+    if not path.exists():
+        raise RuntimeError(
+            f"{path.name} is missing — run `uv run scripts/fetch_data.py` to download it."
+        )
+    return gpd.read_file(path)
 
 
 def _load_hs_directory(ay: int = 2021) -> pd.DataFrame:
@@ -102,6 +116,8 @@ def load() -> DataStore:
         nysed_out_of_cert=nysed_src.load_out_of_certification(2025, nyc_only=True),
         nysed_hs_grad=nysed_src.load_hs_graduation_rate(2025, nyc_only=True),
         nysed_hs_cccr=nysed_src.load_hs_cccr(2025, nyc_only=True),
+        es_zones=_load_zones("es", 2024),
+        ms_zones=_load_zones("ms", 2024),
     )
     return _store
 
@@ -117,5 +133,6 @@ def summary() -> str:
         f"nysed: essa={len(_store.nysed_essa_status):,} essa_sg={len(_store.nysed_essa_subgroup):,} "
         f"chronic={len(_store.nysed_chronic):,} exp={len(_store.nysed_expenditures):,} "
         f"inexp={len(_store.nysed_inexp_teachers):,} oct={len(_store.nysed_out_of_cert):,} "
-        f"grad={len(_store.nysed_hs_grad):,} cccr={len(_store.nysed_hs_cccr):,}"
+        f"grad={len(_store.nysed_hs_grad):,} cccr={len(_store.nysed_hs_cccr):,} "
+        f"es_zones={len(_store.es_zones):,} ms_zones={len(_store.ms_zones):,}"
     )
