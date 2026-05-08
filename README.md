@@ -1,5 +1,7 @@
 # NYC Schools Agentic
 
+**Live at https://nycschools.fly.dev**
+
 Interactive site/server for NYC public school data, keyed by **DBN** (e.g. `15K321`). Serves HTML pages to humans and (planned) MCP/A2A/ACP surfaces to agents — the service layer is designed so a single function powers all of them.
 
 This repo is the **app** (FastAPI server, service layer, frontend, future agentic surfaces, deployment). The running app reads from a committed SQLite database in `data/`. The upstream [`nycschools`](https://github.com/adelphi-ed-tech/nycschools) package (Adelphi Ed Tech, AGPL-3.0) — and our [fork at `kleinmatic/nycschools`](https://github.com/kleinmatic/nycschools/tree/nysed-src-loader) — is a **build-time-only** dependency, used by `scripts/build_db.py` to assemble that SQLite. See [CLAUDE.md](./CLAUDE.md) for architecture and repo-boundary policy.
@@ -287,7 +289,12 @@ Available in upstream `nycschools` but not currently wired into the app:
 .
 ├── pyproject.toml         # runtime deps + [build] group for refresh scripts
 ├── uv.lock                # committed; reproducible installs
-├── data/                  # committed working set the app reads at startup
+├── .gitattributes         # routes data/* through Git LFS
+├── Dockerfile             # production runtime image
+├── fly.toml               # Fly.io app config
+├── .github/workflows/
+│   └── main.yml           # CI (tests on push/PR) + Deploy (push to main)
+├── data/                  # LFS-tracked working set the app reads at startup
 │   ├── data.sqlite                # ~50 MB; tabular data
 │   ├── school-locations.geojson   # school point locations
 │   ├── school-zones-{es,ms}.geojson  # attendance zone polygons
@@ -313,9 +320,10 @@ Available in upstream `nycschools` but not currently wired into the app:
 ├── scripts/
 │   ├── fetch_data.py      # build-time: pull upstream → school-data/
 │   ├── build_db.py        # build-time: filter → data/data.sqlite + geo
-│   ├── find_school.py     # ad-hoc: name → DBN lookup
+│   ├── find_school.py     # ad-hoc: name → DBN lookup (build group)
 │   └── inspect_school.py  # ad-hoc: dump everything we know about a DBN
 ├── CLAUDE.md              # architecture & repo-boundary policy
+├── SECRETS.md             # gitignored; ops details (Fly app name, secrets map)
 └── README.md
 ```
 
@@ -348,12 +356,16 @@ In practice that means:
 
 ## Deployment
 
-CI + deploy workflow not yet wired up. The plan is GitHub Actions for both:
+**Live at https://nycschools.fly.dev**
 
-- **CI** runs on every push and PR — `git lfs pull`, `uv sync`, `uv run pytest`, posts coverage. Fast (~30 seconds end-to-end now that data isn't bootstrapped from upstream).
-- **Deploy** runs on merge to `main` — builds a Docker image with `data/` baked in (LFS pulled at build time), pushes, and ships. Target TBD; Fly.io is the leading candidate for our shape (single FastAPI process holding ~50 MB of data in memory). EC2 / Hetzner are also defensible.
+CI/CD via GitHub Actions, Fly.io for hosting. One workflow file (`.github/workflows/main.yml`) with two jobs:
 
-Until that lands, deploys are manual from your laptop. Don't push directly to a server — branch, PR, merge, then deploy from `main`.
+- **`test`** runs on every push and PR (~1 min). Pulls LFS-tracked data (cached by pointer hash so we don't burn LFS bandwidth), installs system libs (libgdal/libgeos/libproj for geopandas), `uv sync --frozen --no-group build`, `uv run --no-sync pytest --cov=app`.
+- **`deploy`** runs only on push to `main`, only if `test` passed (~2-5 min). Pulls LFS data fully, then `flyctl deploy --remote-only` — Fly's remote builder builds the Dockerfile and rolls the machines.
+
+The Dockerfile bakes `data/data.sqlite` and the geo files into the image at build time, so the deployed container is fully self-contained: no runtime data fetch, no upstream API access, no `mdbtools` system dep. Currently runs as `shared-cpu-1x@2gb` in `ewr` (Newark) with auto-stop when idle (sub-2s cold start).
+
+Operational details (Fly account, dashboard URL, common admin commands, token rotation, recovery scenarios) live in `SECRETS.md` (gitignored). For a typical iteration: branch or push to main, watch the [Actions tab](https://github.com/kleinmatic/nyc-schools-agentic/actions), then verify at https://nycschools.fly.dev.
 
 ## Gotchas
 
