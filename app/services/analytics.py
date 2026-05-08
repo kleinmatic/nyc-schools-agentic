@@ -16,10 +16,16 @@ import pandas as pd
 
 from .. import data
 from .models import (
+    BoroughGrid,
+    BoroughRow,
     HomepageLeaderboards,
     HsListing,
     LeaderboardTable,
     MetricRow,
+    NeighborhoodAggregate,
+    NeighborhoodLeaderboard,
+    PeerCohort,
+    PeerSchool,
     RankedSchool,
 )
 
@@ -315,6 +321,275 @@ def bulk_metrics(
             metrics=vals,
         ))
     return out
+
+
+# -------- Geographic aggregations: NTAs and boroughs --------
+
+# Minimum schools per NTA required to be included in a leaderboard.
+# Single-school neighborhoods produce noisy "averages" that overstate /
+# understate the area's true distribution.
+_MIN_NTA_SCHOOLS = 5
+
+
+def _candidate_schools_with_geo(level: Optional[str], store) -> pd.DataFrame:
+    """Active candidate schools joined with NTA + district from locations.
+    Schools without an NTA assigned are dropped (~7% of schools)."""
+    cands = _candidate_schools(level=level, borough=None, store=store)
+    loc = store.locations[["dbn", "nta_name", "district"]].copy()
+    loc = loc.rename(columns={"district": "geo_district"})
+    df = cands.merge(loc, on="dbn", how="left")
+    return df[df["nta_name"].notna()]
+
+
+def _aggregate_metric_by_group(
+    df: pd.DataFrame,
+    group_col: str,
+    metric: str,
+    store,
+    min_schools: int,
+) -> list[tuple[str, Optional[str], int, float]]:
+    """Compute the per-school metric, group by `group_col`, return (name,
+    boro, n, mean) tuples. Cohorts smaller than min_schools are dropped."""
+    df = df.copy()
+    df["_value"] = df.apply(
+        lambda r: _compute_metric(metric, r["dbn"], r.get("beds"), store),
+        axis=1,
+    )
+    df = df.dropna(subset=["_value"])
+    if df.empty:
+        return []
+    grouped = df.groupby(group_col, dropna=True)
+    out: list[tuple[str, Optional[str], int, float]] = []
+    for name, sub in grouped:
+        if len(sub) < min_schools:
+            continue
+        boro = sub["boro"].iloc[0] if "boro" in sub.columns else None
+        out.append((str(name), boro, len(sub), float(sub["_value"].mean())))
+    return out
+
+
+def aggregate_by_neighborhood(
+    metric: str,
+    level: Optional[str] = "high",
+    limit: int = 10,
+    ascending: bool = False,
+    min_schools: int = _MIN_NTA_SCHOOLS,
+) -> list[NeighborhoodAggregate]:
+    """Top NTAs by the mean of `metric` across their schools (within the
+    given `level`). NTAs with fewer than `min_schools` schools are
+    excluded — single-school NTAs produce noisy "averages.\""""
+    if metric not in METRIC_DESCRIPTIONS:
+        raise ValueError(f"unknown metric: {metric!r}. Valid: {METRIC_NAMES}")
+    store = data.get_store()
+    df = _candidate_schools_with_geo(level, store)
+    rows = _aggregate_metric_by_group(df, "nta_name", metric, store, min_schools)
+    rows.sort(key=lambda r: r[3], reverse=not ascending)
+    return [
+        NeighborhoodAggregate(
+            name=name, boro=boro, n_schools=n, metric=metric, value=val,
+        )
+        for name, boro, n, val in rows[:limit]
+    ]
+
+
+def borough_summary(metrics: list[str], level: Optional[str] = None) -> BoroughGrid:
+    """5-borough × N-metric overview grid. Each cell = mean of metric
+    across schools in that borough (filtered to the given level if any)."""
+    unknown = [m for m in metrics if m not in METRIC_DESCRIPTIONS]
+    if unknown:
+        raise ValueError(f"unknown metric(s): {unknown}. Valid: {METRIC_NAMES}")
+    store = data.get_store()
+    cands = _candidate_schools(level=level, borough=None, store=store)
+
+    # Compute per-school metric values once per metric (so we don't iterate
+    # the candidate set N times).
+    rows_by_boro: dict[str, BoroughRow] = {}
+    for boro in BORO_NAME_BY_LETTER.values():
+        sub = cands[cands["boro"] == boro]
+        agg: dict[str, Optional[float]] = {}
+        for m in metrics:
+            vals = [
+                _compute_metric(m, r["dbn"], r.get("beds"), store)
+                for _, r in sub.iterrows()
+            ]
+            non_null = [v for v in vals if v is not None]
+            agg[m] = float(sum(non_null) / len(non_null)) if non_null else None
+        rows_by_boro[boro] = BoroughRow(name=boro, n_schools=len(sub), metrics=agg)
+
+    return BoroughGrid(
+        metric_names=metrics,
+        metric_labels={m: METRIC_LABELS.get(m, m) for m in metrics},
+        metric_formats={m: METRIC_FORMATS.get(m, "ratio") for m in metrics},
+        rows=[rows_by_boro[b] for b in ("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island")],
+    )
+
+
+# Display defaults for metrics — used by tools that surface metric
+# values directly to users (peer comparison, borough grid). Compact
+# labels for table headers.
+METRIC_LABELS: dict[str, str] = {
+    "eni": "ENI",
+    "poverty_pct": "Poverty",
+    "attendance_rate": "Attendance",
+    "chronic_absent_rate": "Chronic absent",
+    "ela_pct_proficient": "ELA proficient",
+    "math_pct_proficient": "Math proficient",
+    "regents_pct_above_64": "Regents pass",
+    "regents_pct_above_79": "Regents mastery",
+    "graduation_rate_4yr": "4yr grad rate",
+    "pupil_teacher_ratio": "Pupil:teacher",
+    "pct_inexperienced_teachers": "Inexp teachers",
+    "pct_out_of_cert_teachers": "Out-of-cert",
+    "per_pupil_expenditure": "$/pupil",
+}
+
+METRIC_FORMATS: dict[str, str] = {
+    "per_pupil_expenditure": "currency",
+    "pupil_teacher_ratio": "ratio",
+    # default = "pct"
+}
+for _m in METRIC_NAMES:
+    METRIC_FORMATS.setdefault(_m, "pct")
+
+
+# -------- Homepage neighborhood + borough leaderboards --------
+
+_HOMEPAGE_NTA_LEADERBOARDS = (
+    {
+        "title": "Top neighborhoods — high schools",
+        "description": "Average Regents passing rate (≥65) across high schools in each NTA. NTAs with fewer than 5 high schools excluded.",
+        "metric": "regents_pct_above_64",
+        "level": "high",
+        "year_label": "2022",
+    },
+    {
+        "title": "Top neighborhoods — elementary schools",
+        "description": "Average ELA proficiency (Level 3-4) across elementary schools in each NTA.",
+        "metric": "ela_pct_proficient",
+        "level": "elementary",
+        "year_label": "2022",
+    },
+)
+
+_HOMEPAGE_BOROUGH_METRICS = ("eni", "attendance_rate", "regents_pct_above_64", "graduation_rate_4yr")
+
+
+def homepage_neighborhood_leaderboards(per_table: int = 5) -> list[NeighborhoodLeaderboard]:
+    out: list[NeighborhoodLeaderboard] = []
+    for cfg in _HOMEPAGE_NTA_LEADERBOARDS:
+        rows = aggregate_by_neighborhood(
+            metric=cfg["metric"], level=cfg["level"], limit=per_table,
+        )
+        out.append(NeighborhoodLeaderboard(
+            title=cfg["title"],
+            description=cfg["description"],
+            metric=cfg["metric"],
+            metric_label=METRIC_LABELS.get(cfg["metric"], cfg["metric"]),
+            metric_format=METRIC_FORMATS.get(cfg["metric"], "pct"),
+            year_label=cfg["year_label"],
+            rows=rows,
+        ))
+    return out
+
+
+def homepage_borough_grid() -> BoroughGrid:
+    """Single 5-borough overview across HS-level outcomes + equity."""
+    return borough_summary(metrics=list(_HOMEPAGE_BOROUGH_METRICS), level="high")
+
+
+# -------- School-page peer comparison --------
+
+# Default metrics shown in peer-comparison tables, by school level.
+# HS gets graduation/Regents; ES/MS gets ELA/math; everything gets ENI
+# + attendance.
+_PEER_METRICS_BY_LEVEL: dict[str, tuple[str, ...]] = {
+    "high": ("eni", "attendance_rate", "regents_pct_above_64", "graduation_rate_4yr"),
+    "elementary": ("eni", "attendance_rate", "ela_pct_proficient", "math_pct_proficient"),
+    "middle": ("eni", "attendance_rate", "ela_pct_proficient", "math_pct_proficient"),
+    "K-8": ("eni", "attendance_rate", "ela_pct_proficient", "math_pct_proficient"),
+    "6-12": ("eni", "attendance_rate", "ela_pct_proficient", "regents_pct_above_64"),
+}
+
+
+def _make_peer_school(dbn: str, name: str, beds: Optional[str],
+                      metrics: tuple[str, ...], is_self: bool, store) -> PeerSchool:
+    return PeerSchool(
+        dbn=dbn,
+        school_name=name,
+        is_self=is_self,
+        metrics={m: _compute_metric(m, dbn, beds, store) for m in metrics},
+    )
+
+
+def school_peers(dbn: str, scope: str, limit: int = 20) -> Optional[PeerCohort]:
+    """Schools in the same NTA (`scope="neighborhood"`) or district
+    (`scope="district"`) as `dbn`, with comparable metrics. Returns None
+    if the focal school can't be looked up. The focal school is included
+    and flagged via `is_self=True` so the template can highlight it."""
+    if scope not in ("neighborhood", "district"):
+        raise ValueError(f"scope must be 'neighborhood' or 'district', got {scope!r}")
+    store = data.get_store()
+
+    # Look up the focal school's NTA and district.
+    loc = store.locations
+    self_loc = loc[loc["dbn"] == dbn]
+    if self_loc.empty:
+        return None
+    self_loc_row = self_loc.iloc[0]
+    nta = self_loc_row.get("nta_name")
+    geo_district = self_loc_row.get("district")
+
+    # Need school_level (and beds for NYSED-derived metrics) from demographics.
+    cands = _candidate_schools(level=None, borough=None, store=store)
+    self_row = cands[cands["dbn"] == dbn]
+    if self_row.empty:
+        return None
+    self_row = self_row.iloc[0]
+    self_level = self_row["school_level"]
+    metrics = _PEER_METRICS_BY_LEVEL.get(self_level)
+    if not metrics:
+        return None
+
+    # Filter peers to the same level so we're comparing apples to apples.
+    cands = cands[cands["school_level"] == self_level]
+    if scope == "neighborhood":
+        if not isinstance(nta, str) or not nta:
+            return None
+        peer_dbns = (
+            loc.loc[(loc["nta_name"] == nta) & (loc["dbn"].isin(cands["dbn"])), "dbn"]
+               .tolist()
+        )
+        label = nta
+    else:  # district
+        if pd.isna(geo_district):
+            return None
+        peer_dbns = (
+            loc.loc[(loc["district"] == geo_district) & (loc["dbn"].isin(cands["dbn"])), "dbn"]
+               .tolist()
+        )
+        label = f"District {int(geo_district)}"
+
+    if not peer_dbns:
+        return None
+
+    peer_rows = cands[cands["dbn"].isin(peer_dbns)].copy()
+    rows: list[PeerSchool] = []
+    for _, r in peer_rows.iterrows():
+        rows.append(_make_peer_school(
+            dbn=r["dbn"], name=r["school_name"], beds=r.get("beds"),
+            metrics=metrics, is_self=(r["dbn"] == dbn), store=store,
+        ))
+    rows.sort(key=lambda p: (not p.is_self, p.school_name))
+    rows = rows[:limit]
+
+    return PeerCohort(
+        label=label,
+        scope=scope,
+        metric_names=list(metrics),
+        metric_labels={m: METRIC_LABELS.get(m, m) for m in metrics},
+        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in metrics},
+        rows=rows,
+    )
 
 
 # -------- HS directory listing --------

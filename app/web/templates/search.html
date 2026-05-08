@@ -53,4 +53,23 @@
   {% endfor %}
 </div>
 {% endif %}
+
+{% if borough_grid or nta_leaderboards %}
+<div class="mt-12 pt-6 border-t border-slate-200">
+  <h2 class="text-lg font-semibold mb-1">By place</h2>
+  <p class="text-sm text-slate-500 mb-6">
+    Aggregations across boroughs and neighborhoods.
+    Neighborhood = NTA (Neighborhood Tabulation Area), NYC's official boundaries; cohorts
+    smaller than 5 schools are excluded as too noisy to average.
+  </p>
+  {% if borough_grid %}
+    {% with grid=borough_grid %}{% include "partials/borough_grid.html" %}{% endwith %}
+  {% endif %}
+  {% if nta_leaderboards %}
+    {% for table in nta_leaderboards %}
+      {% include "partials/neighborhood_leaderboard.html" %}
+    {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

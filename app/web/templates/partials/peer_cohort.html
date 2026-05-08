@@ -1,0 +1,52 @@
+{# Side-by-side peer comparison: this school + same-NTA or same-district peers.
+   `cohort` is a PeerCohort. The focal school's row is highlighted via is_self. #}
+{% macro fmt(v, format) %}
+  {%- if v is none -%}
+    <span class="text-slate-300">—</span>
+  {%- elif format == 'pct' -%}
+    {{ "%.0f"|format(v * 100) }}%
+  {%- elif format == 'currency' -%}
+    ${{ "{:,.0f}".format(v) }}
+  {%- else -%}
+    {{ "%.1f"|format(v) }}
+  {%- endif -%}
+{% endmacro %}
+<div class="mb-6">
+  <h3 class="text-sm font-semibold text-slate-700 mb-1">
+    {% if cohort.scope == 'neighborhood' %}
+      Schools in {{ cohort.label }}
+    {% else %}
+      Schools in {{ cohort.label }}
+    {% endif %}
+    <span class="text-xs text-slate-400 font-normal">({{ cohort.rows|length }} schools{% if cohort.rows|length >= 20 %} — capped{% endif %})</span>
+  </h3>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+        <tr>
+          <th class="text-left px-3 py-2 font-medium">School</th>
+          {% for m in cohort.metric_names %}
+            <th class="text-right px-3 py-2 font-medium whitespace-nowrap">{{ cohort.metric_labels[m] }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in cohort.rows %}
+        <tr class="{% if r.is_self %}bg-amber-50{% endif %}">
+          <td class="px-3 py-2 {% if r.is_self %}font-semibold text-slate-900{% else %}text-slate-700{% endif %}">
+            {% if r.is_self %}
+              {{ r.school_name }}
+              <span class="text-xs font-normal text-amber-700 ml-1">this school</span>
+            {% else %}
+              <a href="/school/{{ r.dbn }}" class="hover:underline">{{ r.school_name }}</a>
+            {% endif %}
+          </td>
+          {% for m in cohort.metric_names %}
+            <td class="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-700">{{ fmt(r.metrics[m], cohort.metric_formats[m]) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -334,6 +334,59 @@ class HomepageLeaderboards(BaseModel):
     tables: list[LeaderboardTable]
 
 
+class NeighborhoodAggregate(BaseModel):
+    """One NTA aggregated across its schools — used in NTA leaderboards."""
+    name: str                    # NTA name, e.g. "Park Slope"
+    boro: Optional[str] = None
+    n_schools: int               # schools contributing to the aggregate (>= min threshold)
+    metric: str
+    value: float                 # mean of the metric across the cohort
+
+
+class NeighborhoodLeaderboard(BaseModel):
+    """A ranked list of NTAs by some metric."""
+    title: str
+    description: str
+    metric: str
+    metric_label: str
+    metric_format: str           # "pct" | "currency" | "ratio"
+    year_label: str
+    rows: list[NeighborhoodAggregate]
+
+
+class BoroughRow(BaseModel):
+    """One borough's averages — used in the homepage borough grid."""
+    name: str                    # "Manhattan", "Brooklyn", ...
+    n_schools: int
+    metrics: dict[str, Optional[float]]
+
+
+class BoroughGrid(BaseModel):
+    """5-borough × N-metric overview."""
+    metric_names: list[str]      # order for rendering columns
+    metric_labels: dict[str, str]
+    metric_formats: dict[str, str]
+    rows: list[BoroughRow]
+
+
+class PeerSchool(BaseModel):
+    """One row in a school-page peer-comparison table."""
+    dbn: str
+    school_name: str
+    is_self: bool                # focal school highlighted by template
+    metrics: dict[str, Optional[float]]
+
+
+class PeerCohort(BaseModel):
+    """A geographic peer cohort — schools in the same NTA or district as the focal school."""
+    label: str                   # "Park Slope" or "District 15"
+    scope: str                   # "neighborhood" | "district"
+    metric_names: list[str]
+    metric_labels: dict[str, str]
+    metric_formats: dict[str, str]
+    rows: list[PeerSchool]
+
+
 class HsListing(BaseModel):
     """One high school's slim listing from the HS Directory (AY 2021).
     Returned by list_high_schools — call get_school for full detail."""

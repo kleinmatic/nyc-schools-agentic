@@ -342,6 +342,24 @@
 </section>
 {% endif %}
 
+{# ---------- Schools nearby (NTA + district peers) ---------- #}
+{% if peer_neighborhood or peer_district %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Schools nearby</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Same-level schools in this school's neighborhood and district, with comparable headline metrics.
+    Districts (1-32) are NYC's geographic admissions zones for elementary and middle school —
+    less meaningful for high schools, which are city-wide choice.
+  </p>
+  {% if peer_neighborhood %}
+    {% with cohort=peer_neighborhood %}{% include "partials/peer_cohort.html" %}{% endwith %}
+  {% endif %}
+  {% if peer_district %}
+    {% with cohort=peer_district %}{% include "partials/peer_cohort.html" %}{% endwith %}
+  {% endif %}
+</section>
+{% endif %}
+
 {# ---------- Galaxy budget ---------- #}
 {% if school.budget %}
 <section class="mb-10">

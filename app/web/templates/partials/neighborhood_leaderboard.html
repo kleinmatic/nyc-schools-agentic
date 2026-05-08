@@ -1,0 +1,28 @@
+{# One ranked NTA leaderboard. `table` is a NeighborhoodLeaderboard. #}
+<section class="mb-10">
+  <div class="flex items-baseline justify-between gap-4 mb-1">
+    <h3 class="text-base font-semibold">{{ table.title }}</h3>
+    <span class="text-xs text-slate-500 whitespace-nowrap">{{ table.year_label }}</span>
+  </div>
+  <p class="text-xs text-slate-500 mb-3">{{ table.description }}</p>
+  <ol class="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 bg-white">
+    {% for r in table.rows %}
+    <li class="flex items-center px-4 py-2.5 text-sm">
+      <span class="text-slate-400 tabular-nums w-6">{{ loop.index }}</span>
+      <span class="flex-1 truncate">
+        <span class="text-slate-900">{{ r.name }}</span>
+        <span class="text-slate-400 text-xs ml-1">— {{ r.boro }} · {{ r.n_schools }} schools</span>
+      </span>
+      <span class="text-slate-500 tabular-nums whitespace-nowrap">
+        {%- if table.metric_format == 'pct' -%}
+          {{ "%.1f"|format(r.value * 100) }}%
+        {%- elif table.metric_format == 'currency' -%}
+          ${{ "{:,.0f}".format(r.value) }}
+        {%- else -%}
+          {{ "%.2f"|format(r.value) }}
+        {%- endif -%}
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>

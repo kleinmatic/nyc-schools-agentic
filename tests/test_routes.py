@@ -36,6 +36,46 @@ def test_home_renders_accountability_dashboard(client):
     assert 'href="/school/02M475"' in r.text
 
 
+def test_home_renders_place_based_leaderboards(client):
+    """Borough grid + 2 NTA leaderboards under the 'By place' section."""
+    r = client.get("/")
+    for fragment in (
+        "By place",
+        "Boroughs at a glance",
+        "Top neighborhoods — high schools",
+        "Top neighborhoods — elementary schools",
+    ):
+        assert fragment in r.text, f"missing place section: {fragment!r}"
+    # Borough grid: 5 boroughs, each as a <td>.
+    for boro in ("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"):
+        assert f"<td class=\"px-4 py-2 text-slate-900\">{boro}</td>" in r.text
+
+
+def test_school_page_includes_neighborhood_peers(client):
+    """ES school page should show the 'Schools nearby' section with both
+    NTA and district cohorts, and highlight the focal school."""
+    r = client.get("/school/15K321")
+    assert "Schools nearby" in r.text
+    assert "Park Slope-Gowanus" in r.text  # NTA label
+    assert "District 15" in r.text
+    # Focal-school highlight appears once per cohort.
+    assert r.text.count("this school</span>") == 2
+
+
+def test_high_school_page_omits_district_peer_cohort(client):
+    """HS aren't district-zoned (city-wide choice), so school page should
+    skip the district cohort but still show the NTA cohort."""
+    r = client.get("/school/02M475")  # Stuyvesant
+    assert "Schools nearby" in r.text
+    # Exactly one peer-cohort heading (the NTA one); no "District N" label.
+    import re
+    district_labels = re.findall(r"District \d+", r.text)
+    # The Location & neighborhood section already prints district numbers
+    # — exclude that. The peer-cohort district label sits inside an h3
+    # under "Schools nearby"; assert no peer-cohort h3 with District.
+    assert "<h3 class=\"text-sm font-semibold text-slate-700 mb-1\">\n    \n      Schools in District" not in r.text
+
+
 def test_search_with_query_hides_dashboard(client):
     """When the user has searched, leaderboards step aside — search
     results take focus."""

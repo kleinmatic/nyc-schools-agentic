@@ -1,0 +1,40 @@
+{# 5-borough × N-metric overview. `grid` is a BoroughGrid. #}
+{% macro fmt(v, format) %}
+  {%- if v is none -%}
+    <span class="text-slate-300">—</span>
+  {%- elif format == 'pct' -%}
+    {{ "%.0f"|format(v * 100) }}%
+  {%- elif format == 'currency' -%}
+    ${{ "{:,.0f}".format(v) }}
+  {%- else -%}
+    {{ "%.1f"|format(v) }}
+  {%- endif -%}
+{% endmacro %}
+<section class="mb-10">
+  <h3 class="text-base font-semibold mb-1">Boroughs at a glance — high schools</h3>
+  <p class="text-xs text-slate-500 mb-3">Average across high schools in each borough.</p>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+        <tr>
+          <th class="text-left px-4 py-2 font-medium">Borough</th>
+          <th class="text-right px-4 py-2 font-medium">Schools</th>
+          {% for m in grid.metric_names %}
+            <th class="text-right px-4 py-2 font-medium">{{ grid.metric_labels[m] }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in grid.rows %}
+        <tr>
+          <td class="px-4 py-2 text-slate-900">{{ r.name }}</td>
+          <td class="px-4 py-2 text-right text-slate-500 tabular-nums">{{ r.n_schools }}</td>
+          {% for m in grid.metric_names %}
+            <td class="px-4 py-2 text-right text-slate-700 tabular-nums">{{ fmt(r.metrics[m], grid.metric_formats[m]) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

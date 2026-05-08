@@ -6,7 +6,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
-from ..services.analytics import homepage_leaderboards
+from ..services.analytics import (
+    homepage_borough_grid,
+    homepage_leaderboards,
+    homepage_neighborhood_leaderboards,
+    school_peers,
+)
 from ..services.schools import get_school, search_schools
 from ..services.zoning import find_zoned_schools, geocode
 
@@ -28,24 +33,34 @@ def _make_uid():
     return lambda prefix="id": f"{prefix}-{next(counter)}"
 
 
+def _dashboard_context() -> dict:
+    """The cluster of leaderboards / aggregates that make up the homepage
+    accountability dashboard. Pulled into one place so /` and empty-query
+    /search render the same thing."""
+    return {
+        "leaderboards": homepage_leaderboards(),
+        "nta_leaderboards": homepage_neighborhood_leaderboards(),
+        "borough_grid": homepage_borough_grid(),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse(
-        request, "search.html",
-        {"results": [], "query": "", "leaderboards": homepage_leaderboards()},
-    )
+    ctx = {"results": [], "query": ""}
+    ctx.update(_dashboard_context())
+    return templates.TemplateResponse(request, "search.html", ctx)
 
 
 @router.get("/search", response_class=HTMLResponse)
 async def search(request: Request, q: str = ""):
     results = search_schools(q)
     template = "partials/results.html" if _is_htmx(request) else "search.html"
-    # No leaderboards on /search?q=… — search-result focus. Empty-query
-    # /search behaves like the homepage and gets them too, so a user who
+    # No dashboard on /search?q=… — search-result focus. Empty-query
+    # /search behaves like the homepage and gets it too, so a user who
     # clears the input doesn't lose the dashboard.
     ctx = {"results": results, "query": q}
     if not _is_htmx(request) and not q.strip():
-        ctx["leaderboards"] = homepage_leaderboards()
+        ctx.update(_dashboard_context())
     return templates.TemplateResponse(request, template, ctx)
 
 
@@ -74,5 +89,16 @@ async def school_page(request: Request, dbn: str):
             status_code=404,
         )
     return templates.TemplateResponse(
-        request, "school.html", {"school": detail, "uid": _make_uid()}
+        request, "school.html",
+        {
+            "school": detail,
+            "uid": _make_uid(),
+            "peer_neighborhood": school_peers(dbn, scope="neighborhood"),
+            # District peers are most meaningful for ES/MS — HS is city-wide
+            # choice. Non-HS get the second cohort; HS just shows the NTA peers.
+            "peer_district": (
+                school_peers(dbn, scope="district")
+                if detail.summary.school_level not in ("high",) else None
+            ),
+        },
     )

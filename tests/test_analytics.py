@@ -5,9 +5,14 @@ import pytest
 
 from app.services.analytics import (
     METRIC_NAMES,
+    aggregate_by_neighborhood,
+    borough_summary,
     bulk_metrics,
+    homepage_borough_grid,
     homepage_leaderboards,
+    homepage_neighborhood_leaderboards,
     list_high_schools,
+    school_peers,
     top_schools,
 )
 
@@ -166,6 +171,102 @@ def test_list_high_schools_invalid_accessibility_raises():
 
 
 # ----- homepage_leaderboards -----
+
+
+# ----- Geographic aggregations: NTAs and boroughs -----
+
+
+def test_aggregate_by_neighborhood_excludes_small_cohorts():
+    """Single-school NTAs produce noisy averages; min_schools enforces a
+    floor. Default is 5."""
+    rows = aggregate_by_neighborhood("regents_pct_above_64", level="high", limit=20)
+    assert rows
+    assert all(r.n_schools >= 5 for r in rows), [r.n_schools for r in rows]
+    # Sorted descending.
+    values = [r.value for r in rows]
+    assert values == sorted(values, reverse=True)
+    # Each NTA gets a borough.
+    assert all(r.boro in {"Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"} for r in rows)
+
+
+def test_aggregate_by_neighborhood_park_slope_appears_in_es_ela_top():
+    """Park Slope is reliably high-performing on elementary ELA — useful
+    sanity check that NTA names match between locations and demographics
+    join."""
+    rows = aggregate_by_neighborhood("ela_pct_proficient", level="elementary", limit=20)
+    names = [r.name for r in rows]
+    assert any("Park Slope" in n for n in names), f"Park Slope not in top 20: {names}"
+
+
+def test_borough_summary_returns_all_five_boroughs_in_canonical_order():
+    g = borough_summary(metrics=["eni", "regents_pct_above_64"], level="high")
+    assert [r.name for r in g.rows] == ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]
+    # Bronx has highest ENI of the five — common sanity check.
+    bronx = next(r for r in g.rows if r.name == "Bronx")
+    si = next(r for r in g.rows if r.name == "Staten Island")
+    assert bronx.metrics["eni"] > si.metrics["eni"], (
+        f"expected Bronx ENI > Staten Island ENI, got {bronx.metrics['eni']} vs {si.metrics['eni']}"
+    )
+
+
+def test_homepage_borough_grid_includes_4_metrics():
+    g = homepage_borough_grid()
+    assert g.metric_names == ["eni", "attendance_rate", "regents_pct_above_64", "graduation_rate_4yr"]
+    assert len(g.rows) == 5
+
+
+def test_homepage_neighborhood_leaderboards_returns_two_tables():
+    tables = homepage_neighborhood_leaderboards(per_table=5)
+    assert len(tables) == 2
+    for t in tables:
+        assert len(t.rows) == 5
+        # Each row is a real NTA (string), not None.
+        assert all(isinstance(r.name, str) and r.name for r in t.rows)
+
+
+# ----- school_peers -----
+
+
+def test_school_peers_neighborhood_includes_focal_school():
+    """The focal school must be in its own peer cohort with is_self=True;
+    otherwise the template can't highlight it."""
+    cohort = school_peers("15K321", "neighborhood")
+    assert cohort is not None
+    assert cohort.scope == "neighborhood"
+    assert cohort.label  # NTA name string
+    selves = [r for r in cohort.rows if r.is_self]
+    assert len(selves) == 1
+    assert selves[0].dbn == "15K321"
+    # Peers are same-level (elementary in this case).
+    assert len(cohort.rows) >= 2  # at least focal + one peer
+
+
+def test_school_peers_district_returns_district_label():
+    cohort = school_peers("15K321", "district")
+    assert cohort is not None
+    assert cohort.scope == "district"
+    assert cohort.label.startswith("District ")
+
+
+def test_school_peers_unknown_dbn_returns_none():
+    assert school_peers("99Z999", "neighborhood") is None
+
+
+def test_school_peers_invalid_scope_raises():
+    with pytest.raises(ValueError, match="scope must be"):
+        school_peers("15K321", "borough")
+
+
+def test_school_peers_metric_set_matches_level():
+    """ES peer cohort should include ela/math metrics; HS cohort should
+    include Regents/grad. Confirms _PEER_METRICS_BY_LEVEL is wired right."""
+    es = school_peers("15K321", "neighborhood")
+    assert "ela_pct_proficient" in es.metric_names
+    assert "math_pct_proficient" in es.metric_names
+    hs = school_peers("02M475", "neighborhood")  # Stuyvesant
+    if hs is not None:  # Stuy might be the only HS in its NTA — guard.
+        assert "regents_pct_above_64" in hs.metric_names
+        assert "graduation_rate_4yr" in hs.metric_names
 
 
 def test_homepage_leaderboards_returns_curated_set():
