@@ -8,46 +8,23 @@ This repo is the **app** (FastAPI server, service layer, frontend, future agenti
 
 - **macOS or Linux** (Windows untested)
 - **[uv](https://docs.astral.sh/uv/)** — `brew install uv`
-- **unixODBC** — `brew install unixodbc` (upstream pulls `pyodbc`, which won't build without it; we never call ODBC at runtime)
-- **mdbtools** — `brew install mdbtools` (used to read NYSED's Microsoft Access database; without it, the NYSED loader is the only loader that fails)
-- **The upstream `nycschools` repo cloned as a sibling**:
-  ```
-  ~/Code/
-    nycschools/        # https://github.com/adelphi-ed-tech/nycschools
-    nyc-report-card/   # this repo
-  ```
-  `pyproject.toml` references it as `../nycschools` (editable install). Note: this project depends on the `nysed_src` module, which lives on the [`nysed-src-loader` branch of the kleinmatic fork](https://github.com/kleinmatic/nycschools/tree/nysed-src-loader) pending PR back to upstream.
+- **Git LFS** — `brew install git-lfs && git lfs install` (one-time, per machine). The committed data files in `data/` are stored in Git LFS; without LFS, your clone gets the small pointer files and the app fails to load the SQLite.
+
+That's it for *running* the app. Refreshing the data from upstream is a separate, rarer workflow with extra requirements; see ["Refreshing data"](#refreshing-data) below.
 
 ## Bootstrap
 
 ```bash
-# 1. Clone both repos as siblings
-cd ~/Code
-git clone https://github.com/adelphi-ed-tech/nycschools.git
-git clone <this-repo-url> nyc-report-card
-cd nyc-report-card
-
-# 2. Install (creates .venv/, populates uv.lock)
+git clone <this-repo-url>
+cd nyc-schools-agentic
 uv sync
-
-# 3. Pre-warm the local data cache (~600 MB total — includes the 367 MB
-#    NYSED SRC zip and the 1.5 GB extracted .mdb. Several minutes on first run.)
-uv run scripts/fetch_data.py
+uv run uvicorn app.main:app --reload
+# → http://localhost:8000
 ```
 
-That's it. After step 3, `./school-data/` contains 13 nycschools datasets plus 16 NYSED Report Card tables — see [Data inventory](#data-inventory) for the full breakdown. Once the NYSED feathers are extracted, the 1.5 GB `SRC2025_Group3.mdb` can be safely deleted to reclaim disk; the loaders read the per-table feathers directly.
+That's the whole bootstrap. The app reads from `data/data.sqlite` (LFS-tracked) and a few small geo/feather files, all committed to the repo. Cold-start is ~1 second.
 
-The `.env` file (gitignored) sets `NYC_SCHOOLS_DATA_DIR=./school-data`. If you want to use the data from a different working directory, set the env var explicitly:
-
-```bash
-export NYC_SCHOOLS_DATA_DIR=$(pwd)/school-data
-```
-
-### Why we don't use upstream's `python -m nycschools.dataloader -d`
-
-Upstream's bootstrap downloads a single `.7z` archive from a Google Drive link. **That link is dead** as of 2026 and returns a 404 HTML page (which the loader tries to unpack as 7z and crashes with `Bad7zFile: not a 7z file`).
-
-We bypass it. The package's own `dataloader.load()` already has a per-file fallback to `https://data.mixi.nyc/<filename>` — that host is alive and serves all the cleaned files individually. `scripts/fetch_data.py` just calls each loader once to pre-warm the cache via that fallback.
+If you forget `git lfs install` before cloning, run `git lfs pull` from inside the repo to fetch the actual data files.
 
 ## Run the site locally
 
@@ -56,7 +33,7 @@ uv run uvicorn app.main:app --reload
 # → http://localhost:8000
 ```
 
-Cold start takes ~5s while the dataframes load into memory; you'll see a "Data loaded: ..." log line. After that, `--reload` watches Python files and restarts on save.
+Cold start ~1s. `--reload` watches Python files and restarts on save.
 
 Routes you'll have:
 - `/` — search page (htmx live results as you type)
@@ -68,11 +45,61 @@ Routes you'll have:
 ### Run the tests
 
 ```bash
-uv run pytest          # full suite, ~2s after the dataframes load
+uv run pytest                    # full suite, ~2s
+uv run pytest --cov=app          # with coverage
 uv run pytest -k routes
 ```
 
-Tests use FastAPI's `TestClient` and load the real on-disk data once per session. If you haven't run `scripts/fetch_data.py` yet, tests will fail with "Data not loaded."
+Tests load `data/data.sqlite` (committed to the repo) once per session — no setup beyond `uv sync` required.
+
+## Refreshing data
+
+The running app reads from `data/` (committed). Those files are *built* from `school-data/` (gitignored upstream cache). You only need to refresh when upstream sources change — typically once a year when NYSED publishes a new School Report Card.
+
+**Extra prerequisites for a refresh:**
+- **unixODBC** — `brew install unixodbc` (upstream's `pyodbc` won't build without it)
+- **mdbtools** — `brew install mdbtools` (reads NYSED's Microsoft Access `.mdb`)
+- **The upstream `nycschools` fork cloned as a sibling**:
+  ```
+  ~/Code/
+    nycschools/          # https://github.com/kleinmatic/nycschools
+                         # branch: nysed-src-loader (PR pending upstream)
+    nyc-schools-agentic/ # this repo
+  ```
+- **Build-only deps installed:** `uv sync --group build`
+
+**Refresh sequence (human-driven; the production server NEVER updates data on its own):**
+
+```bash
+# 1. Pull raw upstream into school-data/ (~600 MB, several minutes; downloads
+#    the 367 MB NYSED SRC zip and extracts the 1.5 GB Access database).
+uv run --group build scripts/fetch_data.py
+
+# 2. Filter + write data/data.sqlite + copy small geo files into data/.
+uv run --group build scripts/build_db.py
+
+# 3. Verify locally — full suite must pass.
+uv run pytest
+
+# 4. MANUAL smoke test — boot the app, click through a few schools.
+uv run uvicorn app.main:app --reload
+# Visit http://localhost:8000, search "Midwood High School", click through.
+# Visit http://localhost:8000/find?address=180+7+Ave+Brooklyn — should show PS 321.
+# Verify the school page renders all sections you expect.
+
+# 5. Commit. Files in data/ go through Git LFS automatically (see .gitattributes).
+git add data/
+git commit -m "Refresh data from upstream (NYSED SRC YYYY)"
+git push           # pushes LFS blobs to the remote LFS store
+```
+
+After CI runs and passes, the deploy workflow picks up the new commit, fetches the LFS blobs at build time, bakes them into the deploy artifact, and ships. **The running server never re-pulls data** — every refresh is a deliberate, reviewable git commit.
+
+After step 2, the 1.5 GB `school-data/SRC2025_Group3.mdb` can be deleted to reclaim disk — the feathers extracted from it are the working source.
+
+### Why we don't use upstream's `python -m nycschools.dataloader -d`
+
+Upstream's bulk-archive bootstrap downloads a single `.7z` from a Google Drive link. **That link is dead** as of 2026 and returns a 404 HTML page. The package's own `dataloader.load()` already has a per-file fallback to `https://data.mixi.nyc/<filename>` — that host is alive and serves all the cleaned files individually. `scripts/fetch_data.py` calls each loader once to pre-warm the cache via that fallback.
 
 ## Exploring the data
 
@@ -261,27 +288,36 @@ To add one, follow the pattern in CLAUDE.md → "Adding a new operation": loader
 
 ```
 .
-├── pyproject.toml         # uv-managed; FastAPI + nycschools (editable @ ../nycschools)
+├── pyproject.toml         # runtime deps + [build] group for refresh scripts
 ├── uv.lock                # committed; reproducible installs
-├── .env                   # NYC_SCHOOLS_DATA_DIR=./school-data (gitignored)
-├── school-data/           # cached data files, ~150 MB (gitignored)
+├── data/                  # committed working set the app reads at startup
+│   ├── data.sqlite                # ~50 MB; tabular data
+│   ├── school-locations.geojson   # school point locations
+│   ├── school-zones-{es,ms}.geojson  # attendance zone polygons
+│   └── hs-directory.feather       # AY 2021 HS directory (wide format)
+├── school-data/           # gitignored; raw upstream cache for refresh only
 ├── app/
 │   ├── main.py            # FastAPI app, lifespan-loaded data
-│   ├── config.py          # .env loading, NYC_SCHOOLS_DATA_DIR resolution
-│   ├── data.py            # in-memory dataframes (loaded once at startup)
+│   ├── config.py          # paths to data/ and (for build) school-data/
+│   ├── data.py            # reads data/data.sqlite + geo files into memory
 │   ├── services/          # transport-agnostic data-access functions
 │   │   ├── models.py      # Pydantic schemas (the cross-surface contract)
-│   │   └── schools.py     # search_schools, get_school
+│   │   ├── schools.py     # search_schools, get_school, peer ranks, etc.
+│   │   └── zoning.py      # geocode + find_zoned_schools (address search)
 │   └── web/               # thin Jinja-rendering adapters
-│       ├── routes.py
-│       └── templates/     # base, search, school, partials/
+│       ├── routes.py      # /, /search, /school/{dbn}, /find
+│       └── templates/     # base, search, school, find, partials/
 ├── tests/
+│   ├── conftest.py        # session-scoped data load
 │   ├── test_services.py
-│   └── test_routes.py
+│   ├── test_routes.py
+│   ├── test_zoning.py
+│   └── test_helpers.py
 ├── scripts/
-│   ├── fetch_data.py      # pre-warm ./school-data/ from data.mixi.nyc
-│   ├── find_school.py     # name → DBN lookup
-│   └── inspect_school.py  # everything we know about one DBN
+│   ├── fetch_data.py      # build-time: pull upstream → school-data/
+│   ├── build_db.py        # build-time: filter → data/data.sqlite + geo
+│   ├── find_school.py     # ad-hoc: name → DBN lookup
+│   └── inspect_school.py  # ad-hoc: dump everything we know about a DBN
 ├── CLAUDE.md              # architecture & repo-boundary policy
 └── README.md
 ```

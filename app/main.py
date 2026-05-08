@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Loading nycschools data from %s ...", config.DATA_DIR)
+    log.info("Loading committed data from %s ...", config.DB_PATH)
     data.load()
     log.info("Data loaded: %s", data.summary())
     yield

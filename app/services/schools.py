@@ -5,11 +5,10 @@ A2A, ACP) shares.
 import re
 from typing import Optional
 
-from .. import config  # noqa: F401  -- must precede nycschools import (sets data-dir env var)
+from .. import config  # noqa: F401
 
 import pandas as pd
-
-from nycschools import schools as ns_schools
+from rapidfuzz import fuzz
 
 from .. import data
 from .models import (
@@ -42,6 +41,57 @@ from .models import (
 
 DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
 _BUDGET_RE = re.compile(r"[^0-9.\-]")
+_CLEAN_NAME_RE = re.compile(r"[^a-z0-9 ]")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _clean_name(name: str) -> str:
+    """Normalize a school name for matching: lowercase, strip non-alphanumerics,
+    collapse whitespace. Mirrors the column upstream nycschools writes into
+    `school-demographics.csv` so we can do O(1) exact-match lookups."""
+    if not name:
+        return ""
+    s = _CLEAN_NAME_RE.sub("", name.lower())
+    return _WHITESPACE_RE.sub(" ", s).strip()
+
+
+def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
+    """Three-stage school search, matching the heuristic that used to live in
+    nycschools.schools.search:
+      1. exact match on `clean_name` (handles "midwood high school" → 22K405)
+      2. exact match on `short_name` upper-cased ("PS 321" → 15K321)
+      3. token-set fuzzy on school_name with rapidfuzz; sort by ratio of
+         clean_name vs the cleaned query.
+    """
+    q_clean = _clean_name(qry)
+
+    if q_clean and "clean_name" in df.columns:
+        exact = df[df["clean_name"] == q_clean]
+        if not exact.empty:
+            return exact.head(limit)
+
+    if "short_name" in df.columns:
+        sn = df[df["short_name"].fillna("").str.upper() == qry.upper()]
+        if not sn.empty:
+            return sn.head(limit)
+
+    if df.empty:
+        return df
+
+    scored = df.copy()
+    scored["_token_match"] = scored["school_name"].fillna("").apply(
+        lambda sn: fuzz.token_set_ratio(qry, sn)
+    )
+    scored = scored[scored["_token_match"] > 80]
+    if scored.empty:
+        return scored
+    if "clean_name" in scored.columns:
+        scored["_match"] = scored["clean_name"].fillna("").apply(
+            lambda cn: fuzz.ratio(q_clean, cn)
+        )
+    else:
+        scored["_match"] = scored["_token_match"]
+    return scored.sort_values("_match", ascending=False).head(limit)
 
 
 def _opt_int(v) -> Optional[int]:
@@ -133,11 +183,11 @@ def search_schools(query: str, limit: int = 10) -> list[SchoolSummary]:
     latest = df[df["ay"] == df["ay"].max()]
 
     if DBN_RE.match(q):
-        results = latest[latest["dbn"].str.contains(q, case=False, na=False)]
+        results = latest[latest["dbn"].str.contains(q, case=False, na=False)].head(limit)
     else:
-        results = ns_schools.search(latest, q)
+        results = _fuzzy_search(latest, q, limit)
 
-    return [_to_summary(row) for _, row in results.head(limit).iterrows()]
+    return [_to_summary(row) for _, row in results.iterrows()]
 
 
 # ----- per-section helpers -----
@@ -212,7 +262,8 @@ def _location_for(dbn: str) -> Optional[LocationInfo]:
 
 
 def _exam_rows_for(dbn: str, df) -> list[ExamRow]:
-    rows = df[(df["dbn"] == dbn) & (df["category"].fillna("All Students") == "All Students")]
+    # All-Students filtering already happened at build time (build_db.py).
+    rows = df[df["dbn"] == dbn]
     out: list[ExamRow] = []
     for _, r in rows.iterrows():
         out.append(
@@ -239,7 +290,8 @@ def _exam_rows_for(dbn: str, df) -> list[ExamRow]:
 
 def _regents_for(dbn: str) -> list[RegentsRow]:
     df = data.get_store().regents
-    rows = df[(df["dbn"] == dbn) & (df["category"].fillna("All Students") == "All Students")]
+    # All-Students filtering already happened at build time (build_db.py).
+    rows = df[df["dbn"] == dbn]
     out: list[RegentsRow] = []
     for _, r in rows.iterrows():
         out.append(

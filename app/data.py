@@ -1,16 +1,20 @@
-"""Process-wide data store. Holds upstream nycschools dataframes in memory.
+"""Process-wide data store. Reads from the committed SQLite + geo files in
+data/, loads tables into pandas dataframes at FastAPI startup. The running
+app has zero runtime dependency on the upstream nycschools package or on
+the `school-data/` cache — both are build-time concerns only.
 
-Loaded once at FastAPI startup via lifespan; queried by services/schools.py.
-This is the only module that imports nycschools loaders directly.
+To rebuild the committed data after an upstream refresh:
+    uv run scripts/fetch_data.py    # pull raw upstream into school-data/
+    uv run scripts/build_db.py      # filter + write to data/
 """
 from dataclasses import dataclass, field
-from pathlib import Path
+import sqlite3
 from typing import Optional
 
 import geopandas as gpd
 import pandas as pd
 
-from . import config  # noqa: F401  -- side effect: sets NYC_SCHOOLS_DATA_DIR
+from . import config
 
 
 @dataclass
@@ -25,8 +29,7 @@ class DataStore:
     locations: gpd.GeoDataFrame
     shsat: pd.DataFrame
     budgets: pd.DataFrame
-    hs_directory: pd.DataFrame  # academic year 2021
-    # NYSED School Report Card Database (NYC-only views, year 2025).
+    hs_directory: pd.DataFrame
     nysed_essa_status: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_essa_subgroup: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_chronic: pd.DataFrame = field(default_factory=pd.DataFrame)
@@ -35,7 +38,6 @@ class DataStore:
     nysed_out_of_cert: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_hs_grad: pd.DataFrame = field(default_factory=pd.DataFrame)
     nysed_hs_cccr: pd.DataFrame = field(default_factory=pd.DataFrame)
-    # Zone polygons for address-based search (NYC Open Data, AY 2024-25).
     es_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
     ms_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
 
@@ -53,71 +55,53 @@ def is_loaded() -> bool:
     return _store is not None
 
 
-def _load_zones(level: str, year: int = 2024) -> gpd.GeoDataFrame:
-    """Load NYC ES or MS zone polygons. Files are pre-fetched by
-    scripts/fetch_data.py. If missing, raises a helpful error."""
-    path: Path = config.DATA_DIR / f"nyc-school-zones-{level}-{year}.geojson"
-    if not path.exists():
-        raise RuntimeError(
-            f"{path.name} is missing — run `uv run scripts/fetch_data.py` to download it."
-        )
-    return gpd.read_file(path)
-
-
-def _load_hs_directory(ay: int = 2021) -> pd.DataFrame:
-    """HS directory isn't in data.mixi.nyc, so we cache it locally to feather
-    after the first NYC-Open-Data fetch. scripts/fetch_data.py also primes
-    this cache, so a freshly-bootstrapped repo never hits the network here."""
-    cache_path: Path = config.DATA_DIR / f"hs-directory-{ay}.feather"
-    if cache_path.exists():
-        return pd.read_feather(cache_path)
-    from nycschools import schools as ns_schools
-
-    df = ns_schools.load_hs_directory(ay=ay).reset_index(drop=True)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_feather(cache_path)
-    return df
+_TABLES = (
+    "demographics", "snapshots", "exams_ela", "exams_math", "regents",
+    "class_size", "ptr", "shsat", "budgets",
+    "nysed_essa_status", "nysed_essa_subgroup", "nysed_chronic",
+    "nysed_expenditures", "nysed_inexp_teachers", "nysed_out_of_cert",
+    "nysed_hs_grad", "nysed_hs_cccr",
+)
 
 
 def load() -> DataStore:
-    """Load all dataframes from the on-disk cache. Idempotent."""
+    """Read every table from the committed SQLite + geo files. Idempotent."""
     global _store
     if _store is not None:
         return _store
 
-    from nycschools import (
-        schools,
-        snapshot,
-        exams,
-        class_size,
-        geo,
-        shsat,
-        budgets,
-        nysed_src,
-    )
+    if not config.DB_PATH.exists():
+        raise RuntimeError(
+            f"{config.DB_PATH} is missing — run `uv run scripts/build_db.py` "
+            "to build it from school-data/."
+        )
 
+    with sqlite3.connect(f"file:{config.DB_PATH}?mode=ro", uri=True) as conn:
+        tables = {t: pd.read_sql_query(f"SELECT * FROM {t}", conn) for t in _TABLES}
+
+    cdd = config.COMMITTED_DATA_DIR
     _store = DataStore(
-        demographics=schools.load_school_demographics(),
-        snapshots=snapshot.load_snapshots(),
-        ela=exams.load_ela(),
-        math=exams.load_math(),
-        regents=exams.load_regents(),
-        class_size=class_size.load_class_size(),
-        ptr=class_size.load_ptr(),
-        locations=geo.load_school_locations(),
-        shsat=shsat.load_admission_offers(),
-        budgets=budgets.load_galaxy_budgets(),
-        hs_directory=_load_hs_directory(2021),
-        nysed_essa_status=nysed_src.load_essa_status(2025, nyc_only=True),
-        nysed_essa_subgroup=nysed_src.load_essa_status_by_subgroup(2025, nyc_only=True),
-        nysed_chronic=nysed_src.load_chronic_absenteeism(2025, level="ALL", nyc_only=True),
-        nysed_expenditures=nysed_src.load_expenditures_per_pupil(2025, nyc_only=True),
-        nysed_inexp_teachers=nysed_src.load_inexperienced_teachers(2025, nyc_only=True),
-        nysed_out_of_cert=nysed_src.load_out_of_certification(2025, nyc_only=True),
-        nysed_hs_grad=nysed_src.load_hs_graduation_rate(2025, nyc_only=True),
-        nysed_hs_cccr=nysed_src.load_hs_cccr(2025, nyc_only=True),
-        es_zones=_load_zones("es", 2024),
-        ms_zones=_load_zones("ms", 2024),
+        demographics=tables["demographics"],
+        snapshots=tables["snapshots"],
+        ela=tables["exams_ela"],
+        math=tables["exams_math"],
+        regents=tables["regents"],
+        class_size=tables["class_size"],
+        ptr=tables["ptr"],
+        locations=gpd.read_file(cdd / "school-locations.geojson"),
+        shsat=tables["shsat"],
+        budgets=tables["budgets"],
+        hs_directory=pd.read_feather(cdd / "hs-directory.feather"),
+        nysed_essa_status=tables["nysed_essa_status"],
+        nysed_essa_subgroup=tables["nysed_essa_subgroup"],
+        nysed_chronic=tables["nysed_chronic"],
+        nysed_expenditures=tables["nysed_expenditures"],
+        nysed_inexp_teachers=tables["nysed_inexp_teachers"],
+        nysed_out_of_cert=tables["nysed_out_of_cert"],
+        nysed_hs_grad=tables["nysed_hs_grad"],
+        nysed_hs_cccr=tables["nysed_hs_cccr"],
+        es_zones=gpd.read_file(cdd / "school-zones-es.geojson"),
+        ms_zones=gpd.read_file(cdd / "school-zones-ms.geojson"),
     )
     return _store
 
