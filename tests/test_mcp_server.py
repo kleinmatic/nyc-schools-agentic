@@ -27,6 +27,9 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "list_high_schools",
         "top_schools",
         "bulk_metrics",
+        "top_neighborhoods",
+        "borough_summary",
+        "school_peers",
     }
 
 
@@ -149,6 +152,47 @@ async def test_list_high_schools_tool_filters_by_borough(mcp_client):
     )
     assert r.data
     assert all(s.boro == "Brooklyn" for s in r.data)
+
+
+async def test_top_neighborhoods_tool_returns_ranked_ntas(mcp_client):
+    r = await mcp_client.call_tool(
+        "top_neighborhoods",
+        {"metric": "ela_pct_proficient", "level": "elementary", "limit": 5},
+    )
+    assert len(r.data) == 5
+    # Each NTA cohort meets the min-schools floor.
+    assert all(n.n_schools >= 5 for n in r.data)
+    # Descending by default.
+    values = [n.value for n in r.data]
+    assert values == sorted(values, reverse=True)
+
+
+async def test_borough_summary_tool_returns_5_borough_grid(mcp_client):
+    r = await mcp_client.call_tool(
+        "borough_summary",
+        {"metrics": ["eni", "regents_pct_above_64"], "level": "high"},
+    )
+    assert [b.name for b in r.data.rows] == [
+        "Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island",
+    ]
+    assert r.data.metric_names == ["eni", "regents_pct_above_64"]
+
+
+async def test_school_peers_tool_returns_focal_school_flagged(mcp_client):
+    r = await mcp_client.call_tool(
+        "school_peers", {"dbn": "15K321", "scope": "neighborhood"}
+    )
+    assert r.data is not None
+    selves = [p for p in r.data.rows if p.is_self]
+    assert len(selves) == 1
+    assert selves[0].dbn == "15K321"
+
+
+async def test_school_peers_tool_unknown_dbn_returns_none(mcp_client):
+    r = await mcp_client.call_tool(
+        "school_peers", {"dbn": "99Z999", "scope": "neighborhood"}
+    )
+    assert r.data is None
 
 
 @respx.mock

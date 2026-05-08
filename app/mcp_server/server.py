@@ -7,16 +7,23 @@ from pydantic import BaseModel
 
 from ..services.analytics import (
     METRIC_DESCRIPTIONS,
+    METRIC_NAMES,
     VALID_ACCESSIBILITY,
     VALID_LEVELS,
+    aggregate_by_neighborhood as _aggregate_by_neighborhood,
+    borough_summary as _borough_summary,
     bulk_metrics as _bulk_metrics,
     list_high_schools as _list_high_schools,
+    school_peers as _school_peers,
     top_schools as _top_schools,
 )
 from ..services.models import (
+    BoroughGrid,
     GeocodingResult,
     HsListing,
     MetricRow,
+    NeighborhoodAggregate,
+    PeerCohort,
     RankedSchool,
     SchoolDetail,
     SchoolSummary,
@@ -38,6 +45,7 @@ MetricName = Literal[
 SchoolLevel = Literal["elementary", "middle", "high", "K-8", "6-12"]
 Borough = Literal["M", "X", "K", "Q", "R", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"]
 Accessibility = Literal["Fully Accessible", "Partially Accessible", "Not Accessible"]
+PeerScope = Literal["neighborhood", "district"]
 
 
 _METRIC_DOC_BLOCK = "\n".join(
@@ -72,10 +80,20 @@ mcp = FastMCP(
         "- Percentages are 0..1 fractions (0.83 = 83%), not 0..100.\n"
         "- ENI (Economic Need Index) is the equity-proxy of choice for "
         "ranking; poverty_pct is for direct interpretability only.\n"
-        "- All years are academic years (the spring year — '2024' = 2023-24).\n\n"
-        "Workflow for 'where should I send my kid' questions: geocode the "
-        "address, find_schools_for_address to get the zoned ES/MS, then "
-        "get_school on each DBN for full detail."
+        "- All years are academic years (the spring year — '2024' = 2023-24).\n"
+        "- Neighborhood = NTA (Neighborhood Tabulation Area), NYC's official "
+        "boundaries — the closest formal proxy to a colloquial neighborhood.\n"
+        "- Zone / district = one of NYC's 32 geographic school districts. "
+        "Districts matter for ES / MS admissions; HS is city-wide choice.\n\n"
+        "Workflow hints:\n"
+        "- 'Where should I send my kid?' → geocode the address, "
+        "find_schools_for_address to get the zoned ES/MS, then get_school + "
+        "school_peers for full detail and neighborhood context.\n"
+        "- 'How does this school compare to its neighbors?' → school_peers.\n"
+        "- 'Best/worst schools by some metric' → top_schools.\n"
+        "- 'Best/worst neighborhoods by some metric' → top_neighborhoods.\n"
+        "- 'Borough overview' → borough_summary.\n"
+        "- 'Cross-school correlations' → bulk_metrics."
     ),
 )
 
@@ -194,3 +212,68 @@ def bulk_metrics(
     borough: Optional[Borough] = None,
 ) -> list[MetricRow]:
     return _bulk_metrics(level=level, metrics=metrics, borough=borough)
+
+
+_TOP_NEIGHBORHOODS_DESC = f"""Rank NYC neighborhoods (NTAs — the official Neighborhood Tabulation Areas) by the mean of a metric across their schools. Returns top N by aggregated value; pass `ascending=True` for the lowest end.
+
+Use for: "best neighborhoods for elementary schools", "neighborhoods with the highest chronic absenteeism", "where are the highest-graduation-rate HS clustered."
+
+NTAs with fewer than `min_schools` schools (default 5) are excluded — single-school cohorts produce noisy "averages." This is also true for the homepage leaderboards.
+
+Available metrics:
+{_METRIC_DOC_BLOCK}"""
+
+
+@mcp.tool(description=_TOP_NEIGHBORHOODS_DESC)
+def top_neighborhoods(
+    metric: MetricName,
+    level: SchoolLevel = "high",
+    limit: int = 10,
+    ascending: bool = False,
+    min_schools: int = 5,
+) -> list[NeighborhoodAggregate]:
+    return _aggregate_by_neighborhood(
+        metric=metric, level=level, limit=limit,
+        ascending=ascending, min_schools=min_schools,
+    )
+
+
+@mcp.tool
+def borough_summary(
+    metrics: Optional[list[MetricName]] = None,
+    level: Optional[SchoolLevel] = "high",
+) -> BoroughGrid:
+    """5-borough × N-metric overview grid: one row per borough (Manhattan,
+    Brooklyn, Queens, Bronx, Staten Island), one column per requested
+    metric, each cell the mean of that metric across schools in that
+    borough at the given level.
+
+    Use for borough-level comparisons: "how does ENI / attendance /
+    Regents passing differ across boroughs?" Defaults: all 13 metrics,
+    HS level. Pass `level=None` to mix all school levels (less
+    interpretable but available)."""
+    return _borough_summary(
+        metrics=metrics if metrics is not None else list(METRIC_NAMES),
+        level=level,
+    )
+
+
+@mcp.tool
+def school_peers(
+    dbn: str,
+    scope: PeerScope = "neighborhood",
+    limit: int = 20,
+) -> Optional[PeerCohort]:
+    """Same-level schools in the same NTA (`scope="neighborhood"`) or the
+    same district (`scope="district"`) as the given school. Each row
+    includes 4 headline metrics for side-by-side comparison; the focal
+    school is included with `is_self=true`.
+
+    Use for: "how does this school compare to its neighbors", "what
+    other schools serve this neighborhood", "where else in District 15
+    could my kid go." District-scope cohorts are most meaningful for
+    ES/MS — high schools are city-wide choice and not district-zoned.
+
+    Returns None if the DBN is unknown or the school has no NTA / district
+    assigned."""
+    return _school_peers(dbn=dbn, scope=scope, limit=limit)

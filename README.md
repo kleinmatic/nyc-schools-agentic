@@ -74,6 +74,16 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 | `top_schools` | `metric`, `level="high"`, `limit=20`, `borough?`, `ascending=False` | `list[RankedSchool]` | Ranked leaderboards by accountability metric: "top HS by Regents passing rate", "lowest chronic absence." See [metric vocabulary](#metric-vocabulary) below. |
 | `bulk_metrics` | `level="high"`, `metrics?`, `borough?` | `list[MetricRow]` | One row per active school × N metrics. For correlations and dashboards — ~10 K tokens for HS-level full dump. |
 
+**Place-based aggregations**
+
+| Tool | Args | Returns | Use for |
+|---|---|---|---|
+| `top_neighborhoods` | `metric`, `level="high"`, `limit=10`, `ascending=False`, `min_schools=5` | `list[NeighborhoodAggregate]` | Rank NYC NTAs (Neighborhood Tabulation Areas) by mean of a metric across their schools: "best neighborhoods for ES", "neighborhoods with highest chronic absence." |
+| `borough_summary` | `metrics?`, `level="high"` | `BoroughGrid` | 5-borough × N-metric overview: side-by-side ENI / outcomes across Manhattan, Brooklyn, Queens, Bronx, Staten Island. |
+| `school_peers` | `dbn`, `scope="neighborhood"\|"district"`, `limit=20` | `PeerCohort \| None` | Same-NTA or same-district peer schools for a given DBN. Focal school flagged via `is_self=true`. District scope is most useful for ES/MS — HS is city-wide choice. |
+
+> **Neighborhood / zone vocabulary used across these tools:** *Neighborhood* = NTA (Neighborhood Tabulation Area), NYC's official 195 neighborhoods — closest formal proxy to colloquial neighborhood names. *District* = one of NYC's 32 geographic school districts; the natural admissions zone for elementary and middle schools.
+
 Tool input/output schemas are auto-generated from the Pydantic models in [`app/services/models.py`](./app/services/models.py) and exposed via the standard MCP `list_tools` / `tools/list` calls.
 
 #### Metric vocabulary
