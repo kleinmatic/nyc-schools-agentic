@@ -1,13 +1,16 @@
 """Service-layer tests for the address-based school search.
 
-geocode() is async and hits a live API, so we don't test it here — instead
-the tests exercise find_zoned_schools() directly with known coordinates.
-PS 321's address (180 7th Avenue, Brooklyn → 40.671816, -73.978633) is the
-fixture point we use because we know exactly what should resolve there.
+geocode() hits NYC's GeoSearch API. We mock that API with respx so the
+tests don't depend on network. find_zoned_schools() is tested directly
+with known coordinates — PS 321's address (180 7th Avenue, Brooklyn →
+40.671816, -73.978633) is the fixture point because we know exactly what
+should resolve there.
 """
+import httpx
 import pytest
+import respx
 
-from app.services.zoning import find_zoned_schools
+from app.services.zoning import GEOSEARCH_URL, find_zoned_schools, geocode
 
 
 PS321_LAT = 40.671816
@@ -45,3 +48,67 @@ def test_offshore_point_returns_empty():
     result = find_zoned_schools(0.0, 0.0)
     assert result.elementary == []
     assert result.middle == []
+
+
+# ----- geocode() — mocked NYC GeoSearch API -----
+
+@respx.mock
+async def test_geocode_parses_a_successful_response():
+    respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "features": [
+                    {
+                        "geometry": {"coordinates": [-73.978633, 40.671816]},
+                        "properties": {
+                            "label": "180 7 AVENUE, Brooklyn, NY, USA",
+                            "borough": "Brooklyn",
+                            "addendum": {"pad": {"bbl": "3009710028"}},
+                        },
+                    }
+                ]
+            },
+        )
+    )
+    result = await geocode("180 7 Ave Brooklyn")
+    assert result is not None
+    assert result.lat == 40.671816
+    assert result.lon == -73.978633
+    assert result.borough == "Brooklyn"
+    assert result.bbl == "3009710028"
+    assert "180" in result.label
+
+
+@respx.mock
+async def test_geocode_no_match_returns_none():
+    """An empty features array → None, not a default-coords match."""
+    respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(200, json={"features": []}))
+    assert await geocode("garbage address xyzzy") is None
+
+
+@respx.mock
+async def test_geocode_http_500_returns_none():
+    """A 5xx → None, no exception leaks to the caller."""
+    respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(500))
+    assert await geocode("180 7 Ave") is None
+
+
+@respx.mock
+async def test_geocode_malformed_geometry_returns_none():
+    """A feature with missing coordinates is treated as no match."""
+    respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"features": [{"geometry": {}, "properties": {"label": "x"}}]},
+        )
+    )
+    assert await geocode("addr") is None
+
+
+async def test_geocode_empty_input_short_circuits():
+    """Empty/whitespace input returns None without making any HTTP call."""
+    # No respx.mock here — if geocode tried to hit the network we'd notice.
+    assert await geocode("") is None
+    assert await geocode("   ") is None
+    assert await geocode(None) is None  # type: ignore[arg-type]
