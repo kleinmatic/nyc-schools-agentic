@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
+from ..services.analytics import homepage_leaderboards
 from ..services.schools import get_school, search_schools
 from ..services.zoning import find_zoned_schools, geocode
 
@@ -29,14 +30,23 @@ def _make_uid():
 
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse(request, "search.html", {"results": [], "query": ""})
+    return templates.TemplateResponse(
+        request, "search.html",
+        {"results": [], "query": "", "leaderboards": homepage_leaderboards()},
+    )
 
 
 @router.get("/search", response_class=HTMLResponse)
 async def search(request: Request, q: str = ""):
     results = search_schools(q)
     template = "partials/results.html" if _is_htmx(request) else "search.html"
-    return templates.TemplateResponse(request, template, {"results": results, "query": q})
+    # No leaderboards on /search?q=… — search-result focus. Empty-query
+    # /search behaves like the homepage and gets them too, so a user who
+    # clears the input doesn't lose the dashboard.
+    ctx = {"results": results, "query": q}
+    if not _is_htmx(request) and not q.strip():
+        ctx["leaderboards"] = homepage_leaderboards()
+    return templates.TemplateResponse(request, template, ctx)
 
 
 @router.get("/find", response_class=HTMLResponse)

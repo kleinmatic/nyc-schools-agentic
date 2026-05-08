@@ -15,7 +15,13 @@ from typing import Optional
 import pandas as pd
 
 from .. import data
-from .models import HsListing, MetricRow, RankedSchool
+from .models import (
+    HomepageLeaderboards,
+    HsListing,
+    LeaderboardTable,
+    MetricRow,
+    RankedSchool,
+)
 
 
 # Metric vocabulary surfaced to MCP. Each entry: name, one-line description,
@@ -357,6 +363,87 @@ def _matches_program_keyword(row, keyword: str) -> bool:
 
 
 VALID_ACCESSIBILITY = ("Fully Accessible", "Partially Accessible", "Not Accessible")
+
+
+# -------- Homepage leaderboards --------
+
+# Curated set surfaced on /. Each entry: title, description, (metric,
+# level, ascending), metric_label/format, year_label. Year labels are
+# hard-coded against the current data vintage; update when the data
+# is refreshed (see README "Refreshing data").
+_HOMEPAGE_LEADERBOARDS = (
+    {
+        "title": "Top high schools by Regents passing rate",
+        "description": "Mean share of students scoring ≥65 across all Regents exams.",
+        "metric": "regents_pct_above_64",
+        "level": "high",
+        "ascending": False,
+        "metric_label": "Passing rate (≥65)",
+        "metric_format": "pct",
+        "year_label": "2022",
+    },
+    {
+        "title": "High schools with the most chronic absenteeism",
+        "description": (
+            "Share of students absent ≥18 days. Higher is worse — but the top of "
+            "this list is dominated by transfer / alternative schools (D79, charter "
+            "transfer schools) whose admissions design selects for students already "
+            "disengaged from school."
+        ),
+        "metric": "chronic_absent_rate",
+        "level": "high",
+        "ascending": False,
+        "metric_label": "Chronic absent",
+        "metric_format": "pct",
+        "year_label": "2024-25",
+    },
+    {
+        "title": "Highest-need high schools",
+        "description": (
+            "Top of the Economic Need Index — NYC DOE's composite poverty / "
+            "disadvantage measure. Transfer schools rank high here for the same "
+            "reason they appear on the chronic-absence list."
+        ),
+        "metric": "eni",
+        "level": "high",
+        "ascending": False,
+        "metric_label": "ENI",
+        "metric_format": "pct",
+        "year_label": "2024-25",
+    },
+    {
+        "title": "Top elementary schools by ELA proficiency",
+        "description": "NYS 3-8 ELA — share of students at Level 3 or 4 across all grades.",
+        "metric": "ela_pct_proficient",
+        "level": "elementary",
+        "ascending": False,
+        "metric_label": "% proficient",
+        "metric_format": "pct",
+        "year_label": "2022",
+    },
+)
+
+
+def homepage_leaderboards(per_table: int = 5) -> HomepageLeaderboards:
+    """Curated set of accountability tables for the homepage dashboard.
+    Same shape every render — leaderboards aren't filterable here; for
+    that, hit the per-metric API once those routes exist."""
+    tables: list[LeaderboardTable] = []
+    for cfg in _HOMEPAGE_LEADERBOARDS:
+        rows = top_schools(
+            metric=cfg["metric"], level=cfg["level"],
+            limit=per_table, ascending=cfg["ascending"],
+        )
+        tables.append(LeaderboardTable(
+            title=cfg["title"],
+            description=cfg["description"],
+            metric=cfg["metric"],
+            metric_label=cfg["metric_label"],
+            metric_format=cfg["metric_format"],
+            year_label=cfg["year_label"],
+            rows=rows,
+        ))
+    return HomepageLeaderboards(tables=tables)
 
 
 def list_high_schools(

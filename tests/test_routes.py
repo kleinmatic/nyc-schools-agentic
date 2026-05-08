@@ -18,6 +18,40 @@ def test_home_renders(client):
     assert "Find a school" in r.text
 
 
+def test_home_renders_accountability_dashboard(client):
+    """Homepage should surface the curated leaderboards by default,
+    with all 4 table titles visible."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Accountability dashboard" in r.text
+    for fragment in (
+        "Top high schools by Regents passing rate",
+        "most chronic absenteeism",
+        "Highest-need high schools",
+        "Top elementary schools by ELA proficiency",
+    ):
+        assert fragment in r.text, f"missing leaderboard: {fragment!r}"
+    # Top of the Regents leaderboard reliably includes one of the
+    # specialized HS — at minimum Stuyvesant's DBN as a row link.
+    assert 'href="/school/02M475"' in r.text
+
+
+def test_search_with_query_hides_dashboard(client):
+    """When the user has searched, leaderboards step aside — search
+    results take focus."""
+    r = client.get("/search", params={"q": "stuyvesant"})
+    assert r.status_code == 200
+    assert "Accountability dashboard" not in r.text
+
+
+def test_search_with_empty_query_keeps_dashboard(client):
+    """Clearing the search input shouldn't lose the dashboard; the user
+    is back to "browse mode."""
+    r = client.get("/search", params={"q": ""})
+    assert r.status_code == 200
+    assert "Accountability dashboard" in r.text
+
+
 def test_search_html_returns_results(client):
     r = client.get("/search", params={"q": "PS 321"})
     assert r.status_code == 200

@@ -6,6 +6,7 @@ import pytest
 from app.services.analytics import (
     METRIC_NAMES,
     bulk_metrics,
+    homepage_leaderboards,
     list_high_schools,
     top_schools,
 )
@@ -162,3 +163,24 @@ def test_list_high_schools_invalid_borough_raises():
 def test_list_high_schools_invalid_accessibility_raises():
     with pytest.raises(ValueError, match="unknown accessibility"):
         list_high_schools(accessibility="Wheelchair OK")
+
+
+# ----- homepage_leaderboards -----
+
+
+def test_homepage_leaderboards_returns_curated_set():
+    """Homepage should render the same fixed set of tables every time;
+    never produce an empty dashboard."""
+    lb = homepage_leaderboards(per_table=5)
+    assert lb.tables, "expected at least one leaderboard table"
+    assert len(lb.tables) == 4, f"expected 4 curated tables, got {len(lb.tables)}"
+    for t in lb.tables:
+        assert t.title and t.description and t.year_label
+        assert t.metric in METRIC_NAMES
+        assert t.metric_format in {"pct", "currency", "ratio"}
+        assert len(t.rows) == 5, f"{t.title!r} has {len(t.rows)} rows, expected 5"
+        # Rows must be in the configured sort direction.
+        values = [r.value for r in t.rows]
+        assert values == sorted(values, reverse=True), (
+            f"{t.title!r} not in descending order: {values}"
+        )

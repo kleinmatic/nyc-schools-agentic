@@ -319,6 +319,21 @@ class MetricRow(BaseModel):
     metrics: dict[str, Optional[float]]
 
 
+class LeaderboardTable(BaseModel):
+    """One ranked accountability table for the homepage dashboard."""
+    title: str
+    description: str
+    metric: str
+    metric_label: str        # column header, e.g. "Passing rate (≥65)"
+    metric_format: str       # "pct" | "currency" | "ratio" — template formatting hint
+    year_label: str          # "2022" or "2024-25" — data freshness, surfaced to user
+    rows: list["RankedSchool"]
+
+
+class HomepageLeaderboards(BaseModel):
+    tables: list[LeaderboardTable]
+
+
 class HsListing(BaseModel):
     """One high school's slim listing from the HS Directory (AY 2021).
     Returned by list_high_schools — call get_school for full detail."""

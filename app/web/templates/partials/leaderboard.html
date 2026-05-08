@@ -1,0 +1,29 @@
+{# Single accountability leaderboard. Renders one LeaderboardTable: title,
+   description, year, ranked rows. Each row links to /school/{dbn}.
+   `table` is a services.models.LeaderboardTable. #}
+<section class="mb-10">
+  <div class="flex items-baseline justify-between gap-4 mb-1">
+    <h3 class="text-base font-semibold">{{ table.title }}</h3>
+    <span class="text-xs text-slate-500 whitespace-nowrap">{{ table.year_label }}</span>
+  </div>
+  <p class="text-xs text-slate-500 mb-3">{{ table.description }}</p>
+  <ol class="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 bg-white">
+    {% for r in table.rows %}
+    <li class="flex items-center hover:bg-slate-50">
+      <a href="/school/{{ r.dbn }}" class="flex-1 flex items-center gap-3 px-4 py-2.5 text-sm">
+        <span class="text-slate-400 tabular-nums w-6">{{ r.rank }}</span>
+        <span class="flex-1 text-slate-900 truncate">{{ r.school_name }}</span>
+        <span class="text-slate-500 tabular-nums whitespace-nowrap">
+          {%- if table.metric_format == 'pct' -%}
+            {{ "%.1f"|format(r.value * 100) }}%
+          {%- elif table.metric_format == 'currency' -%}
+            ${{ "{:,.0f}".format(r.value) }}
+          {%- else -%}
+            {{ "%.2f"|format(r.value) }}
+          {%- endif -%}
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
