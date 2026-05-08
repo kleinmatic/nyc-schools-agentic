@@ -51,7 +51,11 @@ jobs:
           enable-cache: true
 
       - name: Install project deps
-        run: uv sync
+        # --frozen reads uv.lock without re-resolving (so nycschools' path
+        # source ../nycschools isn't validated against the runner's
+        # filesystem). --no-group build skips the build group entirely —
+        # CI doesn't run scripts/build_db.py.
+        run: uv sync --frozen --no-group build
 
       - name: Run tests with coverage
         run: uv run pytest --cov=app --cov-report=term
