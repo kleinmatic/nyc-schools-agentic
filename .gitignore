@@ -43,3 +43,10 @@ school-data/
 *.swp
 *.swo
 *.log
+
+# --- Test artifacts ---
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
