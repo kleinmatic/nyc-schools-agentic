@@ -2,7 +2,7 @@
 
 Interactive site/server for NYC public school data, keyed by **DBN** (e.g. `15K321`). Serves HTML pages to humans and (planned) MCP/A2A/ACP surfaces to agents — the service layer is designed so a single function powers all of them.
 
-This repo is the **app** (FastAPI server, service layer, frontend, future agentic surfaces, deployment). It consumes the upstream [`nycschools`](https://github.com/adelphi-ed-tech/nycschools) Python package as a read-only data layer. See [CLAUDE.md](./CLAUDE.md) for architecture and repo-boundary policy.
+This repo is the **app** (FastAPI server, service layer, frontend, future agentic surfaces, deployment). The running app reads from a committed SQLite database in `data/`. The upstream [`nycschools`](https://github.com/adelphi-ed-tech/nycschools) package (Adelphi Ed Tech, AGPL-3.0) — and our [fork at `kleinmatic/nycschools`](https://github.com/kleinmatic/nycschools/tree/nysed-src-loader) — is a **build-time-only** dependency, used by `scripts/build_db.py` to assemble that SQLite. See [CLAUDE.md](./CLAUDE.md) for architecture and repo-boundary policy.
 
 ## Prerequisites
 
@@ -103,31 +103,24 @@ Upstream's bulk-archive bootstrap downloads a single `.7z` from a Google Drive l
 
 ## Exploring the data
 
-Two CLIs (independent of the web server):
+Easiest path is the running app — `/`, `/search?q=...`, `/school/15K321`, `/find?address=...`. For ad-hoc inspection of the SQLite directly:
 
 ```bash
-# Find a school's DBN. Accepts full names, short names, or partial DBNs.
-uv run scripts/find_school.py "Midwood High School"   # → 22K405
-uv run scripts/find_school.py "PS 321"                # → 15K321
-uv run scripts/find_school.py "Stuyvesant"            # → 02M475 + nearby fuzzy hits
-uv run scripts/find_school.py K405                    # DBN substring search
-
-# Dump everything we have on a DBN across all loaders.
-uv run scripts/inspect_school.py 15K321 --year 2024   # transposed view, one year
-uv run scripts/inspect_school.py 15K321               # all years
+sqlite3 data/data.sqlite
+> .schema demographics
+> SELECT dbn, school_name, eni FROM demographics
+    WHERE ay = 2024 AND school_level = 'elementary'
+    ORDER BY eni DESC LIMIT 5;
 ```
 
-Or open a Python REPL:
+Two ad-hoc CLI tools that hit the **upstream raw data** (require `uv sync --group build` and a populated `school-data/`):
 
 ```bash
-uv run python
+uv run --group build scripts/find_school.py "Midwood High School"   # → 22K405
+uv run --group build scripts/inspect_school.py 15K321 --year 2024
 ```
-```python
-from nycschools import schools, snapshot, exams, class_size, geo
-demo = schools.load_school_demographics()
-schools.search(demo, "Midwood")          # fuzzy lookup
-demo[demo["dbn"] == "22K405"]            # all years for one school
-```
+
+These are pre-SQLite tooling kept for inspecting the upstream side during data-refresh debugging; the web app's own search (`/search?q=Midwood`) is the easier path for everyday lookups.
 
 ### DBN cheatsheet
 
@@ -140,7 +133,9 @@ So `15K321` = District 15, Brooklyn, school 321 (P.S. 321 William Penn).
 
 ## Data inventory
 
-`app/data.py` holds **11 dataframes plus 2 GeoDataFrames** in process memory after startup, totaling ~250 MB on disk and ~600 MB in RAM. Every dataset is keyed by **DBN** (`<district><borough><school#>`, e.g. `15K321`). The year column is always **`ay`** (academic year start, integer — `2024` means 2024-25).
+`app/data.py` reads the committed `data/data.sqlite` (~50 MB) and four small geo / feather files from `data/` at startup, holding everything in pandas/geopandas dataframes in memory (~250 MB RAM total). Every dataset is keyed by **DBN** (`<district><borough><school#>`, e.g. `15K321`). The year column is always **`ay`** (academic year start, integer — `2024` means 2024-25).
+
+The tables described below are the **on-disk and in-memory** shapes after `scripts/build_db.py` has filtered the raw upstream data. For the per-loader semantics of the upstream side (which categories, years, gotchas), this section also documents what each table represents.
 
 ### Quick reference
 
@@ -191,19 +186,21 @@ SHSAT outcomes per (sending DBN, ay) — i.e. how many of *this* school's 8th-gr
 **`budgets`** — `budgets.load_galaxy_budgets()` → `galaxy-budget.csv`
 Galaxy budget portal data, scraped per line item per (DBN, ay). Currently only 2022-23. Categories include Classroom Teacher, Leadership, OTPS (Other Than Personal Services — supplies, contracts), Paraprofessionals, Guidance/Social Workers, etc. **Caveat:** the `budget` column contains strings like `'$ 187,530'`; we parse them client-side. This belongs upstream as a PR.
 
-**`hs_directory`** — `schools.load_hs_directory(ay=2021)` → `hs-directory-2021.feather`
+**`hs_directory`** — `schools.load_hs_directory(ay=2021)` → `data/hs-directory.feather`
 The 8th-grader-facing High School Directory data. **442 schools × 449 columns.** Includes overview paragraph, all admissions programs (up to 12 per school) with seats/applicants/applicants-per-seat ratios, AP courses, language classes, PSAL sports (boys/girls/coed), graduation rate, attendance rate, college-career rate, accessibility status, transit info, etc. **AY 2021 only loaded by default**; the upstream loader supports 2013–2021.
 
-**Caching quirk:** `hs_directory` is the *only* dataset NOT cached on `data.mixi.nyc`. We pull from the NYC Open Data SODA API once and persist locally as feather. `scripts/fetch_data.py` primes this cache; `app.data` falls back to the network if the file is missing.
+**Build quirk:** `hs_directory` is the *only* dataset NOT cached on `data.mixi.nyc`. `scripts/fetch_data.py` pulls from the NYC Open Data SODA API once and persists as feather; `scripts/build_db.py` then copies it into `data/`.
 
 **`zipcodes` / `neighborhoods`** — `geo.load_zipcodes()` / `load_neighborhoods()`
 Boundary polygons (zipcodes) and labeled points (neighborhoods). Loaded for future borough/zone pages; not currently surfaced on the school page.
 
 ### NYSED School Report Card Database (SRC 2025)
 
-Layered on top of the nycschools data, we also pull NYSED's annual ESSA Report Card Database. This is the **freshest data we have** (April 30, 2026 release; covers 2024-25 results and 2025-26 designations). It's downloaded as a Microsoft Access (`.mdb`) inside a 367 MB ZIP from `https://data.nysed.gov/files/essa/24-25/SRC2025.zip`, extracted via `mdbtools`, and persisted as one feather per table under `school-data/nysed-src-2025-*.feather`.
+Layered on top of the nycschools data, we also pull NYSED's annual ESSA Report Card Database. This is the **freshest data we have** (April 30, 2026 release; covers 2024-25 results and 2025-26 designations). During refresh: downloaded as a Microsoft Access (`.mdb`) inside a 367 MB ZIP from `https://data.nysed.gov/files/essa/24-25/SRC2025.zip`, extracted via `mdbtools` (build-time system dep), and persisted as one feather per table under `school-data/nysed-src-2025-*.feather`. `scripts/build_db.py` then loads the relevant tables into `data/data.sqlite` as `nysed_*` tables.
 
-Filtering: NYSED data covers all of NY State; we filter to NYC public schools by joining on `ENTITY_CD` (12-digit BEDS code) with prefix in `("31", "32", "33", "34", "35")` — one prefix per borough.
+The `nysed_src` loader lives on the [`nysed-src-loader` branch of `kleinmatic/nycschools`](https://github.com/kleinmatic/nycschools/tree/nysed-src-loader), pending PR back to Adelphi upstream.
+
+Filtering: NYSED data covers all of NY State; the loader filters to NYC public schools by `ENTITY_CD` (12-digit BEDS code) prefix in `("31", "32", "33", "34", "35")` — one prefix per borough.
 
 | NYSED dataset | Granularity | Year | Notable fields |
 |---|---|---|---|
@@ -220,7 +217,7 @@ Filtering: NYSED data covers all of NY State; we filter to NYC public schools by
 
 #### Suppression and types
 
-Numeric fields in the source Access database are stored as Text. NYSED uses the literal string `"s"` to indicate values suppressed for small-cell privacy (fewer than 5 students in a subgroup). The upstream loader (`nycschools.nysed_src._to_numeric`) coerces these to NaN. Percentages come back in 0–100 units; our service layer divides by 100 to match the rest of the app's 0–1 fraction convention.
+Numeric fields in the source Access database are stored as Text. NYSED uses the literal string `"s"` to indicate values suppressed for small-cell privacy (fewer than 5 students in a subgroup). The build-time loader (`nycschools.nysed_src._to_numeric`, on the fork's `nysed-src-loader` branch) coerces these to NaN before we write to SQLite. Percentages come back in 0–100 units; our service layer divides by 100 to match the rest of the app's 0–1 fraction convention.
 
 ### ENI vs poverty_pct — which to use for equity comparisons
 
@@ -266,7 +263,7 @@ Which datasets have meaningful per-DBN data for which school types:
 | NYSED ESSA + chronic + expenditures + teacher-quality | ✓ | ✓ | ✓ |
 | NYSED HS grad rate + CCCR | — | — | ✓ |
 
-The school page (`/school/{dbn}`) renders each section conditionally on data presence — an elementary school gets ~8 sections, a high school gets ~12.
+The school page (`/school/{dbn}`) renders each section conditionally on data presence — an elementary school gets ~14 sections, a high school gets ~20.
 
 ### What we *don't* load
 
@@ -282,7 +279,7 @@ Available in upstream `nycschools` but not currently wired into the app:
 - `segregation.*` — analytical functions, not data sources.
 - `budgets.get_galaxy_budgets()` — the live Selenium scraper. We use the cached output, not the scraper.
 
-To add one, follow the pattern in CLAUDE.md → "Adding a new operation": loader call in `app/data.py`, Pydantic model in `app/services/models.py`, helper in `app/services/schools.py`, template block in `app/web/templates/school.html`.
+**To add a new dataset:** add the upstream loader call in `scripts/build_db.py` (write a new SQLite table or file under `data/`), then add a load step in `app/data.py`, a Pydantic model in `app/services/models.py`, a helper in `app/services/schools.py`, and a template block in `app/web/templates/school.html`. Same shape for every dataset; takes about an hour each.
 
 ## Repo layout
 
@@ -326,14 +323,14 @@ To add one, follow the pattern in CLAUDE.md → "Adding a new operation": loader
 
 (Repeated from CLAUDE.md, since this is the most-asked question.)
 
-| Goes in `~/Code/nycschools/` | Goes here |
+| Goes in our fork [`kleinmatic/nycschools`](https://github.com/kleinmatic/nycschools) (PR back to Adelphi when ready) | Goes here |
 |---|---|
-| New data loaders, schema fixes, dataset modules | New service-layer functions over existing data |
+| New data loaders, schema fixes, dataset modules | New service-layer functions over the SQLite |
 | Bug fixes in existing loaders | HTTP / MCP / A2A / ACP route adapters |
 | New tests for the data layer | Tests for the service & route layers |
 | Documentation for the package | Site templates, frontend, deploy, project notes |
 
-If another data-analysis project could reuse it, it's upstream. Otherwise it's here.
+If another NYC-schools-data project could reuse it, it's upstream. Otherwise it's here.
 
 **Adding a new operation:** define it once in `app/services/schools.py` returning a Pydantic model from `app/services/models.py`. It's automatically available to every surface (HTML, JSON API, future MCP/A2A/ACP). Adapters wrap; services compute. Don't import `Request`, `Context`, or other transport types into `services/`.
 
@@ -342,17 +339,25 @@ If another data-analysis project could reuse it, it's upstream. Otherwise it's h
 This project is **AGPL-3.0** (matching upstream `nycschools`). Full text in [LICENSE](./LICENSE).
 
 In practice that means:
-- Anyone we share code with — and anyone interacting with a deployed service that runs this code — has the right to obtain the full source, including any modifications. If we deploy a server-side instance (a live API, an admin tool, etc.), it must link to the source.
-- A static-build deployment (the path CLAUDE.md prefers) still ships AGPL'd build tooling, but the deployed artifact is just JSON + JS, so the disclosure obligation is satisfied by keeping this repo public.
+- Anyone we share code with — and anyone interacting with a deployed service that runs this code — has the right to obtain the full source, including any modifications. The site footer links to this GitHub repo to satisfy the disclosure obligation.
 - Any code that imports from this project (or from `nycschools`) has to be AGPL-compatible. Plan dependencies with that in mind.
 
 **Don't commit anything you wouldn't put in a public repo.** Deploy keys, internal notes, vendor credentials, scratch SQL, etc. should either:
 1. Land in `.env`, `secrets/`, `private/`, `notes/`, or any `*.local` file (all gitignored), **or**
 2. Live in a sibling private repo (e.g. `~/Code/nyc-report-card-private/`). Cleaner, harder to leak by accident.
 
+## Deployment
+
+CI + deploy workflow not yet wired up. The plan is GitHub Actions for both:
+
+- **CI** runs on every push and PR — `git lfs pull`, `uv sync`, `uv run pytest`, posts coverage. Fast (~30 seconds end-to-end now that data isn't bootstrapped from upstream).
+- **Deploy** runs on merge to `main` — builds a Docker image with `data/` baked in (LFS pulled at build time), pushes, and ships. Target TBD; Fly.io is the leading candidate for our shape (single FastAPI process holding ~50 MB of data in memory). EC2 / Hetzner are also defensible.
+
+Until that lands, deploys are manual from your laptop. Don't push directly to a server — branch, PR, merge, then deploy from `main`.
+
 ## Gotchas
 
-- `urllib3 NotOpenSSLWarning: ... LibreSSL 2.8.3` on macOS — benign, comes from system Python's TLS stack. Ignore.
-- `pandas DtypeWarning: Columns (18) have mixed types` from `school-demographics.csv` — also benign; column 18 is `school_type` which has stringy values.
-- The first call to a `load_*` function may take a few seconds (HTTP fetch + cache write). Subsequent calls are local-disk fast.
-- `school-data/` is gitignored on purpose — don't commit it.
+- `urllib3 NotOpenSSLWarning: ... LibreSSL 2.8.3` on macOS during data refresh — benign, comes from system Python's TLS stack. Ignore.
+- `pandas DtypeWarning: Columns (18) have mixed types` during build_db.py — also benign; column 18 is `school_type` which has stringy values.
+- `school-data/` is gitignored on purpose — don't commit it. The committed working set is `data/` (with LFS).
+- If you run `git status` and see `data/*.sqlite` showing as modified after a fresh clone: you forgot `git lfs install` before cloning. Run `git lfs install && git lfs pull` from inside the repo.
