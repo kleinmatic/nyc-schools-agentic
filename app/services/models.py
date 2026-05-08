@@ -299,6 +299,38 @@ class PeerRank(BaseModel):
     extreme_low: Optional[PeerExtreme] = None   # rank #total in cohort
 
 
+class RankedSchool(BaseModel):
+    """One school's rank by a single metric. Used by top_schools."""
+    rank: int                # 1-based, 1 = best
+    dbn: str
+    school_name: str
+    school_level: Optional[str] = None
+    metric: str              # the metric name being ranked, e.g. "regents_pct_above_64"
+    value: float             # 0..1 fraction where applicable
+
+
+class MetricRow(BaseModel):
+    """One school's values across multiple named metrics. Used by
+    bulk_metrics for correlation / cross-school analytics. Missing values
+    are None — never coerce to 0, since that breaks downstream stats."""
+    dbn: str
+    school_name: str
+    school_level: Optional[str] = None
+    metrics: dict[str, Optional[float]]
+
+
+class HsListing(BaseModel):
+    """One high school's slim listing from the HS Directory (AY 2021).
+    Returned by list_high_schools — call get_school for full detail."""
+    dbn: str
+    school_name: str
+    boro: Optional[str] = None
+    neighborhood: Optional[str] = None
+    accessibility: Optional[str] = None  # "Fully Accessible" | "Partially Accessible" | "Not Accessible"
+    total_enrollment: Optional[int] = None
+    overview: Optional[str] = None       # truncated to ~400 chars
+
+
 class GeocodingResult(BaseModel):
     """A single best-match for an address from NYC's GeoSearch API."""
     label: str             # canonical address as resolved

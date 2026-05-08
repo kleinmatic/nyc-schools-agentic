@@ -37,19 +37,22 @@ A new operation (e.g. `list_by_attendance_zone`) shows up across all surfaces by
 
 ```
 app/
-├── main.py            FastAPI app, lifespan-loaded data
+├── main.py            FastAPI app, lifespan-loaded data, mounts web + MCP
 ├── config.py          paths to data/ (committed) + school-data/ (build-only)
 ├── data.py            reads data/data.sqlite + geo files into in-memory dataframes
 ├── services/
 │   ├── models.py      Pydantic schemas — the contract surfaced everywhere
-│   ├── schools.py     search_schools, get_school, peer ranks, etc.
-│   └── zoning.py      geocode + find_zoned_schools (address search)
-└── web/
-    ├── routes.py      thin Jinja-rendering adapters
-    └── templates/     base, search, school, find, partials/
+│   ├── schools.py     search_schools, get_school, peer ranks, etc. (one-school)
+│   ├── zoning.py      geocode + find_zoned_schools (address search)
+│   └── analytics.py   top_schools, bulk_metrics, list_high_schools (cross-school)
+├── web/
+│   ├── routes.py      thin Jinja-rendering adapters
+│   └── templates/     base, search, school, find, partials/
+└── mcp_server/
+    └── server.py      thin FastMCP adapter; mounted at /mcp/ over Streamable HTTP
 ```
 
-Future siblings of `web/` will be `mcp_server/`, `a2a_server/`, `acp_server/`. Each is a thin adapter — same shape as `web/`.
+Future siblings of `web/` and `mcp_server/` will be `a2a_server/`, `acp_server/`. Each is a thin adapter — same shape.
 
 ## Repo boundaries
 

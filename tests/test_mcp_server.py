@@ -16,7 +16,7 @@ async def mcp_client():
         yield c
 
 
-async def test_list_tools_returns_the_four_registered_tools(mcp_client):
+async def test_list_tools_returns_all_registered_tools(mcp_client):
     tools = await mcp_client.list_tools()
     names = {t.name for t in tools}
     assert names == {
@@ -24,7 +24,23 @@ async def test_list_tools_returns_the_four_registered_tools(mcp_client):
         "get_school",
         "find_schools_for_address",
         "geocode_address",
+        "list_high_schools",
+        "top_schools",
+        "bulk_metrics",
     }
+
+
+async def test_top_schools_and_bulk_metrics_descriptions_advertise_metric_vocabulary(mcp_client):
+    """Critical for LLM discovery: the agent only knows which strings to
+    pass for the `metric` arg if the description names them. A regression
+    here (e.g. broken docstring concatenation) silently degrades agents."""
+    tools = {t.name: t for t in await mcp_client.list_tools()}
+    for name in ("top_schools", "bulk_metrics"):
+        d = tools[name].description or ""
+        # Spot-check a metric from each major data source.
+        for metric in ("eni", "regents_pct_above_64", "graduation_rate_4yr",
+                       "chronic_absent_rate", "per_pupil_expenditure"):
+            assert metric in d, f"{name} description missing {metric!r}"
 
 
 async def test_each_tool_advertises_an_input_schema(mcp_client):
@@ -102,6 +118,37 @@ async def test_find_schools_for_address_returns_none_when_geocode_fails(mcp_clie
         "find_schools_for_address", {"address": "garbage xyzzy"}
     )
     assert r.data is None
+
+
+async def test_top_schools_tool_returns_ranked_schools(mcp_client):
+    r = await mcp_client.call_tool(
+        "top_schools",
+        {"metric": "regents_pct_above_64", "level": "high", "limit": 5},
+    )
+    assert len(r.data) == 5
+    assert [s.rank for s in r.data] == [1, 2, 3, 4, 5]
+    assert all(s.metric == "regents_pct_above_64" for s in r.data)
+    # Descending by default.
+    values = [s.value for s in r.data]
+    assert values == sorted(values, reverse=True)
+
+
+async def test_bulk_metrics_tool_returns_per_school_rows(mcp_client):
+    r = await mcp_client.call_tool(
+        "bulk_metrics",
+        {"level": "high", "metrics": ["eni", "regents_pct_above_64"]},
+    )
+    assert r.data
+    first = r.data[0]
+    assert set(first.metrics.keys()) == {"eni", "regents_pct_above_64"}
+
+
+async def test_list_high_schools_tool_filters_by_borough(mcp_client):
+    r = await mcp_client.call_tool(
+        "list_high_schools", {"borough": "Brooklyn", "limit": 5}
+    )
+    assert r.data
+    assert all(s.boro == "Brooklyn" for s in r.data)
 
 
 @respx.mock

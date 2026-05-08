@@ -1,12 +1,23 @@
 """MCP tool definitions. Each tool is a thin adapter over `app.services` —
 no business logic, no dataframe access, no transport leakage in services/."""
-from typing import Optional
+from typing import Literal, Optional
 
 from fastmcp import FastMCP
 from pydantic import BaseModel
 
+from ..services.analytics import (
+    METRIC_DESCRIPTIONS,
+    VALID_ACCESSIBILITY,
+    VALID_LEVELS,
+    bulk_metrics as _bulk_metrics,
+    list_high_schools as _list_high_schools,
+    top_schools as _top_schools,
+)
 from ..services.models import (
     GeocodingResult,
+    HsListing,
+    MetricRow,
+    RankedSchool,
     SchoolDetail,
     SchoolSummary,
     ZonedSearchResult,
@@ -15,6 +26,39 @@ from ..services.schools import get_school as _get_school
 from ..services.schools import search_schools as _search_schools
 from ..services.zoning import find_zoned_schools as _find_zoned_schools
 from ..services.zoning import geocode as _geocode
+
+# Literal types so the JSON schema enumerates valid values for the LLM.
+MetricName = Literal[
+    "eni", "poverty_pct", "attendance_rate", "chronic_absent_rate",
+    "ela_pct_proficient", "math_pct_proficient",
+    "regents_pct_above_64", "regents_pct_above_79", "graduation_rate_4yr",
+    "pupil_teacher_ratio", "pct_inexperienced_teachers",
+    "pct_out_of_cert_teachers", "per_pupil_expenditure",
+]
+SchoolLevel = Literal["elementary", "middle", "high", "K-8", "6-12"]
+Borough = Literal["M", "X", "K", "Q", "R", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"]
+Accessibility = Literal["Fully Accessible", "Partially Accessible", "Not Accessible"]
+
+
+_METRIC_DOC_BLOCK = "\n".join(
+    f"  - `{k}` — {v}" for k, v in METRIC_DESCRIPTIONS.items()
+)
+
+_TOP_SCHOOLS_DESC = f"""Rank schools by an accountability metric. Returns top N by metric value; pass `ascending=True` for the lowest-value end.
+
+Use for: "top high schools by Regents passing rate", "Bronx elementary schools with the highest math proficiency", "high schools with the lowest chronic absenteeism."
+
+Metric vocabulary (all 0..1 fractions, except `per_pupil_expenditure` which is dollars):
+{_METRIC_DOC_BLOCK}
+
+Note level applicability — graduation/Regents are HS-only; ela/math_pct_proficient is ES/MS/K-8/6-12 only. Schools without data for the requested metric are silently dropped from results."""
+
+_BULK_METRICS_DESC = f"""One row per active school with the requested metrics. For cross-school analytics: correlations, scatter plots, "is X associated with Y across schools."
+
+Use this instead of calling `get_school` 400 times. ~440 HS rows × 13 metrics ≈ 10 K tokens for the full dump; specify a subset of `metrics` to shrink. Default is all 13. Missing values are returned as None — never coerce to 0, since that breaks downstream stats.
+
+Available metrics:
+{_METRIC_DOC_BLOCK}"""
 
 
 mcp = FastMCP(
@@ -101,3 +145,52 @@ async def geocode_address(address: str) -> Optional[GeocodingResult]:
     'what schools serve this address', call find_schools_for_address
     instead, which combines this with zone lookup."""
     return await _geocode(address)
+
+
+@mcp.tool
+def list_high_schools(
+    borough: Optional[Borough] = None,
+    accessibility: Optional[Accessibility] = None,
+    program_keyword: Optional[str] = None,
+    limit: int = 50,
+) -> list[HsListing]:
+    """Browse / filter NYC high schools from the HS Directory (AY 2021).
+
+    Use this when the user is shopping for a high school and gives
+    criteria but doesn't have a specific school in mind: "performing arts
+    high schools in Brooklyn", "fully accessible HS in the Bronx",
+    "schools with strong CTE programs."
+
+    Filters compose AND. `program_keyword` is a case-insensitive
+    substring search across overview, academic opportunities, language
+    classes, and AP courses fields. Returns slim summaries; call
+    `get_school` for full detail on candidates of interest."""
+    return _list_high_schools(
+        borough=borough,
+        accessibility=accessibility,
+        program_keyword=program_keyword,
+        limit=limit,
+    )
+
+
+@mcp.tool(description=_TOP_SCHOOLS_DESC)
+def top_schools(
+    metric: MetricName,
+    level: SchoolLevel = "high",
+    limit: int = 20,
+    borough: Optional[Borough] = None,
+    ascending: bool = False,
+) -> list[RankedSchool]:
+    return _top_schools(
+        metric=metric, level=level, limit=limit,
+        borough=borough, ascending=ascending,
+    )
+
+
+@mcp.tool(description=_BULK_METRICS_DESC)
+def bulk_metrics(
+    level: SchoolLevel = "high",
+    metrics: Optional[list[MetricName]] = None,
+    borough: Optional[Borough] = None,
+) -> list[MetricRow]:
+    return _bulk_metrics(level=level, metrics=metrics, borough=borough)

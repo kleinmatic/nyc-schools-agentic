@@ -57,6 +57,8 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 
 ### Tools at a glance
 
+**One-school lookup**
+
 | Tool | Args | Returns | Use for |
 |---|---|---|---|
 | `search_schools` | `query: str`, `limit: int = 10` | `list[SchoolSummary]` | Resolve a school name to a DBN (the primary key for everything else). |
@@ -64,7 +66,33 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 | `find_schools_for_address` | `address: str` | `FindSchoolsForAddressResult \| None` | Geocode a NYC address → return its zoned ES + MS schools. The natural entry point for "where should I send my kid?" |
 | `geocode_address` | `address: str` | `GeocodingResult \| None` | Plain geocode escape hatch. Most callers want `find_schools_for_address` instead. |
 
+**Cross-school analytics & browse**
+
+| Tool | Args | Returns | Use for |
+|---|---|---|---|
+| `list_high_schools` | `borough?`, `accessibility?`, `program_keyword?`, `limit=50` | `list[HsListing]` | Browse / filter HS Directory: "performing arts HS in Brooklyn", "fully accessible HS in Bronx." |
+| `top_schools` | `metric`, `level="high"`, `limit=20`, `borough?`, `ascending=False` | `list[RankedSchool]` | Ranked leaderboards by accountability metric: "top HS by Regents passing rate", "lowest chronic absence." See [metric vocabulary](#metric-vocabulary) below. |
+| `bulk_metrics` | `level="high"`, `metrics?`, `borough?` | `list[MetricRow]` | One row per active school × N metrics. For correlations and dashboards — ~10 K tokens for HS-level full dump. |
+
 Tool input/output schemas are auto-generated from the Pydantic models in [`app/services/models.py`](./app/services/models.py) and exposed via the standard MCP `list_tools` / `tools/list` calls.
+
+#### Metric vocabulary
+
+Used by `top_schools` and `bulk_metrics`. All values are 0..1 fractions except `per_pupil_expenditure` (USD).
+
+| Metric | Source | Applies to | Notes |
+|---|---|---|---|
+| `eni` | DOE demographics | all levels | Economic Need Index; equity-proxy of choice (see [ENI vs poverty_pct](#eni-vs-poverty_pct--which-to-use-for-equity-comparisons)). |
+| `poverty_pct` | DOE demographics | all levels | Direct certification (HRA / SNAP / Medicaid / temp housing). |
+| `attendance_rate` | DOE snapshots | all levels | Mostly AY 2016 vintage. |
+| `chronic_absent_rate` | NYSED SRC | all levels | ≥18 days absent. **Lower is better** — pass `ascending=True` to top_schools. |
+| `ela_pct_proficient` / `math_pct_proficient` | NYS 3-8 exams | ES/MS/K-8/6-12 only | Level 3-4, All Grades, latest year. |
+| `regents_pct_above_64` / `regents_pct_above_79` | DOE Regents | HS / 6-12 only | Mean across all exams, latest year. ≥65 = passing; ≥80 = mastery. |
+| `graduation_rate_4yr` | NYSED SRC | HS / 6-12 only | All Students, 4-year cohort. |
+| `pupil_teacher_ratio` | DOE | all levels | Lower is generally seen as better. |
+| `pct_inexperienced_teachers` | NYSED SRC | all levels | Teachers with <4 years experience. |
+| `pct_out_of_cert_teachers` | NYSED SRC | all levels | Teaching outside their certification area. |
+| `per_pupil_expenditure` | NYSED SRC | all levels | Federal + state + local combined, USD. |
 
 **Conventions to know when calling these tools:**
 - DBN (e.g. `15K321`) is the primary key everywhere.
