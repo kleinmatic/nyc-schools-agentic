@@ -17,6 +17,44 @@ def test_search_by_partial_dbn_finds_midwood():
     assert any(s.dbn == "22K405" for s in results)
 
 
+def test_search_finds_laguardia_hs_alongside_namesake_elementary():
+    """Regression: 'Fiorello LaGuardia' used to short-circuit to PS 205
+    (the elementary school whose clean_name is exactly 'fiorello laguardia')
+    and never return the famous LaGuardia HS. Both should appear now."""
+    results = search_schools("Fiorello LaGuardia")
+    dbns = [s.dbn for s in results]
+    assert "10X205" in dbns, "PS 205 (the namesake elementary) should match"
+    assert "03M485" in dbns, "Fiorello H. LaGuardia HS should match"
+
+
+def test_search_finds_bronx_science_with_non_contiguous_tokens():
+    """Regression: 'Bronx Science' couldn't find 'The Bronx High School of
+    Science' with partial_ratio alone (78), since the query tokens are
+    non-contiguous in the target. token_set_ratio fixes it."""
+    results = search_schools("Bronx Science")
+    assert results, "Bronx Science should return results"
+    assert results[0].dbn == "10X445", (
+        f"Bronx HS of Science should rank first; got {results[0].dbn}"
+    )
+
+
+def test_search_partial_name_finds_full_school():
+    """'art and design' should find 'Art and Design High School' even
+    though the query is shorter than the target."""
+    results = search_schools("art and design")
+    assert any(s.dbn == "02M630" for s in results)
+
+
+def test_search_stuyvesant_ranks_real_stuy_above_namesakes():
+    """When tokens match multiple schools at the same primary score,
+    the tie-breaker (full-string ratio, length-sensitive) should rank
+    Stuyvesant HS above Bedford Stuyvesant Charter."""
+    results = search_schools("Stuyvesant")
+    assert results[0].dbn == "02M475", (
+        f"Stuyvesant HS should rank first; got {results[0].dbn}"
+    )
+
+
 def test_search_empty_query_returns_empty():
     assert search_schools("") == []
     assert search_schools("   ") == []

@@ -56,42 +56,62 @@ def _clean_name(name: str) -> str:
 
 
 def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
-    """Three-stage school search, matching the heuristic that used to live in
-    nycschools.schools.search:
-      1. exact match on `clean_name` (handles "midwood high school" → 22K405)
-      2. exact match on `short_name` upper-cased ("PS 321" → 15K321)
-      3. token-set fuzzy on school_name with rapidfuzz; sort by ratio of
-         clean_name vs the cleaned query.
+    """Score every school against the query, return the best matches.
+
+    Scoring:
+      - Primary: rapidfuzz.partial_ratio — finds the best alignment of
+        the query within the school name. Handles partial-name queries
+        ("LaGuardia" → full name match) AND extra-word queries
+        ("art and design high school" → "Art and Design High School")
+        without the over-permissiveness of partial_token_set_ratio
+        (which scores 100 for any token overlap, including "and").
+      - Boost +10 for exact clean_name match.
+      - Boost +5 for exact short_name match (e.g. "PS 321" → 15K321).
+      - Secondary tie-breaker: full-string fuzz.ratio against the
+        school name. Penalizes length difference, so for queries with
+        many partial-100 matches ("Stuyvesant" — Stuyvesant HS,
+        Bedford Stuyvesant Charter, etc.) the school whose name is
+        closest in length to the query ranks first.
+
+    We deliberately do NOT short-circuit on exact match: when the user
+    types "Fiorello LaGuardia", PS 205's clean_name happens to be exactly
+    "fiorello laguardia", but they probably also want LaGuardia HS in
+    the results. Both schools end up in the list; user picks.
     """
-    q_clean = _clean_name(qry)
-
-    if q_clean and "clean_name" in df.columns:
-        exact = df[df["clean_name"] == q_clean]
-        if not exact.empty:
-            return exact.head(limit)
-
-    if "short_name" in df.columns:
-        sn = df[df["short_name"].fillna("").str.upper() == qry.upper()]
-        if not sn.empty:
-            return sn.head(limit)
-
     if df.empty:
         return df
 
-    scored = df.copy()
-    scored["_token_match"] = scored["school_name"].fillna("").apply(
-        lambda sn: fuzz.token_set_ratio(qry, sn)
-    )
-    scored = scored[scored["_token_match"] > 80]
-    if scored.empty:
-        return scored
-    if "clean_name" in scored.columns:
-        scored["_match"] = scored["clean_name"].fillna("").apply(
-            lambda cn: fuzz.ratio(q_clean, cn)
+    q_clean = _clean_name(qry)
+    df = df.copy()
+
+    # max(partial_ratio, token_set_ratio):
+    # - partial_ratio handles substring/abbreviation queries
+    #   ("Stuyvesant" → "Stuyvesant High School").
+    # - token_set_ratio handles non-contiguous-token queries where the
+    #   target inserts words between the query's tokens
+    #   ("Bronx Science" → "The Bronx High School of Science").
+    # Either alone misses cases the other catches.
+    df["_match"] = df["school_name"].fillna("").apply(
+        lambda sn: max(
+            float(fuzz.partial_ratio(qry, sn)),
+            float(fuzz.token_set_ratio(qry, sn)),
         )
-    else:
-        scored["_match"] = scored["_token_match"]
-    return scored.sort_values("_match", ascending=False).head(limit)
+    )
+
+    if q_clean and "clean_name" in df.columns:
+        df.loc[df["clean_name"].fillna("") == q_clean, "_match"] += 10
+
+    if "short_name" in df.columns:
+        df.loc[df["short_name"].fillna("").str.upper() == qry.upper(), "_match"] += 5
+
+    df = df[df["_match"] >= 80]
+    if df.empty:
+        return df
+
+    df["_tiebreak"] = df["school_name"].fillna("").apply(
+        lambda sn: float(fuzz.ratio(qry, sn))
+    )
+    return df.sort_values(["_match", "_tiebreak"], ascending=[False, False]).head(limit)
 
 
 def _opt_int(v) -> Optional[int]:
