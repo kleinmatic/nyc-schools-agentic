@@ -159,6 +159,8 @@ One command from any terminal — adds the server to your **user-scope** Claude 
 claude mcp add --transport http --scope user nyc-schools https://nycschools.fly.dev/mcp/
 ```
 
+The trailing slash is canonical, but the server accepts `/mcp` and `/mcp/` interchangeably (an ASGI middleware rewrites the path before routing), so a paste-fumbled URL still works.
+
 Verify and use it:
 
 ```bash
