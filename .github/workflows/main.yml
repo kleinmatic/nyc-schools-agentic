@@ -1,0 +1,78 @@
+name: CI + Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel previous runs of the same workflow on the same branch when a new
+# commit lands. Avoids piling up redundant CI runs on a fast push series.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------- TESTS ----------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # We don't auto-pull LFS here — we cache the LFS blobs separately
+          # so we don't burn GitHub's free LFS bandwidth on every CI run.
+          lfs: false
+
+      - name: Compute LFS pointer hash
+        id: lfs-hash
+        run: |
+          # Build a stable key from the LFS pointer file contents in HEAD.
+          # If data/* hasn't been refreshed, this hash is identical between
+          # runs, so the cache hits and `git lfs pull` is a no-op.
+          git ls-files data/ | xargs -I {} git show HEAD:{} > .lfs-pointers
+          echo "hash=$(sha256sum .lfs-pointers | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+
+      - name: Cache LFS objects
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs/objects
+          key: lfs-${{ steps.lfs-hash.outputs.hash }}
+
+      - name: Pull LFS data
+        run: git lfs pull
+
+      - name: Install system libs (geopandas)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgdal-dev libgeos-dev libproj-dev
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install project deps
+        run: uv sync
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=app --cov-report=term
+
+  # ---------- DEPLOY ----------
+  deploy:
+    needs: test
+    # Only deploy on push to main; PR runs of the workflow stop after `test`.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy-fly   # serialize deploys so we don't race
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fly's remote builder uploads the working tree as the build context;
+          # data/ files MUST be materialized binaries, not LFS pointers.
+          lfs: true
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
