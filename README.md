@@ -41,8 +41,107 @@ Routes you'll have:
 - `/` — search page (htmx live results as you type)
 - `/search?q=...` — same search, also returns htmx partial when called with `HX-Request: true`
 - `/school/{dbn}` — school detail (e.g. `/school/15K321`)
+- `/find?address=...` — address-based zoned-school lookup
+- `/mcp/` — MCP server over Streamable HTTP (see [MCP server](#mcp-server) below)
 - `/healthz` — liveness check
 - `/docs` — auto-generated OpenAPI / Swagger UI (FastAPI default)
+
+## MCP server
+
+The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) endpoint at `/mcp/` (note the trailing slash) over [Streamable HTTP](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#streamable-http). It's a sibling adapter to the HTML routes — same `app/services/` functions, same Pydantic models, separate transport. Built with [FastMCP](https://gofastmcp.com).
+
+- **Production:** `https://nycschools.fly.dev/mcp/`
+- **Local:** `http://localhost:8000/mcp/` (after `uv run uvicorn app.main:app --reload`)
+- **Auth:** none. Public data, public endpoint.
+- **Source (AGPL §13):** [github.com/kleinmatic/nyc-schools-agentic](https://github.com/kleinmatic/nyc-schools-agentic) — the MCP tool definitions live in [`app/mcp_server/server.py`](./app/mcp_server/server.py).
+
+### Tools at a glance
+
+| Tool | Args | Returns | Use for |
+|---|---|---|---|
+| `search_schools` | `query: str`, `limit: int = 10` | `list[SchoolSummary]` | Resolve a school name to a DBN (the primary key for everything else). |
+| `get_school` | `dbn: str` | `SchoolDetail \| None` | Full report for one school: demographics by year, exams, Regents, class size, budget, NYSED accountability, peer ranks. **Heavy** — 8–14 K tokens per call. |
+| `find_schools_for_address` | `address: str` | `FindSchoolsForAddressResult \| None` | Geocode a NYC address → return its zoned ES + MS schools. The natural entry point for "where should I send my kid?" |
+| `geocode_address` | `address: str` | `GeocodingResult \| None` | Plain geocode escape hatch. Most callers want `find_schools_for_address` instead. |
+
+Tool input/output schemas are auto-generated from the Pydantic models in [`app/services/models.py`](./app/services/models.py) and exposed via the standard MCP `list_tools` / `tools/list` calls.
+
+**Conventions to know when calling these tools:**
+- DBN (e.g. `15K321`) is the primary key everywhere.
+- Percentages are `0..1` fractions (`0.83` = 83%), not `0..100`.
+- Years are academic-year start integers — `2024` means 2024-25.
+- `eni` (Economic Need Index) is the equity proxy of choice for ranking; `poverty_pct` is for direct interpretability. See [ENI vs poverty_pct](#eni-vs-poverty_pct--which-to-use-for-equity-comparisons) below.
+
+### Quick smoke test
+
+Easiest interactive check is the official **[MCP Inspector](https://github.com/modelcontextprotocol/inspector)** — it handles the Streamable HTTP `initialize` → session-id handshake for you and gives you a browser UI to list tools and call them:
+
+```bash
+npx @modelcontextprotocol/inspector
+# In the UI: Transport = "Streamable HTTP", URL = https://nycschools.fly.dev/mcp/
+```
+
+For a scripted check without Node, the Python snippet below works.
+
+### Connect from Python (FastMCP `Client`)
+
+The simplest path. `pip install fastmcp` (or `uv add fastmcp`), then:
+
+```python
+import asyncio
+from fastmcp import Client
+
+async def main():
+    async with Client("https://nycschools.fly.dev/mcp/") as c:
+        tools = await c.list_tools()
+        print("tools:", [t.name for t in tools])
+
+        # Find Park Slope's zoned ES + MS by address.
+        r = await c.call_tool(
+            "find_schools_for_address",
+            {"address": "180 7th Avenue, Brooklyn"},
+        )
+        print(r.data.geocoding.label)
+        for s in r.data.schools.elementary:
+            print("ES:", s.dbn, s.school_name)
+        for s in r.data.schools.middle:
+            print("MS:", s.dbn, s.school_name)
+
+asyncio.run(main())
+```
+
+`r.data` is a parsed Pydantic model — same shape the HTML site renders against.
+
+### Connect from LibreChat
+
+Add to `librechat.yaml`:
+
+```yaml
+mcpServers:
+  nyc-schools:
+    type: streamable-http
+    url: https://nycschools.fly.dev/mcp/
+    timeout: 30000
+```
+
+Restart LibreChat; the four tools appear in the model's tool list.
+
+### Connect from Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "nyc-schools": {
+      "type": "http",
+      "url": "https://nycschools.fly.dev/mcp/"
+    }
+  }
+}
+```
+
+Restart Claude Desktop. (Note: at the time of writing, Claude Desktop's `http` transport is Streamable HTTP. If you have an older build that only supports stdio, run a small bridge — easiest is the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) npm package: `npx mcp-remote https://nycschools.fly.dev/mcp/`.)
 
 ### Run the tests
 

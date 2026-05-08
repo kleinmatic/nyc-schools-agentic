@@ -1,13 +1,14 @@
 [project]
 name = "nyc-report-card"
 version = "0.1.0"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 # Runtime deps the FastAPI app actually needs. nycschools is intentionally NOT
 # here — the running app reads from the committed data/data.sqlite, not from
 # upstream loaders. nycschools is only used by build-time scripts and lives
 # in the [build] dependency group below.
 dependencies = [
     "fastapi>=0.128.8",
+    "fastmcp>=3.2,<4",
     "geopandas>=1.0.0",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
