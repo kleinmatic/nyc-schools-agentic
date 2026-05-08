@@ -30,6 +30,7 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "top_neighborhoods",
         "borough_summary",
         "school_peers",
+        "schools_in_neighborhood",
     }
 
 
@@ -186,6 +187,25 @@ async def test_school_peers_tool_returns_focal_school_flagged(mcp_client):
     selves = [p for p in r.data.rows if p.is_self]
     assert len(selves) == 1
     assert selves[0].dbn == "15K321"
+
+
+async def test_schools_in_neighborhood_tool_resolves_colloquial_name(mcp_client):
+    r = await mcp_client.call_tool(
+        "schools_in_neighborhood", {"query": "park slope", "limit": 5}
+    )
+    assert r.data is not None
+    assert r.data.nta_name == "Park Slope-Gowanus"
+    assert r.data.schools
+    assert r.data.n_schools_total >= len(r.data.schools)
+
+
+async def test_schools_in_neighborhood_tool_surfaces_alternatives(mcp_client):
+    """'harlem' matches multiple NTAs — alternatives must come back so
+    the agent can offer disambiguation to the user."""
+    r = await mcp_client.call_tool("schools_in_neighborhood", {"query": "harlem"})
+    assert r.data is not None
+    assert "Harlem" in r.data.nta_name
+    assert len(r.data.other_candidates) >= 2
 
 
 async def test_school_peers_tool_unknown_dbn_returns_none(mcp_client):

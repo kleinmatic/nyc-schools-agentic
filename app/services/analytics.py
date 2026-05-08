@@ -15,6 +15,8 @@ from typing import Optional
 import pandas as pd
 
 from .. import data
+from rapidfuzz import fuzz
+
 from .models import (
     BoroughGrid,
     BoroughRow,
@@ -24,10 +26,13 @@ from .models import (
     MetricRow,
     NeighborhoodAggregate,
     NeighborhoodLeaderboard,
+    NeighborhoodSchoolsResult,
     PeerCohort,
     PeerSchool,
     RankedSchool,
+    SchoolSummary,
 )
+from .schools import _to_summary
 
 
 # Metric vocabulary surfaced to MCP. Each entry: name, one-line description,
@@ -495,6 +500,107 @@ def homepage_neighborhood_leaderboards(per_table: int = 5) -> list[NeighborhoodL
 def homepage_borough_grid() -> BoroughGrid:
     """Single 5-borough overview across HS-level outcomes + equity."""
     return borough_summary(metrics=list(_HOMEPAGE_BOROUGH_METRICS), level="high")
+
+
+# -------- Neighborhood lookup by colloquial name --------
+
+# Below this fuzzy-match score, we treat the query as not finding any NTA.
+# rapidfuzz partial_ratio scores 0..100. 85 is empirically the right cutoff:
+# legitimate colloquial queries score ~100 (the user's term is a substring
+# of the NTA name); fragment-level false positives like "xyzzy fake
+# neighborhood" matching 'Norwood' on 'ood' score ~77.
+_NTA_FUZZY_MIN_SCORE = 85
+# Other candidates that scored within this many points of the top match
+# get surfaced for the caller to consider.
+_NTA_OTHER_CANDIDATE_BAND = 15
+
+
+def _ntas_with_boros(store) -> list[tuple[str, Optional[str]]]:
+    """Distinct (nta_name, boro) pairs across all schools. Boroughs come
+    from demographics.boro joined on DBN; we take the most-common borough
+    per NTA in case a single NTA spans a borough boundary."""
+    loc = store.locations[["dbn", "nta_name"]].dropna(subset=["nta_name"])
+    dem = store.demographics[["dbn", "boro"]].drop_duplicates("dbn")
+    j = loc.merge(dem, on="dbn", how="left")
+    pairs: dict[str, str] = {}
+    for nta, group in j.groupby("nta_name"):
+        b = group["boro"].mode()
+        pairs[str(nta)] = str(b.iloc[0]) if not b.empty else None
+    return sorted(pairs.items())
+
+
+def _fuzzy_match_ntas(query: str, store) -> list[tuple[str, Optional[str], int]]:
+    """Score every NTA against the query and return ranked candidates."""
+    q = query.strip()
+    if not q:
+        return []
+    pairs = _ntas_with_boros(store)
+    scored: list[tuple[str, Optional[str], int]] = []
+    for nta, boro in pairs:
+        score = int(fuzz.partial_ratio(q.lower(), nta.lower()))
+        if score >= _NTA_FUZZY_MIN_SCORE:
+            scored.append((nta, boro, score))
+    scored.sort(key=lambda t: t[2], reverse=True)
+    return scored
+
+
+def _schools_in_nta(
+    nta_name: str,
+    level: Optional[str],
+    store,
+    limit: Optional[int] = None,
+) -> tuple[list[SchoolSummary], int]:
+    """Schools whose canonical NTA matches `nta_name`. Returns (slice,
+    total_count) — total is informational so the caller can show "12 of
+    30 schools" when limited."""
+    loc = store.locations
+    dbns = loc.loc[loc["nta_name"] == nta_name, "dbn"].tolist()
+    if not dbns:
+        return [], 0
+    cands = _candidate_schools(level=level, borough=None, store=store)
+    rows = cands[cands["dbn"].isin(dbns)].copy()
+    if rows.empty:
+        return [], 0
+    # Reuse search_schools' per-row Pydantic builder for consistency.
+    summaries = [_to_summary(r) for _, r in rows.iterrows()]
+    total = len(summaries)
+    summaries.sort(key=lambda s: s.school_name)
+    if limit is not None:
+        summaries = summaries[:limit]
+    return summaries, total
+
+
+def schools_in_neighborhood(
+    query: str,
+    level: Optional[str] = None,
+    limit: int = 50,
+) -> Optional[NeighborhoodSchoolsResult]:
+    """Look up an NTA by colloquial name (fuzzy) and return its schools.
+
+    Useful for "tell me about the schools in park slope" — the caller
+    doesn't have to know the canonical NTA name ('Park Slope-Gowanus').
+    Multi-match queries ("Harlem" matches 4 NTAs) get the best match in
+    `nta_name` plus runners-up in `other_candidates`; the caller can
+    disambiguate or follow up.
+
+    Returns None if no NTA fuzzy-matches the query above a low threshold."""
+    if not query or not query.strip():
+        return None
+    store = data.get_store()
+    candidates = _fuzzy_match_ntas(query, store)
+    if not candidates:
+        return None
+    top_name, top_boro, top_score = candidates[0]
+    cutoff = max(_NTA_FUZZY_MIN_SCORE, top_score - _NTA_OTHER_CANDIDATE_BAND)
+    others = [name for name, _, score in candidates[1:6] if score >= cutoff]
+    schools, total = _schools_in_nta(top_name, level, store, limit=limit)
+    return NeighborhoodSchoolsResult(
+        nta_name=top_name,
+        boro=top_boro,
+        n_schools_total=total,
+        other_candidates=others,
+        schools=schools,
+    )
 
 
 # -------- School-page peer comparison --------

@@ -80,6 +80,7 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 |---|---|---|---|
 | `top_neighborhoods` | `metric`, `level="high"`, `limit=10`, `ascending=False`, `min_schools=5` | `list[NeighborhoodAggregate]` | Rank NYC NTAs (Neighborhood Tabulation Areas) by mean of a metric across their schools: "best neighborhoods for ES", "neighborhoods with highest chronic absence." |
 | `borough_summary` | `metrics?`, `level="high"` | `BoroughGrid` | 5-borough × N-metric overview: side-by-side ENI / outcomes across Manhattan, Brooklyn, Queens, Bronx, Staten Island. |
+| `schools_in_neighborhood` | `query`, `level?`, `limit=50` | `NeighborhoodSchoolsResult \| None` | Look up schools by colloquial neighborhood name ("park slope", "harlem"). Fuzzy-matches to NTAs; ambiguous queries surface alternatives in `other_candidates`. |
 | `school_peers` | `dbn`, `scope="neighborhood"\|"district"`, `limit=20` | `PeerCohort \| None` | Same-NTA or same-district peer schools for a given DBN. Focal school flagged via `is_self=true`. District scope is most useful for ES/MS — HS is city-wide choice. |
 
 > **Neighborhood / zone vocabulary used across these tools:** *Neighborhood* = NTA (Neighborhood Tabulation Area), NYC's official 195 neighborhoods — closest formal proxy to colloquial neighborhood names. *District* = one of NYC's 32 geographic school districts; the natural admissions zone for elementary and middle schools.

@@ -15,6 +15,7 @@ from ..services.analytics import (
     bulk_metrics as _bulk_metrics,
     list_high_schools as _list_high_schools,
     school_peers as _school_peers,
+    schools_in_neighborhood as _schools_in_neighborhood,
     top_schools as _top_schools,
 )
 from ..services.models import (
@@ -23,6 +24,7 @@ from ..services.models import (
     HsListing,
     MetricRow,
     NeighborhoodAggregate,
+    NeighborhoodSchoolsResult,
     PeerCohort,
     RankedSchool,
     SchoolDetail,
@@ -89,6 +91,8 @@ mcp = FastMCP(
         "- 'Where should I send my kid?' → geocode the address, "
         "find_schools_for_address to get the zoned ES/MS, then get_school + "
         "school_peers for full detail and neighborhood context.\n"
+        "- 'Tell me about the schools in <neighborhood>' → "
+        "schools_in_neighborhood (fuzzy-matches colloquial names).\n"
         "- 'How does this school compare to its neighbors?' → school_peers.\n"
         "- 'Best/worst schools by some metric' → top_schools.\n"
         "- 'Best/worst neighborhoods by some metric' → top_neighborhoods.\n"
@@ -256,6 +260,32 @@ def borough_summary(
         metrics=metrics if metrics is not None else list(METRIC_NAMES),
         level=level,
     )
+
+
+@mcp.tool
+def schools_in_neighborhood(
+    query: str,
+    level: Optional[SchoolLevel] = None,
+    limit: int = 50,
+) -> Optional[NeighborhoodSchoolsResult]:
+    """Look up schools in a NYC neighborhood by colloquial name.
+
+    The caller doesn't need to know NYC's official NTA names — fuzzy-
+    matches the query against all 189 NTAs and returns the schools in
+    the best match. Use for "tell me about the schools in park slope",
+    "what middle schools are in mott haven", "harlem high schools."
+
+    Behavior on ambiguous queries: returns the single best match in
+    `nta_name`, but populates `other_candidates` with alternative NTAs
+    that scored well — so a query like "harlem" returns Central Harlem
+    North-Polo Grounds plus Central Harlem South / East Harlem North /
+    East Harlem South in `other_candidates` for the caller to offer the
+    user. Returns None when nothing matches above a low threshold.
+
+    Pair with `get_school` (one of the returned DBNs) for full detail
+    on individual schools, or with `school_peers(dbn, "neighborhood")`
+    for the same-NTA peer comparison table the school page uses."""
+    return _schools_in_neighborhood(query=query, level=level, limit=limit)
 
 
 @mcp.tool

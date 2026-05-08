@@ -377,6 +377,17 @@ class PeerSchool(BaseModel):
     metrics: dict[str, Optional[float]]
 
 
+class NeighborhoodSchoolsResult(BaseModel):
+    """Result of looking up schools by neighborhood name. Always returns
+    the single best NTA match; alternatives surface in `other_candidates`
+    so the caller can disambiguate (e.g. 'Harlem' has 4 matching NTAs)."""
+    nta_name: str                     # canonical NTA we matched
+    boro: Optional[str] = None
+    n_schools_total: int              # total schools in this NTA at the requested level
+    other_candidates: list[str] = []  # other NTAs that scored well against the query
+    schools: list["SchoolSummary"]
+
+
 class PeerCohort(BaseModel):
     """A geographic peer cohort — schools in the same NTA or district as the focal school."""
     label: str                   # "Park Slope" or "District 15"

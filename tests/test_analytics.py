@@ -13,6 +13,7 @@ from app.services.analytics import (
     homepage_neighborhood_leaderboards,
     list_high_schools,
     school_peers,
+    schools_in_neighborhood,
     top_schools,
 )
 
@@ -255,6 +256,43 @@ def test_school_peers_unknown_dbn_returns_none():
 def test_school_peers_invalid_scope_raises():
     with pytest.raises(ValueError, match="scope must be"):
         school_peers("15K321", "borough")
+
+
+def test_schools_in_neighborhood_park_slope_returns_canonical_nta():
+    """Common case: a colloquial query resolves to the canonical NTA name."""
+    r = schools_in_neighborhood("park slope", limit=10)
+    assert r is not None
+    assert r.nta_name == "Park Slope-Gowanus"
+    assert r.boro == "Brooklyn"
+    assert r.schools  # at least some Park Slope schools
+    # Single-match query — no other strong candidates.
+    assert r.other_candidates == []
+
+
+def test_schools_in_neighborhood_harlem_surfaces_alternatives():
+    """A query like 'harlem' matches multiple NTAs; the runner-up names
+    must come back in other_candidates so the caller can disambiguate."""
+    r = schools_in_neighborhood("harlem", limit=3)
+    assert r is not None
+    assert "Harlem" in r.nta_name
+    assert len(r.other_candidates) >= 2
+    # All candidates should reference Harlem.
+    assert all("Harlem" in n for n in r.other_candidates)
+
+
+def test_schools_in_neighborhood_unknown_returns_none():
+    assert schools_in_neighborhood("xyzzy fake neighborhood") is None
+    assert schools_in_neighborhood("") is None
+    assert schools_in_neighborhood("   ") is None
+
+
+def test_schools_in_neighborhood_level_filter():
+    """level filter should narrow to one school type."""
+    r = schools_in_neighborhood("park slope", level="elementary", limit=20)
+    assert r is not None
+    assert all(s.school_level == "elementary" for s in r.schools), (
+        [s.school_level for s in r.schools]
+    )
 
 
 def test_school_peers_metric_set_matches_level():
