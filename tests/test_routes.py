@@ -167,3 +167,28 @@ def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok", "data_loaded": True}
+
+
+def test_mcp_endpoint_accepts_bare_path_without_redirect(client):
+    """`/mcp` (no trailing slash) must respond with the MCP initialize
+    handshake directly, not a 307 redirect to `/mcp/`. Some clients
+    (Claude Code's `claude mcp add`) normalize the trailing slash off
+    URLs they store, and Starlette's auto-redirect on the bare mount
+    path was breaking them. The _McpTrailingSlashMiddleware in main.py
+    rewrites the scope path to `/mcp/` before routing — pin that
+    behavior here."""
+    init_payload = {
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1"},
+        },
+    }
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    # `/mcp` and `/mcp/` should behave identically.
+    for url in ("/mcp", "/mcp/"):
+        r = client.post(url, json=init_payload, headers=headers)
+        assert r.status_code == 200, f"{url}: expected 200, got {r.status_code} (body: {r.text[:200]})"
+        assert "Mcp-Session-Id" in {k.title() for k in r.headers}
+        assert "text/event-stream" in r.headers.get("content-type", "")

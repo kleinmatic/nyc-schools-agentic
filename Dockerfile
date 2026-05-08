@@ -41,4 +41,12 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers + --forwarded-allow-ips='*': Fly terminates TLS at its
+# edge, so uvicorn sees plain HTTP from the proxy. These flags make
+# uvicorn trust X-Forwarded-Proto / X-Forwarded-For so request.url is
+# the original https:// URL the client used, not http://10.x.x.x:8000.
+# (Belt-and-suspenders alongside _McpTrailingSlashMiddleware in main.py:
+# we no longer rely on Starlette redirects, but anything else that does
+# generate a redirect URL — RedirectResponse, OpenAPI server URLs —
+# will get the right scheme.)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
