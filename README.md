@@ -38,13 +38,13 @@ uv run uvicorn app.main:app --reload
 Cold start ~1s. `--reload` watches Python files and restarts on save.
 
 Routes you'll have:
-- `/` — search page (htmx live results as you type)
-- `/search?q=...` — same search, also returns htmx partial when called with `HX-Request: true`
-- `/school/{dbn}` — school detail (e.g. `/school/15K321`)
-- `/find?address=...` — address-based zoned-school lookup
-- `/mcp/` — MCP server over Streamable HTTP (see [MCP server](#mcp-server) below)
-- `/healthz` — liveness check
-- `/docs` — auto-generated OpenAPI / Swagger UI (FastAPI default)
+- `/` — search + accountability dashboard. Search box (htmx live results) at top; below it, two stacked sets of leaderboards. **Accountability dashboard** (4 school-level tables: top HS by Regents passing rate; HS with most chronic absenteeism; highest-need HS by ENI; top elementary by ELA proficiency) and **By place** (5-borough overview grid; top NTAs for HS Regents and ES ELA). The dashboard hides on `/search?q=…` so search results take focus, and reappears when the query is cleared.
+- `/search?q=...` — same search; returns an htmx partial when called with `HX-Request: true`.
+- `/school/{dbn}` — school detail (e.g. `/school/15K321`). Sections include quick stats, single-metric peer-rank markers, exam history, NYSED accountability, location, **Schools nearby** (a multi-metric peer-comparison table for same-NTA peers + same-district peers for ES/MS), Galaxy budget, demographics by year. HS pages add the HS Directory + admissions programs sections; HS pages skip the same-district peer table since HS is city-wide choice.
+- `/find?address=...` — address-based zoned-school lookup.
+- `/mcp/` — MCP server over Streamable HTTP (see [MCP server](#mcp-server) below).
+- `/healthz` — liveness check.
+- `/docs` — auto-generated OpenAPI / Swagger UI (FastAPI default).
 
 ## MCP server
 
@@ -439,22 +439,29 @@ Available in upstream `nycschools` but not currently wired into the app:
 │   └── hs-directory.feather       # AY 2021 HS directory (wide format)
 ├── school-data/           # gitignored; raw upstream cache for refresh only
 ├── app/
-│   ├── main.py            # FastAPI app, lifespan-loaded data
+│   ├── main.py            # FastAPI app, lifespan-loaded data, mounts web + MCP
 │   ├── config.py          # paths to data/ and (for build) school-data/
 │   ├── data.py            # reads data/data.sqlite + geo files into memory
 │   ├── services/          # transport-agnostic data-access functions
 │   │   ├── models.py      # Pydantic schemas (the cross-surface contract)
-│   │   ├── schools.py     # search_schools, get_school, peer ranks, etc.
-│   │   └── zoning.py      # geocode + find_zoned_schools (address search)
-│   └── web/               # thin Jinja-rendering adapters
-│       ├── routes.py      # /, /search, /school/{dbn}, /find
-│       └── templates/     # base, search, school, find, partials/
+│   │   ├── schools.py     # one-school: search_schools, get_school, peer ranks
+│   │   ├── zoning.py      # geocode + find_zoned_schools (address search)
+│   │   └── analytics.py   # cross-school: top_schools, bulk_metrics, neighborhoods,
+│   │                      # peer cohorts, homepage leaderboard sets
+│   ├── web/               # thin Jinja-rendering adapters
+│   │   ├── routes.py      # /, /search, /school/{dbn}, /find
+│   │   └── templates/     # base, search, school, find + partials/
+│   └── mcp_server/        # FastMCP adapter, mounted at /mcp/ (Streamable HTTP)
+│       ├── __init__.py
+│       └── server.py      # 11 tools, all thin wrappers over services/
 ├── tests/
 │   ├── conftest.py        # session-scoped data load
 │   ├── test_services.py
 │   ├── test_routes.py
 │   ├── test_zoning.py
-│   └── test_helpers.py
+│   ├── test_helpers.py
+│   ├── test_analytics.py  # cross-school + peer + neighborhood services
+│   └── test_mcp_server.py # MCP tools via FastMCP in-memory transport
 ├── scripts/
 │   ├── fetch_data.py      # build-time: pull upstream → school-data/
 │   ├── build_db.py        # build-time: filter → data/data.sqlite + geo
