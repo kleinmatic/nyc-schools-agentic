@@ -1,8 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Search NYC Schools{% endblock %}
+{% block title %}NYC Schools — The Data Tribune{% endblock %}
 {% block content %}
+{% if not query %}
+<section class="mb-10 text-center">
+  <p class="eyebrow mb-3">An accountability database</p>
+  <h1 class="display-headline">Search NYC's 1,500+ public schools</h1>
+  <p class="display-deck mx-auto">
+    Demographics, exam results, attendance, NYS accountability —
+    every NYC public school, searchable for parents and queryable
+    by agents over <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic#mcp-server">MCP</a>.
+  </p>
+</section>
+{% else %}
 <h1 class="text-2xl font-semibold mb-2">Find a school</h1>
 <p class="text-sm text-slate-500 mb-6">By name (e.g. <em>Midwood High School</em>), short name (<em>PS 321</em>), or DBN (<em>15K321</em>).</p>
+{% endif %}
 
 <form action="/search" method="get" class="mb-6">
   <input

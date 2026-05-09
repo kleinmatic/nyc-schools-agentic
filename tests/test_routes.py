@@ -15,7 +15,18 @@ def client():
 def test_home_renders(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Find a school" in r.text
+    # Newspaper-masthead branding on every page; the homepage hero on / only.
+    assert "The Data Tribune" in r.text
+    assert "Search NYC's 1,500+ public schools" in r.text
+
+
+def test_search_with_query_drops_homepage_hero(client):
+    """When the user has searched, the eyebrow + display headline give
+    way to a plain section header so search results take focus."""
+    r = client.get("/search", params={"q": "stuyvesant"})
+    assert r.status_code == 200
+    assert "Search NYC's 1,500+ public schools" not in r.text
+    assert "Find a school" in r.text  # the smaller fallback heading
 
 
 def test_home_renders_accountability_dashboard(client):

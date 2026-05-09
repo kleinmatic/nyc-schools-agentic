@@ -3,11 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}NYC Schools{% endblock %}</title>
+  <title>{% block title %}The Data Tribune — NYC Schools{% endblock %}</title>
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Newspaper-masthead palette + typography (matches ~/Code/tmp/index.html). */
+    :root {
+      --ink: #111;
+      --paper: #fafaf7;
+      --muted: #6b6b6b;
+    }
+    .masthead-bar { background: var(--paper); }
+    .masthead-rule {
+      border: 0;
+      border-top: 1px solid var(--ink);
+      margin: 0;
+    }
+    .masthead-wordmark {
+      font-family: 'Grenze Gotisch', 'Times New Roman', serif;
+      font-weight: 700;
+      font-size: clamp(1.75rem, 5vw, 3rem);
+      line-height: 1;
+      letter-spacing: 0.005em;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .eyebrow {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .display-headline {
+      font-family: 'Grenze Gotisch', 'Times New Roman', serif;
+      font-weight: 700;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      line-height: 1.05;
+      letter-spacing: -0.005em;
+      color: var(--ink);
+      margin: 0;
+    }
+    .display-deck {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 1.0625rem;
+      line-height: 1.5;
+      color: var(--muted);
+      max-width: 36rem;
+      margin: 1rem 0 0;
+    }
     /* Popover trigger that looks like inline text. */
     button.pop-trigger {
       background: transparent; border: 0; padding: 0; margin: 0;
@@ -33,12 +82,13 @@
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
-  <header class="bg-white border-b border-slate-200">
-    <div class="max-w-4xl mx-auto px-6 py-4 flex items-baseline justify-between">
-      <a href="/" class="text-xl font-semibold tracking-tight">NYC Schools</a>
-      <nav class="text-sm text-slate-500">
-        <a href="https://github.com/kleinmatic/nyc-schools-agentic" class="hover:text-slate-900">source</a>
-      </nav>
+  <header class="masthead-bar">
+    <div class="max-w-5xl mx-auto px-6 py-4">
+      <hr class="masthead-rule">
+      <div class="text-center" style="margin: 0.45em 0;">
+        <a href="/" class="masthead-wordmark">The Data Tribune</a>
+      </div>
+      <hr class="masthead-rule">
     </div>
   </header>
   <main class="max-w-4xl mx-auto px-6 py-8">
