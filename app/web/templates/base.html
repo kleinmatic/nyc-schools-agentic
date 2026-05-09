@@ -9,13 +9,22 @@
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Newspaper-masthead palette + typography (matches ~/Code/tmp/index.html). */
+    /* Newspaper-style typography:
+         - Grenze Gotisch — masthead wordmark only
+         - IBM Plex Serif — headlines (h1/h2) and display copy (deck)
+         - IBM Plex Sans — body copy, UI, eyebrow labels (everything else) */
     :root {
       --ink: #111;
       --paper: #fafaf7;
       --muted: #6b6b6b;
+    }
+    body {
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    }
+    h1, h2 {
+      font-family: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
     }
     .masthead-bar { background: var(--paper); }
     .masthead-rule {
@@ -33,7 +42,7 @@
       text-decoration: none;
     }
     .eyebrow {
-      font-family: 'Inter', system-ui, sans-serif;
+      /* Inherits IBM Plex Sans from body. */
       font-size: 0.7rem;
       font-weight: 500;
       letter-spacing: 0.35em;
@@ -41,8 +50,8 @@
       color: var(--muted);
     }
     .display-headline {
-      font-family: 'Inter', system-ui, sans-serif;
-      font-weight: 700;
+      /* IBM Plex Serif via the h1/h2 rule above. */
+      font-weight: 600;
       font-size: clamp(2.25rem, 6vw, 3.25rem);
       line-height: 1.1;
       letter-spacing: -0.02em;
@@ -50,8 +59,8 @@
       margin: 0;
     }
     .display-deck {
-      font-family: 'Inter', system-ui, sans-serif;
-      font-size: 1.0625rem;
+      font-family: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+      font-size: 1.125rem;
       line-height: 1.5;
       color: var(--muted);
       max-width: 36rem;
