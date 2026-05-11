@@ -12,24 +12,25 @@ def client():
         yield c
 
 
-_HOME_HERO_HEADLINE = "Search NYC’s 1,500+ Public Schools"  # curly apostrophe
-
-
 def test_home_renders(client):
+    """Structural-only — exact copy in the masthead and hero is free to
+    change. We check that the page renders, has an h1, and surfaces the
+    structural commitments: the masthead wordmark and the hero block."""
     r = client.get("/")
     assert r.status_code == 200
-    # Newspaper-masthead branding on every page; the homepage hero on / only.
-    assert "The Data Tribune" in r.text
-    assert _HOME_HERO_HEADLINE in r.text
+    assert "<h1" in r.text
+    assert 'class="masthead-wordmark"' in r.text
+    assert 'class="display-headline"' in r.text
 
 
 def test_search_with_query_drops_homepage_hero(client):
     """When the user has searched, the eyebrow + display headline give
-    way to a plain section header so search results take focus."""
+    way to a plain section header so search results take focus. Page
+    still has *some* h1 (the smaller fallback heading)."""
     r = client.get("/search", params={"q": "stuyvesant"})
     assert r.status_code == 200
-    assert _HOME_HERO_HEADLINE not in r.text
-    assert "Find a school" in r.text  # the smaller fallback heading
+    assert "<h1" in r.text
+    assert 'class="display-headline"' not in r.text
 
 
 def test_home_renders_accountability_dashboard(client):
