@@ -16,7 +16,7 @@
          - IBM Plex Serif — headlines (h1/h2) and display copy (deck)
          - IBM Plex Sans — body copy, UI, eyebrow labels (everything else) */
     :root {
-      --ink: #111;
+      --ink: #000;
       --paper: #fafaf7;
       --muted: #6b6b6b;
     }
@@ -28,9 +28,9 @@
     }
     .masthead-bar { background: var(--paper); }
     .masthead-rule {
-      border: 0;
+      border: 0px;
       border-top: 1px solid var(--ink);
-      margin: 0;
+      margin: 0px;
     }
     .masthead-wordmark {
       font-family: 'Grenze Gotisch', 'Times New Roman', serif;
@@ -93,7 +93,6 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen">
   <header class="masthead-bar">
     <div class="max-w-5xl mx-auto px-6 py-4">
-      <hr class="masthead-rule">
       <div class="text-center" style="margin: 0.45em 0;">
         <a href="/" class="masthead-wordmark">The Data Tribune</a>
       </div>
