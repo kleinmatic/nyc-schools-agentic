@@ -38,7 +38,7 @@
               {{ r.school_name }}
               <span class="text-xs font-normal text-amber-700 ml-1">this school</span>
             {% else %}
-              <a href="/school/{{ r.dbn }}" class="hover:underline">{{ r.school_name }}</a>
+              <a href="/school/{{ r.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ r.school_name }}</a>
             {% endif %}
           </td>
           {% for m in cohort.metric_names %}
