@@ -10,7 +10,7 @@
     <li class="flex items-center px-4 py-2.5 text-sm">
       <span class="text-slate-400 tabular-nums w-6">{{ loop.index }}</span>
       <span class="flex-1 truncate">
-        <a href="/neighborhood/{{ r.name|replace(' ', '-')|urlencode }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ r.name }}</a>
+        <a href="/neighborhood/{{ r.name|replace(' ', '-')|urlencode }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ r.name|pretty }}</a>
         <span class="text-slate-400 text-xs ml-1">— {{ r.boro }} · {{ r.n_schools }} schools</span>
       </span>
       <span class="text-slate-500 tabular-nums whitespace-nowrap">

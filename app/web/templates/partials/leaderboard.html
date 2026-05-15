@@ -12,7 +12,7 @@
     <li class="flex items-center hover:bg-slate-50">
       <a href="/school/{{ r.dbn }}" class="flex-1 flex items-center gap-3 px-4 py-2.5 text-sm">
         <span class="text-slate-400 tabular-nums w-6">{{ r.rank }}</span>
-        <span class="flex-1 text-slate-900 truncate">{{ r.school_name }}</span>
+        <span class="flex-1 text-slate-900 truncate">{{ r.school_name|pretty }}</span>
         <span class="text-slate-500 tabular-nums whitespace-nowrap">
           {%- if table.metric_format == 'pct' -%}
             {{ "%.1f"|format(r.value * 100) }}%

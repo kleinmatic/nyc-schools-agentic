@@ -43,7 +43,19 @@ def _level_label(value):
     return LEVEL_LABELS.get(value, value)
 
 
+def _pretty(value):
+    """Replace straight ASCII apostrophes with curly U+2019. Safe for
+    every school + NTA name in our data — surveyed, all uses are
+    possessive (Children's, Mariner's, etc.), no leading-quote or
+    contraction-ambiguity cases. Display-only; raw data unchanged for
+    DBN keys / fuzzy search input / MCP contracts."""
+    if value is None:
+        return ""
+    return str(value).replace("'", "’")
+
+
 templates.env.filters["level"] = _level_label
+templates.env.filters["pretty"] = _pretty
 
 
 def _is_htmx(request: Request) -> bool:

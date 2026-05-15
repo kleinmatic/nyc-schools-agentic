@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ nbh.nta_name }} — The Data Tribune{% endblock %}
+{% block title %}{{ nbh.nta_name|pretty }} — The Data Tribune{% endblock %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -35,8 +35,8 @@
       <div class="absolute bottom-0 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-slate-500" style="left: {{ "%.2f"|format(position_pct) }}%"></div>
     </div>
     <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-400 mt-1">
-      <span>{% if rank_info.extreme_low %}LOW · {{ rank_info.extreme_low.nta_name }}{% else %}LOW{% endif %}</span>
-      <span>{% if rank_info.extreme_high %}HIGH · {{ rank_info.extreme_high.nta_name }}{% else %}HIGH{% endif %}</span>
+      <span>{% if rank_info.extreme_low %}LOW · {{ rank_info.extreme_low.nta_name|pretty }}{% else %}LOW{% endif %}</span>
+      <span>{% if rank_info.extreme_high %}HIGH · {{ rank_info.extreme_high.nta_name|pretty }}{% else %}HIGH{% endif %}</span>
     </div>
   </div>
   <div class="text-xs text-slate-600 mt-3">Rank #{{ "{:,}".format(rank_info.rank) }} of {{ "{:,}".format(rank_info.total) }} {{ rank_info.cohort_label }}</div>
@@ -46,7 +46,7 @@
 {% block content %}
 <div class="mb-8">
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
-  <h1 class="text-3xl font-semibold mt-2">{{ nbh.nta_name }}</h1>
+  <h1 class="text-3xl font-semibold mt-2">{{ nbh.nta_name|pretty }}</h1>
   <div class="text-sm text-slate-600 mt-1">
     {% if nbh.boro %}{{ nbh.boro }} · {% endif %}{{ nbh.n_schools }} schools
   </div>
@@ -54,7 +54,7 @@
     <div class="text-xs text-slate-500 mt-2">
       Also matched:
       {% for o in nbh.other_candidates %}
-        <a href="/neighborhood/{{ o|replace(' ', '-')|urlencode }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ o }}</a>{% if not loop.last %},{% endif %}
+        <a href="/neighborhood/{{ o|replace(' ', '-')|urlencode }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ o|pretty }}</a>{% if not loop.last %},{% endif %}
       {% endfor %}
     </div>
   {% endif %}
@@ -152,6 +152,8 @@
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
+  // Mirrors the Jinja `pretty` filter: straight apostrophe → curly.
+  const pretty = s => s == null ? "" : String(s).replace(/'/g, "’");
   // Tiny solid squares with a 1px white halo + faint shadow. Quieter and
   // more "data-graphics-y" than circles at the same size.
   const squareIcon = color => L.divIcon({
@@ -169,7 +171,7 @@
       })
         .bindPopup(
           `<a href="/school/${escapeHtml(s.dbn)}" style="color:#1d4ed8;font-weight:600">` +
-          `${escapeHtml(s.school_name)}</a><br>` +
+          `${escapeHtml(pretty(s.school_name))}</a><br>` +
           `<span style="color:#64748b">${escapeHtml(displayLevel(s.school_level))}` +
           (s.total_enrollment ? ` · ${s.total_enrollment.toLocaleString()} enrolled` : "") +
           `</span>`
@@ -224,7 +226,7 @@
         {% for s in nbh.schools %}
         <tr>
           <td class="px-4 py-2" data-sort-value="{{ (s.school_name or '')|lower }}">
-            <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name }}</a>
+            <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name|pretty }}</a>
             <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
           </td>
           <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ (s.school_level|level) or "—" }}</td>

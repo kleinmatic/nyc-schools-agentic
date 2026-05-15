@@ -35,10 +35,10 @@
         <tr class="{% if r.is_self %}bg-amber-50{% endif %}">
           <td class="px-3 py-2 {% if r.is_self %}font-semibold text-slate-900{% else %}text-slate-700{% endif %}">
             {% if r.is_self %}
-              {{ r.school_name }}
+              {{ r.school_name|pretty }}
               <span class="text-xs font-normal text-amber-700 ml-1">this school</span>
             {% else %}
-              <a href="/school/{{ r.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ r.school_name }}</a>
+              <a href="/school/{{ r.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ r.school_name|pretty }}</a>
             {% endif %}
           </td>
           {% for m in cohort.metric_names %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ school.summary.school_name }} ({{ school.summary.dbn }}){% endblock %}
+{% block title %}{{ school.summary.school_name|pretty }} ({{ school.summary.dbn }}){% endblock %}
 
 {% macro card_label(label) %}<dt class="text-xs text-slate-500 uppercase tracking-wide">{{ label|safe }}</dt>{% endmacro %}
 {% macro card_value(value) %}<dd class="text-lg font-medium">{{ value }}</dd>{% endmacro %}
@@ -31,7 +31,7 @@
 <div id="{{ pid }}" popover class="pop-card pop-anchored" style="--anchor: --{{ pid }};">
   <a href="/school/{{ extreme.dbn }}" class="block -m-3 p-3 rounded hover:bg-slate-50 transition-colors no-underline">
     <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{{ label }} in cohort</div>
-    <div class="font-medium leading-tight text-slate-900">{{ extreme.school_name }}</div>
+    <div class="font-medium leading-tight text-slate-900">{{ extreme.school_name|pretty }}</div>
     <div class="font-mono text-[11px] text-slate-500 mt-0.5">{{ extreme.dbn }}</div>
     <div class="text-amber-600 font-serif text-2xl mt-2 leading-none">{{ extreme.value_display }}</div>
     <div class="text-[10px] text-blue-600 mt-3">View school &rarr;</div>
@@ -200,7 +200,7 @@
 
 <div class="mb-8">
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
-  <h1 class="text-3xl font-semibold mt-2">{{ s.school_name }}</h1>
+  <h1 class="text-3xl font-semibold mt-2">{{ s.school_name|pretty }}</h1>
   <div class="text-sm text-slate-500 mt-2">
     {{ term("DBN", "District-Borough-Number — NYC's primary key for schools, formatted as <district><borough letter><school number>. Borough letters: M Manhattan, X Bronx, K Brooklyn, Q Queens, R Staten Island.") }}: <span class="font-mono">{{ s.dbn }}</span>
   </div>
@@ -447,7 +447,7 @@
     "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
-    {% if loc.nta_name %}<div><dt class="text-slate-500">{{ term("Neighborhood (NTA)", "Neighborhood Tabulation Area — NYC's official 195-area neighborhood definitions, used for Census reporting and city planning. Loosely follows colloquial neighborhood names but with formal boundaries.") }}</dt><dd><a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/neighborhood/{{ loc.nta_name|replace(' ', '-')|urlencode }}">{{ loc.nta_name }}</a></dd></div>{% endif %}
+    {% if loc.nta_name %}<div><dt class="text-slate-500">{{ term("Neighborhood (NTA)", "Neighborhood Tabulation Area — NYC's official 195-area neighborhood definitions, used for Census reporting and city planning. Loosely follows colloquial neighborhood names but with formal boundaries.") }}</dt><dd><a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/neighborhood/{{ loc.nta_name|replace(' ', '-')|urlencode }}">{{ loc.nta_name|pretty }}</a></dd></div>{% endif %}
     {% if loc.council_district %}<div><dt class="text-slate-500">Council district</dt><dd>{{ loc.council_district }}</dd></div>{% endif %}
     {% if loc.community_district %}<div><dt class="text-slate-500">Community district</dt><dd>{{ loc.community_district|int }}</dd></div>{% endif %}
     {% if loc.open_year %}<div><dt class="text-slate-500">Open since</dt><dd>{{ loc.open_year }}</dd></div>{% endif %}

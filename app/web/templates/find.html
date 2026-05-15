@@ -50,7 +50,7 @@
           <li class="px-4 py-3 hover:bg-slate-50">
             <a href="/school/{{ sch.dbn }}" class="block">
               <div class="flex items-baseline justify-between gap-4">
-                <span class="font-medium">{{ sch.school_name }}</span>
+                <span class="font-medium">{{ sch.school_name|pretty }}</span>
                 <span class="text-xs text-slate-500 font-mono">{{ sch.dbn }}</span>
               </div>
               <div class="text-xs text-slate-500 mt-0.5">
@@ -86,7 +86,7 @@
           <li class="px-4 py-3 hover:bg-slate-50">
             <a href="/school/{{ sch.dbn }}" class="block">
               <div class="flex items-baseline justify-between gap-4">
-                <span class="font-medium">{{ sch.school_name }}</span>
+                <span class="font-medium">{{ sch.school_name|pretty }}</span>
                 <span class="text-xs text-slate-500 font-mono">{{ sch.dbn }}</span>
               </div>
               <div class="text-xs text-slate-500 mt-0.5">
