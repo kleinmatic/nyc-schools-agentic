@@ -13,6 +13,7 @@ from ..services.analytics import (
     aggregate_by_neighborhood as _aggregate_by_neighborhood,
     borough_summary as _borough_summary,
     bulk_metrics as _bulk_metrics,
+    get_neighborhood as _get_neighborhood,
     list_high_schools as _list_high_schools,
     school_peers as _school_peers,
     schools_in_neighborhood as _schools_in_neighborhood,
@@ -24,6 +25,7 @@ from ..services.models import (
     HsListing,
     MetricRow,
     NeighborhoodAggregate,
+    NeighborhoodDetail,
     NeighborhoodSchoolsResult,
     PeerCohort,
     RankedSchool,
@@ -92,7 +94,9 @@ mcp = FastMCP(
         "find_schools_for_address to get the zoned ES/MS, then get_school + "
         "school_peers for full detail and neighborhood context.\n"
         "- 'Tell me about the schools in <neighborhood>' → "
-        "schools_in_neighborhood (fuzzy-matches colloquial names).\n"
+        "schools_in_neighborhood (just the school list) or get_neighborhood "
+        "(full report: peer ranks vs other NTAs, plus per-school metric "
+        "values and lat/lon for mapping).\n"
         "- 'How does this school compare to its neighbors?' → school_peers.\n"
         "- 'Best/worst schools by some metric' → top_schools.\n"
         "- 'Best/worst neighborhoods by some metric' → top_neighborhoods.\n"
@@ -286,6 +290,32 @@ def schools_in_neighborhood(
     on individual schools, or with `school_peers(dbn, "neighborhood")`
     for the same-NTA peer comparison table the school page uses."""
     return _schools_in_neighborhood(query=query, level=level, limit=limit)
+
+
+@mcp.tool
+def get_neighborhood(
+    query: str,
+    level: Optional[SchoolLevel] = None,
+) -> Optional[NeighborhoodDetail]:
+    """Full report on a NYC neighborhood (NTA): how this NTA ranks vs
+    other NTAs on the 5 default metrics (ENI, attendance, ELA/math
+    proficient, Regents passing rate), the list of schools with per-
+    school metric values and lat/lon, fuzzy-match alternatives if the
+    query was ambiguous, and the NTA's boundary as GeoJSON for mapping.
+
+    Use for: "give me a full report on Park Slope", "compare Bedford-
+    Stuyvesant to other NYC neighborhoods", "what schools are in
+    Sunset Park and how do they stack up." For the lighter "just the
+    school list" version use `schools_in_neighborhood` instead.
+
+    Pass `level` (elementary, middle, high, K-8, 6-12) to restrict the
+    schools and aggregate rankings to that level — useful if the user
+    only cares about HS, say. Default: all levels mixed.
+
+    Returns None when the query doesn't fuzzy-match any NTA above the
+    threshold, or when no schools live in the matched NTA at the
+    requested level."""
+    return _get_neighborhood(query=query, level=level)
 
 
 @mcp.tool

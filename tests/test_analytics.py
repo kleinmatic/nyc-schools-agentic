@@ -8,6 +8,7 @@ from app.services.analytics import (
     aggregate_by_neighborhood,
     borough_summary,
     bulk_metrics,
+    get_neighborhood,
     homepage_borough_grid,
     homepage_leaderboards,
     homepage_neighborhood_leaderboards,
@@ -284,6 +285,45 @@ def test_schools_in_neighborhood_unknown_returns_none():
     assert schools_in_neighborhood("xyzzy fake neighborhood") is None
     assert schools_in_neighborhood("") is None
     assert schools_in_neighborhood("   ") is None
+
+
+def test_get_neighborhood_park_slope_full_report():
+    """The full neighborhood report: peer ranks vs other NTAs, denormalized
+    school list with lat/lon + per-school metrics, and a GeoJSON boundary."""
+    r = get_neighborhood("park slope")
+    assert r is not None
+    assert r.nta_name == "Park Slope-Gowanus"
+    assert r.n_schools == len(r.schools) > 0
+
+    # Each school carries lat/lon (for the map) and a value for every
+    # advertised metric (table contract — keys must match metric_names).
+    sample = r.schools[0]
+    assert sample.latitude is not None and sample.longitude is not None
+    assert set(sample.metrics) == set(r.metric_names)
+
+    # Peer-rank cards are sane: rank in [1, total], cohort extremes present.
+    assert r.peer_ranks
+    for rank in r.peer_ranks:
+        assert 1 <= rank.rank <= rank.total
+        assert rank.extreme_high is not None and rank.extreme_low is not None
+
+    # Boundary is GeoJSON-shaped — the /neighborhood/{nta} map consumes it.
+    assert r.boundary is not None
+    assert r.boundary["type"] in ("Polygon", "MultiPolygon")
+
+
+def test_get_neighborhood_unknown_query_returns_none():
+    assert get_neighborhood("xyzzy fake neighborhood") is None
+    assert get_neighborhood("") is None
+
+
+def test_get_neighborhood_harlem_surfaces_alternatives():
+    """'harlem' fuzzy-matches multiple NTAs — runners-up surface so the
+    caller can disambiguate."""
+    r = get_neighborhood("harlem")
+    assert r is not None
+    assert "Harlem" in r.nta_name
+    assert len(r.other_candidates) >= 2
 
 
 def test_schools_in_neighborhood_level_filter():

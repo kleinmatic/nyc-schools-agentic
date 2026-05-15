@@ -31,6 +31,7 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "borough_summary",
         "school_peers",
         "schools_in_neighborhood",
+        "get_neighborhood",
     }
 
 
@@ -206,6 +207,30 @@ async def test_schools_in_neighborhood_tool_surfaces_alternatives(mcp_client):
     assert r.data is not None
     assert "Harlem" in r.data.nta_name
     assert len(r.data.other_candidates) >= 2
+
+
+async def test_get_neighborhood_tool_returns_full_report(mcp_client):
+    r = await mcp_client.call_tool("get_neighborhood", {"query": "park slope"})
+    assert r.data is not None
+    assert r.data.nta_name == "Park Slope-Gowanus"
+    # Schools have lat/lon for mapping + per-school metric values for the table.
+    assert r.data.schools
+    sample = r.data.schools[0]
+    assert sample.latitude is not None and sample.longitude is not None
+    assert set(sample.metrics).issuperset(r.data.metric_names)
+    # Peer ranks tell the agent where this NTA falls vs other NYC NTAs.
+    assert r.data.peer_ranks
+    for rank in r.data.peer_ranks:
+        assert 1 <= rank.rank <= rank.total
+        assert rank.extreme_high is not None and rank.extreme_low is not None
+    # Boundary is a GeoJSON Polygon for mapping.
+    assert r.data.boundary is not None
+    assert r.data.boundary["type"] == "Polygon"
+
+
+async def test_get_neighborhood_tool_unknown_query_returns_none(mcp_client):
+    r = await mcp_client.call_tool("get_neighborhood", {"query": "xyzzy fake neighborhood"})
+    assert r.data is None
 
 
 async def test_school_peers_tool_unknown_dbn_returns_none(mcp_client):
