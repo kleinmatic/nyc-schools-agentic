@@ -10,6 +10,7 @@ the app. Source data is mixed (Regents pct cols are 0..100; NYSED pct
 cols are 0..100; demographics ENI is already 0..1; ELA/math
 level_3_4_pct is already 0..1) — we normalize at this boundary.
 """
+from collections import Counter
 from functools import lru_cache
 from typing import Optional
 
@@ -628,10 +629,15 @@ def warm_caches() -> None:
       `aggregate_by_neighborhood` with different (metric × level ×
       ascending) tuples
     """
-    # Neighborhood-page peer ranks: 5 metrics × all NTAs sorted descending.
-    # Signature must match what `_neighborhood_peer_rank` passes exactly —
-    # lru_cache keys on (args, kwargs) as given, NOT on resolved defaults.
-    for metric in _NEIGHBORHOOD_METRICS:
+    # Neighborhood-page peer ranks: union of every metric any NTA might
+    # surface (default set + per-level peer metric sets), all sorted
+    # descending against all NTAs. Signature must match what
+    # `_neighborhood_peer_rank` passes exactly — lru_cache keys on
+    # (args, kwargs) as given, NOT on resolved defaults.
+    metrics_to_warm = set(_NEIGHBORHOOD_METRICS)
+    for ms in _PEER_METRICS_BY_LEVEL.values():
+        metrics_to_warm.update(ms)
+    for metric in metrics_to_warm:
         aggregate_by_neighborhood(
             metric=metric, level=None, limit=10_000, ascending=False,
         )
@@ -654,6 +660,33 @@ _NEIGHBORHOOD_METRICS: tuple[str, ...] = (
     "math_pct_proficient",
     "regents_pct_above_64",
 )
+
+
+def _metrics_for_neighborhood(
+    schools: list[SchoolSummary], level: Optional[str]
+) -> tuple[str, ...]:
+    """Pick the metric set most useful for an NTA's school mix.
+
+    Priority order:
+    1. If `level` is an explicit recognized peer-level filter, use that
+       level's metric tuple (e.g. HS gets Regents + grad).
+    2. Otherwise, use the dominant `school_level` among the NTA's schools.
+       An NTA whose schools are mostly elementary shows the ES peer set,
+       even when `level=None` is passed.
+    3. Fall back to `_NEIGHBORHOOD_METRICS` if no clear winner (e.g. the
+       NTA has only unknown-level schools).
+
+    Eliminates most of the "—" cells in the school table — the old logic
+    always asked for ELA + math + Regents regardless of grade band, so a
+    HS-only NTA's table was nearly empty."""
+    if level and level in _PEER_METRICS_BY_LEVEL:
+        return _PEER_METRICS_BY_LEVEL[level]
+    counts = Counter(s.school_level for s in schools if s.school_level)
+    if counts:
+        dominant, _ = counts.most_common(1)[0]
+        if dominant in _PEER_METRICS_BY_LEVEL:
+            return _PEER_METRICS_BY_LEVEL[dominant]
+    return _NEIGHBORHOOD_METRICS
 
 
 def _format_metric_value(value: float, fmt: str) -> str:
@@ -729,6 +762,11 @@ def get_neighborhood(
     if not schools:
         return None
 
+    # Choose the metric set based on the NTA's school mix (or the
+    # explicit `level` if the caller passed one). HS-dominant NTAs get
+    # Regents + grad; ES/MS-dominant get ELA + math.
+    metric_set = _metrics_for_neighborhood(schools, level)
+
     # Focal NTA polygon for the map. None if no boundary on file (a handful
     # of "park-cemetery-etc-*" NTAs don't have a single contiguous polygon).
     boundary = None
@@ -753,7 +791,7 @@ def get_neighborhood(
         lat = float(loc["latitude"]) if loc is not None and pd.notna(loc.get("latitude")) else None
         lon = float(loc["longitude"]) if loc is not None and pd.notna(loc.get("longitude")) else None
         metrics = {
-            m: _compute_metric(m, s.dbn, beds, store) for m in _NEIGHBORHOOD_METRICS
+            m: _compute_metric(m, s.dbn, beds, store) for m in metric_set
         }
         rows.append(NeighborhoodSchool(
             dbn=s.dbn, school_name=s.school_name, school_level=s.school_level,
@@ -764,7 +802,7 @@ def get_neighborhood(
     # Peer ranks vs other NTAs. Drop any metric where this NTA doesn't
     # appear in the ranked aggregate (e.g. <5 schools contributing).
     peer_ranks: list[NeighborhoodPeerRank] = []
-    for m in _NEIGHBORHOOD_METRICS:
+    for m in metric_set:
         rank = _neighborhood_peer_rank(top_name, m, level)
         if rank:
             peer_ranks.append(rank)
@@ -775,9 +813,9 @@ def get_neighborhood(
         n_schools=len(rows),
         other_candidates=others,
         peer_ranks=peer_ranks,
-        metric_names=list(_NEIGHBORHOOD_METRICS),
-        metric_labels={m: METRIC_LABELS.get(m, m) for m in _NEIGHBORHOOD_METRICS},
-        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in _NEIGHBORHOOD_METRICS},
+        metric_names=list(metric_set),
+        metric_labels={m: METRIC_LABELS.get(m, m) for m in metric_set},
+        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in metric_set},
         schools=rows,
         boundary=boundary,
     )

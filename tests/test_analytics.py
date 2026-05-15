@@ -317,6 +317,26 @@ def test_get_neighborhood_unknown_query_returns_none():
     assert get_neighborhood("") is None
 
 
+def test_get_neighborhood_metric_set_matches_dominant_level():
+    """Park Slope-Gowanus is dominated by elementary schools — the page
+    should default to the ES peer metric set (ELA + math, no Regents)."""
+    r = get_neighborhood("park slope")
+    assert r is not None
+    assert "ela_pct_proficient" in r.metric_names
+    assert "math_pct_proficient" in r.metric_names
+    assert "regents_pct_above_64" not in r.metric_names
+
+
+def test_get_neighborhood_with_explicit_high_level_switches_metric_set():
+    """Forcing level='high' selects the HS peer metric set even in an
+    NTA where another level dominates."""
+    r = get_neighborhood("park slope", level="high")
+    assert r is not None
+    assert "regents_pct_above_64" in r.metric_names
+    assert "graduation_rate_4yr" in r.metric_names
+    assert "ela_pct_proficient" not in r.metric_names
+
+
 def test_get_neighborhood_harlem_surfaces_alternatives():
     """'harlem' fuzzy-matches multiple NTAs — runners-up surface so the
     caller can disambiguate."""
