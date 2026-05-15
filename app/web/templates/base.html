@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}The Data Tribune — NYC Schools{% endblock %}</title>
+  {# Google Analytics 4. Property G-KXSN2MX8CR. Adblockers will block this;
+     that's fine. No consent banner — public, non-PII site. #}
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-KXSN2MX8CR"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-KXSN2MX8CR');
+  </script>
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
