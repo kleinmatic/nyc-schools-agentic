@@ -190,28 +190,31 @@
     Latest-year headline metrics per school. ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "—" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
   </p>
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
+    {# Sortable: click any header. Each <td> carries data-sort-value with the
+       raw value (lowercased text for names, numeric for metrics, "" for
+       missing) so JS can sort cleanly without re-parsing the formatted display. #}
+    <table id="nbh-schools-table" class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
         <tr>
-          <th class="px-4 py-2 text-left">School</th>
-          <th class="px-4 py-2 text-left">Level</th>
-          <th class="px-4 py-2 text-right">Enroll</th>
+          <th class="px-4 py-2 text-left cursor-pointer select-none hover:text-slate-700" data-sort-key="name">School</th>
+          <th class="px-4 py-2 text-left cursor-pointer select-none hover:text-slate-700" data-sort-key="level">Level</th>
+          <th class="px-4 py-2 text-right cursor-pointer select-none hover:text-slate-700" data-sort-key="enroll">Enroll</th>
           {% for m in nbh.metric_names %}
-            <th class="px-4 py-2 text-right">{{ nbh.metric_labels[m] }}</th>
+            <th class="px-4 py-2 text-right cursor-pointer select-none hover:text-slate-700" data-sort-key="{{ m }}">{{ nbh.metric_labels[m] }}</th>
           {% endfor %}
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
         {% for s in nbh.schools %}
         <tr>
-          <td class="px-4 py-2">
+          <td class="px-4 py-2" data-sort-value="{{ (s.school_name or '')|lower }}">
             <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name }}</a>
             <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
           </td>
-          <td class="px-4 py-2 text-slate-600">{{ s.school_level or "—" }}</td>
-          <td class="px-4 py-2 text-right">{{ num(s.total_enrollment) }}</td>
+          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ s.school_level or "—" }}</td>
+          <td class="px-4 py-2 text-right" data-sort-value="{{ s.total_enrollment if s.total_enrollment is not none else '' }}">{{ num(s.total_enrollment) }}</td>
           {% for m in nbh.metric_names %}
-            <td class="px-4 py-2 text-right">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>
+            <td class="px-4 py-2 text-right" data-sort-value="{{ s.metrics.get(m) if s.metrics.get(m) is not none else '' }}">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>
           {% endfor %}
         </tr>
         {% endfor %}
@@ -219,6 +222,56 @@
     </table>
   </div>
 </section>
+<script>
+(function() {
+  const table = document.getElementById("nbh-schools-table");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  const headers = Array.from(table.querySelectorAll("th[data-sort-key]"));
+  let state = { col: -1, dir: 1 };
+
+  function compareValues(a, b, dir) {
+    // Missing values (empty string from the template) always sink to the
+    // bottom regardless of sort direction — the eye reads "no data" as
+    // separate from "small value."
+    const aEmpty = a === "";
+    const bEmpty = b === "";
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+    const aNum = parseFloat(a), bNum = parseFloat(b);
+    if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && a !== "" && b !== "") {
+      return (aNum - bNum) * dir;
+    }
+    return a.localeCompare(b) * dir;
+  }
+
+  function sortByColumn(colIndex) {
+    // Same column click = flip direction; otherwise default ascending.
+    const dir = state.col === colIndex ? -state.dir : 1;
+    state = { col: colIndex, dir };
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    rows.sort((rowA, rowB) => {
+      const a = rowA.cells[colIndex].dataset.sortValue ?? "";
+      const b = rowB.cells[colIndex].dataset.sortValue ?? "";
+      return compareValues(a, b, dir);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    headers.forEach((h, i) => {
+      const existing = h.querySelector(".sort-arrow");
+      if (existing) existing.remove();
+      if (i === colIndex) {
+        const arrow = document.createElement("span");
+        arrow.className = "sort-arrow ml-1 text-slate-400";
+        arrow.textContent = dir === 1 ? "▲" : "▼";
+        h.appendChild(arrow);
+      }
+    });
+  }
+
+  headers.forEach((h, i) => h.addEventListener("click", () => sortByColumn(i)));
+})();
+</script>
 
 <p class="text-xs text-slate-500">
   Neighborhoods = <a class="underline" href="https://www.nyc.gov/site/planning/data-maps/nyc-population/geographic-reference.page">NYC NTAs</a> (Neighborhood Tabulation Areas) — the city's official 195 neighborhood boundaries. School locations from NYC Open Data (school-locations.geojson, fiscal year 2019-2020). Metric values from the same sources as the school page; see provenance there.
