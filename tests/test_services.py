@@ -7,6 +7,30 @@ def test_search_by_short_name_finds_ps_321():
     assert any(s.dbn == "15K321" for s in results)
 
 
+def test_search_handles_periods_in_ps_abbreviation():
+    """The school's canonical name is 'P.S. 321 William Penn' (with
+    periods); a user typing the more common abbreviation 'PS 321' should
+    still find it as the top result."""
+    results = search_schools("PS 321")
+    assert results[0].dbn == "15K321", f"got {results[0].dbn}"
+    # And the period form should also work — both normalize the same way.
+    results = search_schools("P.S. 321")
+    assert results[0].dbn == "15K321"
+
+
+def test_search_strips_leading_zeros_from_school_numbers():
+    """NYC names canonically zero-pad ('P.S. 039 Henry Bristow') but
+    users typing from memory usually drop the zero ('PS 39'). Same
+    school, either way."""
+    results = search_schools("PS 39")
+    dbns = [s.dbn for s in results]
+    # 15K039 is P.S. 039 Henry Bristow — should be findable.
+    assert "15K039" in dbns
+    # Extra leading zeros should also work.
+    results = search_schools("PS 0321")
+    assert results[0].dbn == "15K321"
+
+
 def test_search_by_name_finds_midwood():
     results = search_schools("Midwood High School")
     assert any(s.dbn == "22K405" for s in results)

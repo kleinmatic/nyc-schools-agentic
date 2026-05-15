@@ -207,7 +207,7 @@
   <div class="text-sm text-slate-600 mt-1">
     {% if s.boro %}{{ s.boro }}{% endif %}
     {% if s.district %} · District {{ s.district }}{% endif %}
-    {% if s.school_level %} · {{ s.school_level }}{% endif %}
+    {% if s.school_level %} · {{ s.school_level|level }}{% endif %}
     {% if s.zip %} · {{ s.zip }}{% endif %}
   </div>
   <div class="mt-3">

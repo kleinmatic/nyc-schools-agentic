@@ -57,7 +57,7 @@
                 {% if sch.zone_label %}Zone {{ sch.zone_label }} · {% endif %}
                 {% if sch.boro %}{{ sch.boro }}{% endif %}
                 {% if sch.district %} · District {{ sch.district }}{% endif %}
-                {% if sch.school_level %} · {{ sch.school_level }}{% endif %}
+                {% if sch.school_level %} · {{ sch.school_level|level }}{% endif %}
                 {% if sch.total_enrollment %} · {{ "{:,}".format(sch.total_enrollment) }} students{% endif %}
               </div>
             </a>

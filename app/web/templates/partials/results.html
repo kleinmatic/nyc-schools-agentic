@@ -13,7 +13,7 @@
           {% if s.short_name %}{{ s.short_name }} · {% endif %}
           {% if s.boro %}{{ s.boro }}{% endif %}
           {% if s.district %} · District {{ s.district }}{% endif %}
-          {% if s.school_level %} · {{ s.school_level }}{% endif %}
+          {% if s.school_level %} · {{ s.school_level|level }}{% endif %}
           {% if s.total_enrollment %} · {{ "{:,}".format(s.total_enrollment) }} students{% endif %}
         </div>
       </a>

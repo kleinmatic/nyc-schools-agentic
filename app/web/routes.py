@@ -24,6 +24,28 @@ router = APIRouter()
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 
 
+# Display labels for internal school-level codes. Stay aware: MCP tools and
+# services keep the raw values ("high", "middle", etc.); this mapping is
+# template-layer only.
+LEVEL_LABELS = {
+    "elementary": "Elementary School",
+    "middle":     "Middle School",
+    "high":       "High School",
+    "K-8":        "K-8",
+    "6-12":       "6-12",
+    "K-12":       "K-12",
+}
+
+
+def _level_label(value):
+    if value is None:
+        return ""
+    return LEVEL_LABELS.get(value, value)
+
+
+templates.env.filters["level"] = _level_label
+
+
 def _is_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
 

@@ -138,6 +138,17 @@
     "high":       "#ca0020",
     "6-12":       "#f4a582",
   };
+  // Display labels — internal codes ("high") are short; the UI spells
+  // them out. Mirrors LEVEL_LABELS in routes.py.
+  const levelLabels = {
+    "elementary": "Elementary School",
+    "middle":     "Middle School",
+    "K-8":        "K-8",
+    "high":       "High School",
+    "6-12":       "6-12",
+    "K-12":       "K-12",
+  };
+  const displayLevel = lvl => lvl ? (levelLabels[lvl] || lvl) : "—";
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
@@ -159,7 +170,7 @@
         .bindPopup(
           `<a href="/school/${escapeHtml(s.dbn)}" style="color:#1d4ed8;font-weight:600">` +
           `${escapeHtml(s.school_name)}</a><br>` +
-          `<span style="color:#64748b">${escapeHtml(s.school_level || "—")}` +
+          `<span style="color:#64748b">${escapeHtml(displayLevel(s.school_level))}` +
           (s.total_enrollment ? ` · ${s.total_enrollment.toLocaleString()} enrolled` : "") +
           `</span>`
         )
@@ -176,7 +187,7 @@
     div.style.cssText = "background:white;padding:8px 10px;font-size:11px;line-height:1.5;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.05)";
     div.innerHTML = '<div style="font-weight:600;margin-bottom:4px">School level</div>' +
       Object.entries(levelColors).map(([k, c]) =>
-        `<div><span style="display:inline-block;width:9px;height:9px;background:${c};box-shadow:0 0 0 1px rgba(255,255,255,0.95),0 0 0 2px #cbd5e1;margin-right:8px;vertical-align:middle"></span>${k}</div>`
+        `<div><span style="display:inline-block;width:9px;height:9px;background:${c};box-shadow:0 0 0 1px rgba(255,255,255,0.95),0 0 0 2px #cbd5e1;margin-right:8px;vertical-align:middle"></span>${displayLevel(k)}</div>`
       ).join("");
     return div;
   };
@@ -216,7 +227,7 @@
             <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name }}</a>
             <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
           </td>
-          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ s.school_level or "—" }}</td>
+          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ (s.school_level|level) or "—" }}</td>
           <td class="px-4 py-2 text-right" data-sort-value="{{ s.total_enrollment if s.total_enrollment is not none else '' }}">{{ num(s.total_enrollment) }}</td>
           {% for m in nbh.metric_names %}
             <td class="px-4 py-2 text-right" data-sort-value="{{ s.metrics.get(m) if s.metrics.get(m) is not none else '' }}">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>

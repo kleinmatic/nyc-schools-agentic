@@ -43,6 +43,7 @@ DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
 _BUDGET_RE = re.compile(r"[^0-9.\-]")
 _CLEAN_NAME_RE = re.compile(r"[^a-z0-9 ]")
 _WHITESPACE_RE = re.compile(r"\s+")
+_LEADING_ZEROS_RE = re.compile(r"\b0+(\d)")
 
 
 def _clean_name(name: str) -> str:
@@ -53,6 +54,17 @@ def _clean_name(name: str) -> str:
         return ""
     s = _CLEAN_NAME_RE.sub("", name.lower())
     return _WHITESPACE_RE.sub(" ", s).strip()
+
+
+def _search_normalize(name: str) -> str:
+    """Normalize a school name for fuzzy SEARCH (slightly more aggressive
+    than `_clean_name`). On top of clean_name's lowercase + punctuation
+    strip — so 'P.S. 321' becomes 'ps 321' — also strips leading zeros
+    from any number, so 'PS 039 Henry Bristow' matches a user typing
+    'PS 39'. Common when users half-remember the school number."""
+    if not name:
+        return ""
+    return _LEADING_ZEROS_RE.sub(r"\1", _clean_name(name))
 
 
 def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
@@ -82,7 +94,13 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
         return df
 
     q_clean = _clean_name(qry)
+    q_search = _search_normalize(qry)
     df = df.copy()
+
+    # Match against the search-normalized name — strips "P.S." → "ps" and
+    # leading zeros from any number — so "PS 321" finds "P.S. 321 William
+    # Penn" and "PS 39" finds "P.S. 039 Henry Bristow."
+    df["_search_name"] = df["school_name"].fillna("").apply(_search_normalize)
 
     # max(partial_ratio, token_set_ratio):
     # - partial_ratio handles substring/abbreviation queries
@@ -91,10 +109,10 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
     #   target inserts words between the query's tokens
     #   ("Bronx Science" → "The Bronx High School of Science").
     # Either alone misses cases the other catches.
-    df["_match"] = df["school_name"].fillna("").apply(
+    df["_match"] = df["_search_name"].apply(
         lambda sn: max(
-            float(fuzz.partial_ratio(qry, sn)),
-            float(fuzz.token_set_ratio(qry, sn)),
+            float(fuzz.partial_ratio(q_search, sn)),
+            float(fuzz.token_set_ratio(q_search, sn)),
         )
     )
 
@@ -102,7 +120,10 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
         df.loc[df["clean_name"].fillna("") == q_clean, "_match"] += 10
 
     if "short_name" in df.columns:
-        df.loc[df["short_name"].fillna("").str.upper() == qry.upper(), "_match"] += 5
+        df.loc[
+            df["short_name"].fillna("").apply(_search_normalize) == q_search,
+            "_match",
+        ] += 5
 
     df = df[df["_match"] >= 80]
     if df.empty:
