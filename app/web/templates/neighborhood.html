@@ -54,7 +54,7 @@
     <div class="text-xs text-slate-500 mt-2">
       Also matched:
       {% for o in nbh.other_candidates %}
-        <a href="/neighborhood/{{ o|urlencode }}" class="underline">{{ o }}</a>{% if not loop.last %},{% endif %}
+        <a href="/neighborhood/{{ o|replace(' ', '-')|urlencode }}" class="underline">{{ o }}</a>{% if not loop.last %},{% endif %}
       {% endfor %}
     </div>
   {% endif %}
@@ -136,15 +136,20 @@
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
+  // Tiny solid squares with a 1px white halo + faint shadow. Quieter and
+  // more "data-graphics-y" than circles at the same size.
+  const squareIcon = color => L.divIcon({
+    className: "",
+    iconSize: [9, 9],
+    iconAnchor: [4.5, 4.5],
+    html: `<span style="display:block;width:9px;height:9px;background:${color};box-shadow:0 0 0 1px rgba(255,255,255,0.95),0 1px 2px rgba(15,23,42,0.35);"></span>`,
+  });
+
   let markerCount = 0;
   addLayer("markers", () => {
     for (const s of schools) {
-      L.circleMarker([s.latitude, s.longitude], {
-        radius: 10,
-        color: "white",
-        weight: 2.5,
-        fillColor: levelColors[s.school_level] || "#64748b",
-        fillOpacity: 1,
+      L.marker([s.latitude, s.longitude], {
+        icon: squareIcon(levelColors[s.school_level] || "#64748b"),
       })
         .bindPopup(
           `<a href="/school/${escapeHtml(s.dbn)}" style="color:#1d4ed8;font-weight:600">` +
@@ -166,7 +171,7 @@
     div.style.cssText = "background:white;padding:8px 10px;font-size:11px;line-height:1.5;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.05)";
     div.innerHTML = '<div style="font-weight:600;margin-bottom:4px">School level</div>' +
       Object.entries(levelColors).map(([k, c]) =>
-        `<div><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:50%;border:1px solid white;box-shadow:0 0 0 1px #cbd5e1;margin-right:6px;vertical-align:middle"></span>${k}</div>`
+        `<div><span style="display:inline-block;width:9px;height:9px;background:${c};box-shadow:0 0 0 1px rgba(255,255,255,0.95),0 0 0 2px #cbd5e1;margin-right:8px;vertical-align:middle"></span>${k}</div>`
       ).join("");
     return div;
   };
