@@ -90,20 +90,25 @@
   const boundary = {{ boundary | tojson }};
   if (!schools.length && !boundary) { console.warn("Neighborhood map: no data"); return; }
 
-  // Compute the initial view from the polygon's raw coordinates (avoids
-  // Leaflet's polygon clipping, which has been throwing on the mask/halo
-  // and aborting the post-init animation).
-  const ringLatLngs = (boundary && boundary.coordinates && boundary.coordinates[0])
-    ? boundary.coordinates[0].map(([lon, lat]) => [lat, lon])
-    : schools.map(s => [s.latitude, s.longitude]);
-  const initialBounds = L.latLngBounds(ringLatLngs);
+  // Initial view bounds. L.geoJSON handles both Polygon and MultiPolygon —
+  // the earlier manual coord flatten assumed Polygon-only and silently
+  // produced invalid latLngBounds for MultiPolygon NTAs (e.g.
+  // Battery Park City-Lower Manhattan, City Island).
+  let initialBounds = boundary ? L.geoJSON(boundary).getBounds() : null;
+  if ((!initialBounds || !initialBounds.isValid()) && schools.length) {
+    initialBounds = L.latLngBounds(schools.map(s => [s.latitude, s.longitude]));
+  }
 
   const map = L.map("nbh-map", {
     zoomControl: true,
     scrollWheelZoom: false,
     renderer: L.svg({ padding: 0.5 }),  // generous SVG padding so polygons don't clip at edges
   });
-  map.fitBounds(initialBounds, { padding: [24, 24] });
+  if (initialBounds && initialBounds.isValid()) {
+    map.fitBounds(initialBounds, { padding: [24, 24] });
+  } else {
+    map.setView([40.7, -74.0], 12);
+  }
 
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
     subdomains: "abcd", maxZoom: 20,

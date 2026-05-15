@@ -317,6 +317,24 @@ def test_get_neighborhood_unknown_query_returns_none():
     assert get_neighborhood("") is None
 
 
+def test_get_neighborhood_boundary_falls_back_to_none_when_polygon_missing(monkeypatch):
+    """Every NTA with schools currently has a polygon, but the code guards
+    against that contract changing. If the polygons table is empty or
+    doesn't contain a match, the report should still return — schools
+    listed, peer ranks computed — just with boundary=None. The template +
+    Leaflet script fall back to fit-bounds on school points in that case."""
+    import geopandas as gpd
+
+    from app import data as _data
+
+    monkeypatch.setattr(_data.get_store(), "nta_polygons", gpd.GeoDataFrame())
+    r = get_neighborhood("park slope")
+    assert r is not None
+    assert r.boundary is None  # the fallback fired
+    assert r.schools  # everything else still works
+    assert r.peer_ranks
+
+
 def test_get_neighborhood_metric_set_matches_dominant_level():
     """Park Slope-Gowanus is dominated by elementary schools — the page
     should default to the ES peer metric set (ELA + math, no Regents)."""
