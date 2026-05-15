@@ -10,11 +10,12 @@ primary_region = "ewr"   # Newark, NJ — closest to NYC
 [http_service]
   internal_port = 8000
   force_https = true
-  # auto_stop saves money during idle (~$4/mo vs ~$10/mo always-on). Cold
-  # start is sub-2s for our app shape — fine for a demo.
+  # Always-on. Cold-start was sub-2s but first-time visitors hitting the
+  # spin-up read it as "broken." Keep one machine warm 24/7 — ~$7/mo at
+  # shared-cpu-1x + 1GB.
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[http_service.checks]]
     grace_period = "30s"
@@ -25,4 +26,4 @@ primary_region = "ewr"   # Newark, NJ — closest to NYC
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "2gb"   # ~250 MB at startup, plenty of headroom
+  memory = "1gb"   # ~250 MB at startup; 1GB leaves headroom for pandas peaks
