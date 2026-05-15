@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ nbh.nta_name }} — The Data Tribune{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="anonymous"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin="anonymous"></script>
+{% endblock %}
+
+{# Format helpers — pct returns "83.4%", currency "$12,345", ratio "12.34". #}
+{% macro fmt(value, kind) %}
+{%- if value is none -%}—
+{%- elif kind == "pct" -%}{{ "%.1f"|format(value * 100) }}%
+{%- elif kind == "currency" -%}${{ "{:,.0f}".format(value) }}
+{%- elif kind == "ratio" -%}{{ "%.2f"|format(value) }}
+{%- else -%}{{ value }}
+{%- endif -%}
+{% endmacro %}
+
+{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}—{% endif %}{% endmacro %}
+
+{# Peer-marker card — adapted from the school page. Triangle on a HIGH ←→
+   LOW number line; rank #1 = highest value sits on the right. #}
+{% macro peer_marker(rank_info) %}
+{% set position_pct = ((rank_info.total - rank_info.rank) * 100 / (rank_info.total - 1)) if rank_info.total > 1 else 50 %}
+<div class="bg-white border border-slate-200 rounded-lg p-5 flex flex-col">
+  <div class="text-sm text-slate-700 font-medium">{{ rank_info.metric_label }}</div>
+  <div class="text-4xl font-serif text-amber-600 leading-none mt-1">{{ rank_info.value_display }}</div>
+  <div class="text-xs text-slate-500 mt-2">neighborhood average</div>
+  <div class="mt-6">
+    <div class="relative h-px bg-slate-300 w-full">
+      <div class="absolute bottom-0 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] border-t-slate-500" style="left: {{ "%.2f"|format(position_pct) }}%"></div>
+    </div>
+    <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-400 mt-1">
+      <span>{% if rank_info.extreme_low %}LOW · {{ rank_info.extreme_low.nta_name }}{% else %}LOW{% endif %}</span>
+      <span>{% if rank_info.extreme_high %}HIGH · {{ rank_info.extreme_high.nta_name }}{% else %}HIGH{% endif %}</span>
+    </div>
+  </div>
+  <div class="text-xs text-slate-600 mt-3">Rank #{{ "{:,}".format(rank_info.rank) }} of {{ "{:,}".format(rank_info.total) }} {{ rank_info.cohort_label }}</div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="mb-8">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <h1 class="text-3xl font-semibold mt-2">{{ nbh.nta_name }}</h1>
+  <div class="text-sm text-slate-600 mt-1">
+    {% if nbh.boro %}{{ nbh.boro }} · {% endif %}{{ nbh.n_schools }} schools
+  </div>
+  {% if nbh.other_candidates %}
+    <div class="text-xs text-slate-500 mt-2">
+      Also matched:
+      {% for o in nbh.other_candidates %}
+        <a href="/neighborhood/{{ o|urlencode }}" class="underline">{{ o }}</a>{% if not loop.last %},{% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{# ---------- How this neighborhood compares ---------- #}
+{% if nbh.peer_ranks %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">How this neighborhood compares</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Each card shows this neighborhood's average for a metric and its rank among NYC's NTAs (Neighborhood Tabulation Areas) that have at least 5 contributing schools. Triangle position runs HIGH (right) to LOW (left); rank #1 = highest value.
+  </p>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for r in nbh.peer_ranks %}
+      {{ peer_marker(r) }}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ---------- Map ---------- #}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Schools in this neighborhood</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Markers are schools — click for name + enrollment. The blue outline is the NTA boundary.
+  </p>
+  <div id="nbh-map" class="rounded-lg overflow-hidden border border-slate-200" style="height: 520px;"></div>
+</section>
+<script>
+(function() {
+  if (typeof L === "undefined") { console.error("Leaflet failed to load."); return; }
+  const schools = {{ schools_geo | tojson }}.filter(s => s.latitude != null && s.longitude != null);
+  const boundary = {{ boundary | tojson }};
+  if (!schools.length && !boundary) { console.warn("Neighborhood map: no data"); return; }
+
+  // Compute the initial view from the polygon's raw coordinates (avoids
+  // Leaflet's polygon clipping, which has been throwing on the mask/halo
+  // and aborting the post-init animation).
+  const ringLatLngs = (boundary && boundary.coordinates && boundary.coordinates[0])
+    ? boundary.coordinates[0].map(([lon, lat]) => [lat, lon])
+    : schools.map(s => [s.latitude, s.longitude]);
+  const initialBounds = L.latLngBounds(ringLatLngs);
+
+  const map = L.map("nbh-map", {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    renderer: L.svg({ padding: 0.5 }),  // generous SVG padding so polygons don't clip at edges
+  });
+  map.fitBounds(initialBounds, { padding: [24, 24] });
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd", maxZoom: 20,
+    attribution:
+      '&copy; <a href="https://openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors ' +
+      '&copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+  }).addTo(map);
+
+  // Each layer in its own try/catch — one broken polygon shouldn't kill the
+  // rest. Helper logs success/failure to the console so we can diagnose.
+  function addLayer(name, fn) {
+    try { fn(); console.log(`map: ${name} added`); }
+    catch (e) { console.error(`map: ${name} failed`, e); }
+  }
+
+  addLayer("boundary", () => {
+    if (!boundary) return;
+    L.geoJSON(boundary, {
+      style: { color: "#1d4ed8", weight: 1, fill: false, interactive: false },
+    }).addTo(map);
+  });
+
+  const levelColors = {
+    "elementary": "#0571b0",
+    "middle":     "#92c5de",
+    "K-8":        "#6a51a3",
+    "high":       "#ca0020",
+    "6-12":       "#f4a582",
+  };
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+  let markerCount = 0;
+  addLayer("markers", () => {
+    for (const s of schools) {
+      L.circleMarker([s.latitude, s.longitude], {
+        radius: 10,
+        color: "white",
+        weight: 2.5,
+        fillColor: levelColors[s.school_level] || "#64748b",
+        fillOpacity: 1,
+      })
+        .bindPopup(
+          `<a href="/school/${escapeHtml(s.dbn)}" style="color:#1d4ed8;font-weight:600">` +
+          `${escapeHtml(s.school_name)}</a><br>` +
+          `<span style="color:#64748b">${escapeHtml(s.school_level || "—")}` +
+          (s.total_enrollment ? ` · ${s.total_enrollment.toLocaleString()} enrolled` : "") +
+          `</span>`
+        )
+        .addTo(map);
+      markerCount++;
+    }
+    console.log(`map: ${markerCount} school markers drawn`);
+  });
+
+  // Compact school-level legend.
+  const legend = L.control({ position: "topright" });
+  legend.onAdd = () => {
+    const div = L.DomUtil.create("div");
+    div.style.cssText = "background:white;padding:8px 10px;font-size:11px;line-height:1.5;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.05)";
+    div.innerHTML = '<div style="font-weight:600;margin-bottom:4px">School level</div>' +
+      Object.entries(levelColors).map(([k, c]) =>
+        `<div><span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:50%;border:1px solid white;box-shadow:0 0 0 1px #cbd5e1;margin-right:6px;vertical-align:middle"></span>${k}</div>`
+      ).join("");
+    return div;
+  };
+  legend.addTo(map);
+
+  // Force a layout pass — sometimes the map div's height isn't realized
+  // when L.map() is called and tiles render at wrong sizes.
+  setTimeout(() => map.invalidateSize(), 50);
+})();
+</script>
+
+{# ---------- Schools table ---------- #}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">School-by-school</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Latest-year headline metrics per school. ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "—" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
+  </p>
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">School</th>
+          <th class="px-4 py-2 text-left">Level</th>
+          <th class="px-4 py-2 text-right">Enroll</th>
+          {% for m in nbh.metric_names %}
+            <th class="px-4 py-2 text-right">{{ nbh.metric_labels[m] }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for s in nbh.schools %}
+        <tr>
+          <td class="px-4 py-2">
+            <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name }}</a>
+            <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
+          </td>
+          <td class="px-4 py-2 text-slate-600">{{ s.school_level or "—" }}</td>
+          <td class="px-4 py-2 text-right">{{ num(s.total_enrollment) }}</td>
+          {% for m in nbh.metric_names %}
+            <td class="px-4 py-2 text-right">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="text-xs text-slate-500">
+  Neighborhoods = <a class="underline" href="https://www.nyc.gov/site/planning/data-maps/nyc-population/geographic-reference.page">NYC NTAs</a> (Neighborhood Tabulation Areas) — the city's official 195 neighborhood boundaries. School locations from NYC Open Data (school-locations.geojson, fiscal year 2019-2020). Metric values from the same sources as the school page; see provenance there.
+</p>
+{% endblock %}

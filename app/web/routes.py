@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import config
 from ..services.analytics import (
+    get_neighborhood,
     homepage_borough_grid,
     homepage_leaderboards,
     homepage_neighborhood_leaderboards,
@@ -108,6 +109,37 @@ async def school_page(request: Request, dbn: str):
             "math_grade_year": exam_grade_year_levels(detail.math),
             "ela_citywide_levels": citywide_level_breakdown("ela"),
             "math_citywide_levels": citywide_level_breakdown("math"),
+        },
+    )
+
+
+@router.get("/neighborhood/{query:path}", response_class=HTMLResponse)
+async def neighborhood_page(request: Request, query: str):
+    """Neighborhood (NTA) report. `query` is fuzzy-matched, so colloquial
+    names like 'park slope' or URL-encoded canonical names both work."""
+    detail = get_neighborhood(query)
+    if detail is None:
+        return HTMLResponse(
+            content=f"<h1>Neighborhood not found</h1><p>No NTA matched <code>{query}</code>.</p>",
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request, "neighborhood.html",
+        {
+            "nbh": detail,
+            # tojson can't serialize Pydantic models directly — pass a
+            # plain-dict slim for the inline map script.
+            "schools_geo": [
+                {
+                    "dbn": s.dbn, "school_name": s.school_name,
+                    "school_level": s.school_level,
+                    "total_enrollment": s.total_enrollment,
+                    "latitude": s.latitude, "longitude": s.longitude,
+                }
+                for s in detail.schools
+            ],
+            "boundary": detail.boundary,
+            "uid": _make_uid(),
         },
     )
 

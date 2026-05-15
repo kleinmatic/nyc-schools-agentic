@@ -40,6 +40,7 @@ class DataStore:
     nysed_hs_cccr: pd.DataFrame = field(default_factory=pd.DataFrame)
     es_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
     ms_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
+    nta_polygons: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
 
 
 _store: Optional[DataStore] = None
@@ -102,6 +103,7 @@ def load() -> DataStore:
         nysed_hs_cccr=tables["nysed_hs_cccr"],
         es_zones=gpd.read_file(cdd / "school-zones-es.geojson"),
         ms_zones=gpd.read_file(cdd / "school-zones-ms.geojson"),
+        nta_polygons=gpd.read_file(cdd / "nta-2010.geojson"),
     )
     return _store
 
@@ -118,5 +120,6 @@ def summary() -> str:
         f"chronic={len(_store.nysed_chronic):,} exp={len(_store.nysed_expenditures):,} "
         f"inexp={len(_store.nysed_inexp_teachers):,} oct={len(_store.nysed_out_of_cert):,} "
         f"grad={len(_store.nysed_hs_grad):,} cccr={len(_store.nysed_hs_cccr):,} "
-        f"es_zones={len(_store.es_zones):,} ms_zones={len(_store.ms_zones):,}"
+        f"es_zones={len(_store.es_zones):,} ms_zones={len(_store.ms_zones):,} "
+        f"ntas={len(_store.nta_polygons):,}"
     )

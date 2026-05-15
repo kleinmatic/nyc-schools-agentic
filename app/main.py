@@ -1,5 +1,6 @@
 """FastAPI app entry. Loads data on startup, mounts web + MCP routes."""
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +9,7 @@ from fastmcp.utilities.lifespan import combine_lifespans
 from . import config  # noqa: F401  -- ensures NYC_SCHOOLS_DATA_DIR is set
 from . import data
 from .mcp_server import mcp
+from .services.analytics import warm_caches
 from .web import routes as web_routes
 
 log = logging.getLogger("nyc_schools_agentic")
@@ -19,6 +21,12 @@ async def data_lifespan(app: FastAPI):
     log.info("Loading committed data from %s ...", config.DB_PATH)
     data.load()
     log.info("Data loaded: %s", data.summary())
+    # Pre-compute the heavy aggregates so the first user request is fast.
+    # Hidden from end-users by Fly's rolling deploy: traffic only switches
+    # to the new machine after /healthz passes (this lifespan completes).
+    t = time.monotonic()
+    warm_caches()
+    log.info("Caches warm in %.1fs", time.monotonic() - t)
     yield
     log.info("Shutting down")
 

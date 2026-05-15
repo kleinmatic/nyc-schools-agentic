@@ -10,6 +10,7 @@ the app. Source data is mixed (Regents pct cols are 0..100; NYSED pct
 cols are 0..100; demographics ENI is already 0..1; ELA/math
 level_3_4_pct is already 0..1) — we normalize at this boundary.
 """
+from functools import lru_cache
 from typing import Optional
 
 import pandas as pd
@@ -25,7 +26,11 @@ from .models import (
     LeaderboardTable,
     MetricRow,
     NeighborhoodAggregate,
+    NeighborhoodDetail,
     NeighborhoodLeaderboard,
+    NeighborhoodPeerExtreme,
+    NeighborhoodPeerRank,
+    NeighborhoodSchool,
     NeighborhoodSchoolsResult,
     PeerCohort,
     PeerSchool,
@@ -373,6 +378,7 @@ def _aggregate_metric_by_group(
     return out
 
 
+@lru_cache(maxsize=256)
 def aggregate_by_neighborhood(
     metric: str,
     level: Optional[str] = "high",
@@ -382,7 +388,12 @@ def aggregate_by_neighborhood(
 ) -> list[NeighborhoodAggregate]:
     """Top NTAs by the mean of `metric` across their schools (within the
     given `level`). NTAs with fewer than `min_schools` schools are
-    excluded — single-school NTAs produce noisy "averages.\""""
+    excluded — single-school NTAs produce noisy "averages."
+
+    Cached: runtime data is static after the lifespan load, so identical
+    (metric × level × limit × ascending × min_schools) call tuples return
+    the same list. The first hit pays ~1s of pandas iteration; every hit
+    after is instant.\""""
     if metric not in METRIC_DESCRIPTIONS:
         raise ValueError(f"unknown metric: {metric!r}. Valid: {METRIC_NAMES}")
     store = data.get_store()
@@ -600,6 +611,175 @@ def schools_in_neighborhood(
         n_schools_total=total,
         other_candidates=others,
         schools=schools,
+    )
+
+
+def warm_caches() -> None:
+    """Pre-compute the heaviest cached aggregates so the first user request
+    doesn't pay the 5-second cost. Called from the FastAPI lifespan after
+    `data.load()`. With Fly's rolling-deploy strategy the new machine only
+    accepts traffic once /healthz passes, so the warm-up time is hidden
+    behind the old machine continuing to serve.
+
+    What's primed here:
+    - `aggregate_by_neighborhood` for the 5 default neighborhood-page
+      metrics (the slow part — 5 × ~1s of pandas iteration)
+    - The three homepage curated sets, which internally hit
+      `aggregate_by_neighborhood` with different (metric × level ×
+      ascending) tuples
+    """
+    # Neighborhood-page peer ranks: 5 metrics × all NTAs sorted descending.
+    # Signature must match what `_neighborhood_peer_rank` passes exactly —
+    # lru_cache keys on (args, kwargs) as given, NOT on resolved defaults.
+    for metric in _NEIGHBORHOOD_METRICS:
+        aggregate_by_neighborhood(
+            metric=metric, level=None, limit=10_000, ascending=False,
+        )
+    # Homepage sets — touch each so their internal aggregator calls cache.
+    homepage_leaderboards()
+    homepage_neighborhood_leaderboards()
+    homepage_borough_grid()
+
+
+# -------- Neighborhood page --------
+
+# Default metric set surfaced on the neighborhood page. Mixed-level NTAs are
+# common, so we include both 3-8 (ELA / math) and HS (Regents) signals — the
+# table renders "—" where a metric doesn't apply to a given school's grade
+# band. ENI is the lead column (NYC's equity proxy).
+_NEIGHBORHOOD_METRICS: tuple[str, ...] = (
+    "eni",
+    "attendance_rate",
+    "ela_pct_proficient",
+    "math_pct_proficient",
+    "regents_pct_above_64",
+)
+
+
+def _format_metric_value(value: float, fmt: str) -> str:
+    if fmt == "pct":
+        return f"{value * 100:.1f}%"
+    if fmt == "currency":
+        return f"${value:,.0f}"
+    if fmt == "ratio":
+        return f"{value:.2f}"
+    return f"{value:.2f}"
+
+
+def _neighborhood_peer_rank(
+    nta_name: str, metric: str, level: Optional[str]
+) -> Optional[NeighborhoodPeerRank]:
+    """Rank `nta_name` among all NYC NTAs by `metric`. Returns None if the
+    NTA has fewer than _MIN_NTA_SCHOOLS contributing schools at this level
+    (the aggregate is dropped) or if the metric can't be computed."""
+    all_aggs = aggregate_by_neighborhood(
+        metric=metric, level=level, limit=10_000, ascending=False,
+    )
+    if len(all_aggs) < 2:
+        return None
+    idx = next((i for i, a in enumerate(all_aggs) if a.name == nta_name), None)
+    if idx is None:
+        return None
+    fmt = METRIC_FORMATS.get(metric, "pct")
+    return NeighborhoodPeerRank(
+        metric=metric,
+        metric_label=METRIC_LABELS.get(metric, metric),
+        metric_format=fmt,
+        value=all_aggs[idx].value,
+        value_display=_format_metric_value(all_aggs[idx].value, fmt),
+        caption=f"vs {len(all_aggs)} NYC neighborhoods",
+        rank=idx + 1,
+        total=len(all_aggs),
+        cohort_label="NYC neighborhoods",
+        extreme_high=NeighborhoodPeerExtreme(
+            nta_name=all_aggs[0].name,
+            boro=all_aggs[0].boro,
+            value_display=_format_metric_value(all_aggs[0].value, fmt),
+        ),
+        extreme_low=NeighborhoodPeerExtreme(
+            nta_name=all_aggs[-1].name,
+            boro=all_aggs[-1].boro,
+            value_display=_format_metric_value(all_aggs[-1].value, fmt),
+        ),
+    )
+
+
+def get_neighborhood(
+    query: str, level: Optional[str] = None
+) -> Optional[NeighborhoodDetail]:
+    """Full neighborhood report: how this NTA ranks vs others on key
+    metrics, plus a denormalized roster of its schools (with lat/lon for
+    the map and per-school metric values for the table).
+
+    Fuzzy-matches `query` against NTA names — "park slope" → "Park Slope-
+    Gowanus" — and surfaces runner-up matches in `other_candidates` so
+    the caller can disambiguate (e.g. "Harlem" has 4 NTAs). Returns None
+    if no NTA scores above the fuzzy threshold or no schools live there."""
+    if not query or not query.strip():
+        return None
+    store = data.get_store()
+    candidates = _fuzzy_match_ntas(query, store)
+    if not candidates:
+        return None
+    top_name, top_boro, top_score = candidates[0]
+    cutoff = max(_NTA_FUZZY_MIN_SCORE, top_score - _NTA_OTHER_CANDIDATE_BAND)
+    others = [name for name, _, score in candidates[1:6] if score >= cutoff]
+
+    schools, _ = _schools_in_nta(top_name, level, store, limit=None)
+    if not schools:
+        return None
+
+    # Focal NTA polygon for the map. None if no boundary on file (a handful
+    # of "park-cemetery-etc-*" NTAs don't have a single contiguous polygon).
+    boundary = None
+    nta_polys = store.nta_polygons
+    if not nta_polys.empty:
+        match = nta_polys[nta_polys["NTAName"] == top_name]
+        if not match.empty:
+            geom = match.iloc[0].geometry
+            if geom is not None and not geom.is_empty:
+                boundary = geom.__geo_interface__
+
+    # Per-school metric values for the table. Join location for lat/lon.
+    cands = _candidate_schools(level=level, borough=None, store=store)
+    cands_by_dbn = {row["dbn"]: row for _, row in cands.iterrows()}
+    loc_by_dbn = {row["dbn"]: row for _, row in store.locations.iterrows()}
+
+    rows: list[NeighborhoodSchool] = []
+    for s in schools:
+        cand = cands_by_dbn.get(s.dbn)
+        beds = _beds_to_str(cand["beds"]) if cand is not None else None
+        loc = loc_by_dbn.get(s.dbn)
+        lat = float(loc["latitude"]) if loc is not None and pd.notna(loc.get("latitude")) else None
+        lon = float(loc["longitude"]) if loc is not None and pd.notna(loc.get("longitude")) else None
+        metrics = {
+            m: _compute_metric(m, s.dbn, beds, store) for m in _NEIGHBORHOOD_METRICS
+        }
+        rows.append(NeighborhoodSchool(
+            dbn=s.dbn, school_name=s.school_name, school_level=s.school_level,
+            total_enrollment=s.total_enrollment,
+            latitude=lat, longitude=lon, metrics=metrics,
+        ))
+
+    # Peer ranks vs other NTAs. Drop any metric where this NTA doesn't
+    # appear in the ranked aggregate (e.g. <5 schools contributing).
+    peer_ranks: list[NeighborhoodPeerRank] = []
+    for m in _NEIGHBORHOOD_METRICS:
+        rank = _neighborhood_peer_rank(top_name, m, level)
+        if rank:
+            peer_ranks.append(rank)
+
+    return NeighborhoodDetail(
+        nta_name=top_name,
+        boro=top_boro,
+        n_schools=len(rows),
+        other_candidates=others,
+        peer_ranks=peer_ranks,
+        metric_names=list(_NEIGHBORHOOD_METRICS),
+        metric_labels={m: METRIC_LABELS.get(m, m) for m in _NEIGHBORHOOD_METRICS},
+        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in _NEIGHBORHOOD_METRICS},
+        schools=rows,
+        boundary=boundary,
     )
 
 

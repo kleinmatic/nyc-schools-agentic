@@ -66,6 +66,26 @@ def fetch_zone_polygons(level: str, year: int = 2024):
     return gpd.read_file(cache_path)
 
 
+# NYC retired the 2010 NTA boundary dataset from Open Data when the 2020
+# NTAs shipped — but `school-locations.geojson` still uses 2010 nta_name
+# strings, so we pull the canonical 2010 polygons from a community mirror.
+# The file is small (~180 KB / 195 features); if this URL ever rots there
+# are multiple GitHub copies floating around (nycehs, nycplanning forks).
+NTA_2010_URL = "https://raw.githubusercontent.com/nycehs/NYC_geography/master/NTA.geo.json"
+
+
+def fetch_nta_polygons():
+    """Pull the 2010 NTA boundary GeoJSON if not already cached."""
+    import requests
+    cache_path = DATA_DIR / "nyc-nta-2010.geojson"
+    if not cache_path.exists():
+        r = requests.get(NTA_2010_URL, timeout=120)
+        r.raise_for_status()
+        cache_path.write_bytes(r.content)
+    import geopandas as gpd
+    return gpd.read_file(cache_path)
+
+
 LOADERS = [
     ("demographics", schools.load_school_demographics),
     ("snapshots", snapshot.load_snapshots),
@@ -83,6 +103,7 @@ LOADERS = [
     ("nysed_src_2025", fetch_nysed_src),
     ("es_zones_2024", lambda: fetch_zone_polygons("es", 2024)),
     ("ms_zones_2024", lambda: fetch_zone_polygons("ms", 2024)),
+    ("nta_2010", fetch_nta_polygons),
 ]
 
 failures = []

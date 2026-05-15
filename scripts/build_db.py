@@ -183,6 +183,7 @@ GEO_COPIES = [
     ("school_locations.geojson", "school-locations.geojson"),
     ("nyc-school-zones-es-2024.geojson", "school-zones-es.geojson"),
     ("nyc-school-zones-ms-2024.geojson", "school-zones-ms.geojson"),
+    ("nyc-nta-2010.geojson", "nta-2010.geojson"),
     ("hs-directory-2021.feather", "hs-directory.feather"),
 ]
 

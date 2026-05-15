@@ -377,6 +377,57 @@ class PeerSchool(BaseModel):
     metrics: dict[str, Optional[float]]
 
 
+class NeighborhoodPeerExtreme(BaseModel):
+    """Top/bottom NTA in the cohort distribution for a given metric."""
+    nta_name: str
+    boro: Optional[str] = None
+    value_display: str
+
+
+class NeighborhoodPeerRank(BaseModel):
+    """How this NTA ranks vs all NYC NTAs on one metric — drives the
+    'How this neighborhood compares' lockup on the neighborhood page."""
+    metric: str
+    metric_label: str
+    metric_format: str           # "pct" | "currency" | "ratio"
+    value: float
+    value_display: str
+    caption: str
+    rank: int                    # 1-based; #1 = highest value in cohort
+    total: int
+    cohort_label: str
+    extreme_high: Optional[NeighborhoodPeerExtreme] = None
+    extreme_low: Optional[NeighborhoodPeerExtreme] = None
+
+
+class NeighborhoodSchool(BaseModel):
+    """One school in the neighborhood — denormalized for the table + map."""
+    dbn: str
+    school_name: str
+    school_level: Optional[str] = None
+    total_enrollment: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    metrics: dict[str, Optional[float]] = {}
+
+
+class NeighborhoodDetail(BaseModel):
+    """Full neighborhood report. Powers /neighborhood/{query}."""
+    nta_name: str
+    boro: Optional[str] = None
+    n_schools: int
+    other_candidates: list[str] = []
+    peer_ranks: list[NeighborhoodPeerRank] = []
+    metric_names: list[str] = []
+    metric_labels: dict[str, str] = {}
+    metric_formats: dict[str, str] = {}
+    schools: list[NeighborhoodSchool] = []
+    # GeoJSON polygon of the NTA boundary — None if no boundary on file. dict
+    # rather than a typed model because it's pure GeoJSON, opaque to consumers
+    # other than mapping libraries.
+    boundary: Optional[dict] = None
+
+
 class NeighborhoodSchoolsResult(BaseModel):
     """Result of looking up schools by neighborhood name. Always returns
     the single best NTA match; alternatives surface in `other_candidates`
