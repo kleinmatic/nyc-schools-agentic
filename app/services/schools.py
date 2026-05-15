@@ -776,6 +776,51 @@ def _peer_rank_eni(dbn: str) -> Optional[PeerRank]:
     )
 
 
+def _peer_rank_exam_proficient(
+    dbn: str, exam_df: pd.DataFrame, metric_label: str
+) -> Optional[PeerRank]:
+    """Latest-year 'All Grades' rollup of level_3_4_pct, ranked against
+    same-school-level peers. Returns None for high schools (3-8 state
+    tests don't apply) or schools without exam data."""
+    school_level = _school_level_for(dbn)
+    if school_level is None or "high" in school_level.lower():
+        return None
+    store = data.get_store()
+    demo_latest = store.demographics[
+        store.demographics["ay"] == store.demographics["ay"].max()
+    ]
+    same_level = demo_latest[demo_latest["school_level"] == school_level][
+        ["dbn", "school_name"]
+    ]
+    latest_year = exam_df["ay"].max()
+    cohort = exam_df[
+        (exam_df["ay"] == latest_year) & (exam_df["grade"] == "All Grades")
+    ].merge(same_level, on="dbn", how="inner")
+    info = _rank_in_cohort(cohort, "dbn", dbn, "level_3_4_pct", ascending=False)
+    if info is None:
+        return None
+    rank, total, value, top, bottom = info
+    fmt = lambda r: f"{float(r['level_3_4_pct']) * 100:.1f}%"
+    return PeerRank(
+        metric_label=metric_label,
+        value_display=f"{value * 100:.1f}%",
+        caption="scored proficient (L3 + L4)",
+        rank=rank,
+        total=total,
+        cohort_label=f"{school_level} schools",
+        extreme_high=_extreme_from_row(top, "school_name", "dbn", fmt),
+        extreme_low=_extreme_from_row(bottom, "school_name", "dbn", fmt),
+    )
+
+
+def _peer_rank_ela_proficient(dbn: str) -> Optional[PeerRank]:
+    return _peer_rank_exam_proficient(dbn, data.get_store().ela, "ELA proficient")
+
+
+def _peer_rank_math_proficient(dbn: str) -> Optional[PeerRank]:
+    return _peer_rank_exam_proficient(dbn, data.get_store().math, "Math proficient")
+
+
 def _peer_rank_ptr(dbn: str) -> Optional[PeerRank]:
     school_level = _school_level_for(dbn)
     if school_level is None:
@@ -859,6 +904,8 @@ def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
     out: dict[str, PeerRank] = {}
     for key, fn in [
         ("eni", _peer_rank_eni),
+        ("ela_proficient", _peer_rank_ela_proficient),
+        ("math_proficient", _peer_rank_math_proficient),
         ("ptr", _peer_rank_ptr),
         ("chronic_absent", _peer_rank_chronic),
     ]:

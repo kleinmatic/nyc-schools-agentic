@@ -2,7 +2,7 @@
 import itertools
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
@@ -14,6 +14,10 @@ from ..services.analytics import (
 )
 from ..services.schools import get_school, search_schools
 from ..services.zoning import find_zoned_schools, geocode
+from .charts import (
+    citywide_level_breakdown,
+    exam_grade_year_levels,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
@@ -100,5 +104,85 @@ async def school_page(request: Request, dbn: str):
                 school_peers(dbn, scope="district")
                 if detail.summary.school_level not in ("high",) else None
             ),
+            "ela_grade_year": exam_grade_year_levels(detail.ela),
+            "math_grade_year": exam_grade_year_levels(detail.math),
+            "ela_citywide_levels": citywide_level_breakdown("ela"),
+            "math_citywide_levels": citywide_level_breakdown("math"),
         },
     )
+
+
+# Block named AI training crawlers from harvesting the HTML surface, while
+# leaving conventional search indexers (Googlebot, Bingbot, DuckDuckBot,
+# Applebot) untouched — school pages should still be findable. Agents that
+# want structured access should use /mcp/ (Streamable HTTP); /a2a/ and /acp/
+# will be siblings. On-demand fetchers (ChatGPT-User, Claude-Web) are not
+# blocked: those are single-page user-initiated retrievals, not the
+# bulk-training crawl this is trying to deter.
+_ROBOTS_TXT = """\
+# AI training crawlers: disallowed.
+# Agents wanting structured access should use /mcp/ (Streamable HTTP).
+# Source: https://github.com/kleinmatic/nyc-schools-agentic
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: Omgilibot
+Disallow: /
+
+User-agent: Timpibot
+Disallow: /
+
+User-agent: ImagesiftBot
+Disallow: /
+
+User-agent: YouBot
+Disallow: /
+
+# Everyone else (Googlebot, Bingbot, DuckDuckBot, Applebot, on-demand
+# agent fetchers like ChatGPT-User / Claude-Web, and any A2A/MCP traffic):
+# the site is open.
+User-agent: *
+Allow: /
+"""
+
+
+@router.get("/robots.txt", include_in_schema=False, response_class=PlainTextResponse)
+async def robots_txt() -> str:
+    return _ROBOTS_TXT

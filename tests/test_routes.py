@@ -184,6 +184,19 @@ def test_healthz(client):
     assert r.json() == {"status": "ok", "data_loaded": True}
 
 
+def test_robots_txt_blocks_training_crawlers_and_allows_search(client):
+    r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    body = r.text
+    # Named training crawlers we explicitly disallow.
+    for ua in ("GPTBot", "ClaudeBot", "Google-Extended", "CCBot", "PerplexityBot"):
+        assert f"User-agent: {ua}\nDisallow: /" in body, ua
+    # Everyone else is allowed — Googlebot/Bingbot index normally, MCP
+    # clients aren't impeded.
+    assert "User-agent: *\nAllow: /" in body
+
+
 def test_mcp_endpoint_accepts_bare_path_without_redirect(client):
     """`/mcp` (no trailing slash) must respond with the MCP initialize
     handshake directly, not a 307 redirect to `/mcp/`. Some clients

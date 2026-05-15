@@ -58,6 +58,126 @@
   <div class="text-xs text-slate-600 mt-3">Rank #{{ "{:,}".format(rank_info.rank) }} of {{ "{:,}".format(rank_info.total) }} {{ rank_info.cohort_label }}</div>
 </div>
 {% endmacro %}
+{% macro grade_year_figure(prefix, data, citywide_levels, kicker, caption) %}
+{% if data %}
+<figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-4">
+  <figcaption class="text-xs text-slate-500 mb-2">
+    <span class="font-medium text-slate-700">{{ kicker }}</span> — {{ caption | safe }}
+  </figcaption>
+  <div id="{{ prefix }}-grade-year"></div>
+</figure>
+<script>
+(function() {
+  if (typeof Plot === "undefined") return;
+  const raw = {{ data | tojson }};
+  if (!raw.length) return;
+  const points = raw.map(d => ({...d, level: String(d.level), gradeLabel: `Grade ${d.grade}`}));
+
+  // Per-cell L2/L3 boundary for THIS school. Sum of level-1+level-2 percentages
+  // = the y position where "not proficient" ends and "proficient" begins,
+  // measured from the bottom of the bar.
+  const cellMap = new Map();
+  for (const p of points) {
+    const key = `${p.grade}|${p.ay}`;
+    if (!cellMap.has(key)) cellMap.set(key, { grade: p.grade, ay: p.ay, gradeLabel: p.gradeLabel, nonProf: 0 });
+    if (p.level === "1" || p.level === "2") cellMap.get(key).nonProf += p.pct;
+  }
+  const schoolBoundaries = [...cellMap.values()];
+
+  // NYC '22 comparator column. Filter citywide breakdown to the latest year
+  // and to grades this school has, then re-tag the ay as a sentinel so it
+  // takes its own slot on the x-axis after the school's columns.
+  const gradeSet = new Set(points.map(d => d.grade));
+  const schoolYears = [...new Set(points.map(d => d.ay))].sort((a, b) => a - b);
+  const latestAy = schoolYears[schoolYears.length - 1];
+  const cohortKey = "cohort";
+  const cohortPoints = {{ citywide_levels | tojson }}
+    .filter(d => gradeSet.has(d.grade) && d.ay === latestAy)
+    .map(d => ({
+      grade: d.grade, ay: cohortKey, level: String(d.level), pct: d.pct,
+      gradeLabel: `Grade ${d.grade}`, srcAy: d.ay
+    }));
+
+  const levelDomain = ["1", "2", "3", "4"];
+  // ColorBrewer 4-class diverging RdBu: reds = not proficient (L1, L2),
+  // blues = proficient (L3, L4). Dark at the extremes, light flanking
+  // the white L2/L3 boundary rule.
+  const levelColors = ["#ca0020", "#f4a582", "#92c5de", "#0571b0"];
+  const grades = [...new Set(points.map(d => d.grade))].sort();
+  const years = [...new Set(points.map(d => d.ay))].sort((a, b) => a - b);
+  // Force the band domain to cover the full year range including COVID-cancelled
+  // 2019/2020, so the gap shows up as empty bands rather than vanishing.
+  const fullYearDomain = [];
+  for (let y = years[0]; y <= years[years.length - 1]; y++) fullYearDomain.push(y);
+  const xDomain = cohortPoints.length ? [...fullYearDomain, cohortKey] : fullYearDomain;
+  const facetHeight = 64;
+
+  // Full (grade × year) grid for the gray COVID placeholder. Every cell that
+  // could have data gets a gray rectangle; school bars and cohort bars cover
+  // it elsewhere, so it's only visible in the cancelled 2019-20 / 2020-21 years.
+  const fullGrid = [];
+  for (const g of grades) {
+    for (const x of xDomain) fullGrid.push({ grade: g, ay: x, gradeLabel: `Grade ${g}` });
+  }
+
+  const plot = Plot.plot({
+    height: 40 + facetHeight * grades.length + 36,
+    marginTop: 16, marginBottom: 36, marginLeft: 76, marginRight: 12,
+    x: {
+      type: "band",
+      domain: xDomain,
+      tickFormat: d => d === cohortKey
+        ? `NYC '${String(latestAy % 100).padStart(2, "0")}`
+        : `'${String(d % 100).padStart(2, "0")}`,
+      label: null,
+      padding: 0.15
+    },
+    y: { axis: null, domain: [0, 1] },
+    fy: {
+      domain: grades.map(g => `Grade ${g}`),
+      label: null, padding: 0.22,
+      anchor: "left"
+    },
+    color: {
+      type: "ordinal", domain: levelDomain, range: levelColors,
+      legend: true, label: "Proficiency level (1 = lowest, 4 = highest)"
+    },
+    marks: [
+      // Gray cell background — visible only in COVID-cancelled years.
+      Plot.barY(fullGrid, {
+        x: "ay", fy: "gradeLabel",
+        y1: 0, y2: 1,
+        fill: "#e2e8f0"
+      }),
+      Plot.barY(points, Plot.stackY({
+        x: "ay", y: "pct",
+        fill: "level", fy: "gradeLabel",
+        order: levelDomain,
+        title: d => `Grade ${d.grade} · ${d.ay}-${String((d.ay + 1) % 100).padStart(2, "0")}\nLevel ${d.level}: ${(d.pct * 100).toFixed(1)}% of ${d.n_tested} tested`
+      })),
+      // NYC '22 comparator: same stacked-level encoding, lower opacity so it
+      // reads as a reference column, not data.
+      Plot.barY(cohortPoints, Plot.stackY({
+        x: "ay", y: "pct",
+        fill: "level", fy: "gradeLabel",
+        order: levelDomain,
+        fillOpacity: 0.55,
+        title: d => `NYC citywide Grade ${d.grade} ${d.srcAy}-${String((d.srcAy + 1) % 100).padStart(2, "0")}\nLevel ${d.level}: ${(d.pct * 100).toFixed(1)}%`
+      })),
+      // School's own L2/L3 boundary (proficient vs not) — thin white tick.
+      Plot.tickY(schoolBoundaries, {
+        x: "ay", y: "nonProf", fy: "gradeLabel",
+        stroke: "white", strokeWidth: 1,
+        title: d => `Grade ${d.grade} · ${d.ay}: ${((1 - d.nonProf) * 100).toFixed(1)}% proficient at this school`
+      }),
+    ]
+  });
+  document.getElementById("{{ prefix }}-grade-year").append(plot);
+})();
+</script>
+{% endif %}
+{% endmacro %}
+
 {% macro explainer(label="Explanation") %}
 <details class="group mb-3">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium select-none">
@@ -593,6 +713,13 @@
     ["nyc-ela.csv"],
     "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv."
   ) }}
+  {{ grade_year_figure(
+    "ela",
+    ela_grade_year,
+    ela_citywide_levels,
+    "All years × all grades",
+    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+  }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -636,6 +763,13 @@
     ["nyc-math.csv"],
     "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv."
   ) }}
+  {{ grade_year_figure(
+    "math",
+    math_grade_year,
+    math_citywide_levels,
+    "All years × all grades",
+    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+  }}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

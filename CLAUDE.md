@@ -51,6 +51,7 @@ app/
 │                      schools_in_neighborhood, plus homepage_* curated sets
 ├── web/
 │   ├── routes.py      thin Jinja-rendering adapters
+│   ├── charts.py      view-layer data shaping for client-side Observable Plot charts
 │   └── templates/
 │       ├── base, search, school, find         page templates
 │       └── partials/  results, leaderboard, neighborhood_leaderboard,
@@ -107,3 +108,4 @@ The upstream bulk-archive Drive URL is dead; we lazy-fetch per file from `data.m
 - **Don't commit secrets.** `SECRETS.md` and several other patterns are gitignored; deploy keys, vendor info, scratch SQL go there or in a sibling private repo (see README "License & private state").
 - **Don't bypass the SQLite at runtime.** If a new data source is needed, add it to the upstream fork (or to this repo if it's truly app-specific), surface it through `scripts/build_db.py`, and read it via `app/data.py`. The running app should never call upstream loaders or hit the network for static data.
 - **`scripts/find_school.py` and `scripts/inspect_school.py`** still use the upstream loaders directly (pre-SQLite design). They're useful for ad-hoc inspection of raw upstream data; require `uv sync --group build` to run.
+- **Client-side dataviz uses Observable Plot** (UMD via CDN in `base.html`, with d3 alongside since Plot's UMD doesn't re-export d3 helpers). Server-side shaping lives in `app/web/charts.py` — same boundary rule as templates: takes service-layer Pydantic models, returns chart-ready plain dicts. Pass to Jinja contexts and inline `<script>` with `| tojson`. The school-page grade × year × proficiency-level chart is the canonical example: per-cell stacked bars, a NYC '22 cohort comparator column at reduced opacity, and a gray cell placeholder for COVID-cancelled (AY 2019, 2020) years.
