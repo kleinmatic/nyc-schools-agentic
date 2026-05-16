@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ nbh.nta_name|pretty }} — The Data Tribune{% endblock %}
+{% block meta_description %}{{ nbh.nta_name|pretty }}{% if nbh.boro %}, {{ nbh.boro }}{% endif %}: {{ nbh.n_schools }} public schools with demographics, test scores, and accountability metrics. How this neighborhood compares against the rest of NYC.{% endblock %}
 
 {% block head_extra %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"

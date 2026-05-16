@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ school.summary.school_name|pretty }} ({{ school.summary.dbn }}){% endblock %}
+{% block meta_description %}{{ school.summary.school_name|pretty }} ({{ school.summary.dbn }}){% if school.summary.boro %} — {{ school.summary.boro }}{% endif %}{% if school.summary.school_level %}, {{ school.summary.school_level|level }}{% endif %}. Demographics, NYS test results, attendance, accountability, and peer comparison.{% endblock %}
 
 {% macro card_label(label) %}<dt class="text-xs text-slate-500 uppercase tracking-wide">{{ label|safe }}</dt>{% endmacro %}
 {% macro card_value(value) %}<dd class="text-lg font-medium">{{ value }}</dd>{% endmacro %}

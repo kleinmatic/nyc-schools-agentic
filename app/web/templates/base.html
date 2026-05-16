@@ -4,6 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}The Data Tribune — NYC Schools{% endblock %}</title>
+  {# Per-page SEO + social tags. Each page overrides meta_description with
+     something specific to its content; og_title / og_description default
+     to title / meta_description but can be overridden separately. #}
+  <meta name="description" content="{% block meta_description %}Search every NYC public school — demographics, test scores, attendance, accountability — also queryable by AI agents over MCP.{% endblock %}">
+  <meta property="og:site_name" content="The Data Tribune">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ self.meta_description() }}{% endblock %}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ self.og_title() }}">
+  <meta name="twitter:description" content="{{ self.og_description() }}">
   {# Google Analytics 4. Property G-KXSN2MX8CR. Adblockers will block this;
      that's fine. No consent banner — public, non-PII site. #}
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-KXSN2MX8CR"></script>
