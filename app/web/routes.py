@@ -147,6 +147,13 @@ async def school_page(request: Request, dbn: str):
     )
 
 
+@router.get("/sources", response_class=HTMLResponse)
+async def sources_page(request: Request):
+    """Data sources page: every dataset, the agency that publishes it,
+    the vintage, and a link to the original source."""
+    return templates.TemplateResponse(request, "sources.html", {})
+
+
 @router.get("/neighborhood/{query:path}", response_class=HTMLResponse)
 async def neighborhood_page(request: Request, query: str):
     """Neighborhood (NTA) report. `query` is fuzzy-matched, so colloquial

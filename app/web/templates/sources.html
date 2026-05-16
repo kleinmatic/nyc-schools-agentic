@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Data sources — The Data Tribune{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <h1 class="display-headline mt-4">Data sources</h1>
+  <p class="display-deck">
+    Every dataset behind this site, with the year it's from and a link to the original source.
+    Vintages don't line up across sources — NYC publishes each on its own cadence — so we list
+    each one explicitly. Most are refreshed when the relevant agency publishes a new release.
+  </p>
+</div>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Backbone: <code class="text-base font-normal">nycschools</code> by Adelphi Ed Tech</h2>
+  <p class="text-sm text-slate-600 mb-4">
+    Most of the long-tail historical data on this site comes from the
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a>
+    Python package (Matthew X. Curinga / Adelphi Ed Tech), which has been
+    quietly assembling NYC DOE InfoHub releases, scraped DOE-portal data,
+    and several supporting tables for years. It's AGPL-3.0, like this site.
+    A
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nycschools">fork</a>
+    of the package adds the NYSED Report Card Database loader (PR back to
+    Adelphi pending) and the Guidance Counselor + Social Worker loader.
+  </p>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    <div><dt class="font-medium">School demographics</dt><dd class="text-slate-600 mt-1">2005 – 2024-25 · NYC DOE annual demographic snapshot — enrollment, race, ELL, SWD, poverty, ENI.</dd></div>
+    <div><dt class="font-medium">DOE per-school snapshots</dt><dd class="text-slate-600 mt-1">~2016 (stale) · DOE per-school portal scrape — principal, admissions method, quality-review URL. Older than the rest; we still surface it where there's nothing newer.</dd></div>
+    <div><dt class="font-medium">3-8 ELA exams</dt><dd class="text-slate-600 mt-1">2012 – 2022 (no 2019-20, 2020-21 — COVID) · NYS English Language Arts state tests.</dd></div>
+    <div><dt class="font-medium">3-8 math exams</dt><dd class="text-slate-600 mt-1">2012 – 2022 (no 2019-20, 2020-21 — COVID) · NYS mathematics state tests.</dd></div>
+    <div><dt class="font-medium">Regents exams</dt><dd class="text-slate-600 mt-1">2014 – 2022 · NYS Regents results, all subjects.</dd></div>
+    <div><dt class="font-medium">Class size</dt><dd class="text-slate-600 mt-1">2022-23 · DOE InfoHub class-size report.</dd></div>
+    <div><dt class="font-medium">Pupil-to-teacher ratio</dt><dd class="text-slate-600 mt-1">2022-23 · Same DOE InfoHub release as class size.</dd></div>
+    <div><dt class="font-medium">SHSAT outcomes</dt><dd class="text-slate-600 mt-1">Multiple years · NYC Open Data SHSAT applicant + offer counts by sending school.</dd></div>
+    <div><dt class="font-medium">Galaxy budget</dt><dd class="text-slate-600 mt-1">2022-23 · DOE Galaxy school-budget portal scrape.</dd></div>
+    <div><dt class="font-medium">High School Directory</dt><dd class="text-slate-600 mt-1">AY 2021 · NYC Open Data HS directory dataset (8b6c-7uty) — admissions programs, AP courses, sports, transit.</dd></div>
+    <div><dt class="font-medium">School locations</dt><dd class="text-slate-600 mt-1">Fiscal year 2019-20 · NYC Open Data school location points (resource wg9x-4ke6). Includes lat/lon, NTA, council district, BBL.</dd></div>
+  </dl>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Direct from NYC DOE / Open Data</h2>
+  <p class="text-sm text-slate-600 mb-4">
+    Datasets we pull directly (without going through the <code>nycschools</code> upstream),
+    typically because they post-date the package's last release or aren't routed through it.
+  </p>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    <div><dt class="font-medium">ES attendance zones</dt><dd class="text-slate-600 mt-1">2024-25 · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/api/geospatial/cmjf-yawu?method=export&amp;format=GeoJSON">cmjf-yawu</a> · Elementary school zone polygons for the address-based "where is this kid zoned?" lookup.</dd></div>
+    <div><dt class="font-medium">MS attendance zones</dt><dd class="text-slate-600 mt-1">2024-25 · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/api/geospatial/t26j-jbq7?method=export&amp;format=GeoJSON">t26j-jbq7</a> · Middle school zone polygons. Districts 1, 7, 15 use choice-based admissions so they have no MS zones.</dd></div>
+    <div><dt class="font-medium">Co-Location Report</dt><dd class="text-slate-600 mt-1">2020-21 (latest published; DOE has retired the series) · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/d/ugqd-j3dx">ugqd-j3dx</a> · Maps each school to one or more building IDs; powers the "Co-located" list on every school page.</dd></div>
+    <div><dt class="font-medium">Guidance Counselor &amp; Social Worker staffing</dt><dd class="text-slate-600 mt-1">2025-26 (mid-year reporting) · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://infohub.nyced.org/reports/government-reports/guidance-counselor-reporting">DOE InfoHub</a> · Per-school FTE counts and pupil-per-staff ratios. Updated annually.</dd></div>
+  </dl>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">NYSED School Report Card Database</h2>
+  <p class="text-sm text-slate-600 mb-4">
+    All accountability tables under "Spending &amp; staffing" / NYSED on school pages come
+    from the
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.nysed.gov/downloads.php">NYSED Report Card Database</a>,
+    a single Microsoft Access file the State publishes annually (~370 MB zipped). Loader is
+    the <code>nysed_src</code> module on our
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nycschools/tree/nysed-src-loader">nycschools fork branch</a>.
+  </p>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    <div><dt class="font-medium">ESSA accountability status</dt><dd class="text-slate-600 mt-1">2025 release · School-level overall tier (Local Support, TSI, ATSI, CSI), plus by-subgroup breakdown.</dd></div>
+    <div><dt class="font-medium">Chronic absenteeism</dt><dd class="text-slate-600 mt-1">2025 release · % students absent ≥10% of enrolled days, by subgroup, EM + HS.</dd></div>
+    <div><dt class="font-medium">Per-pupil expenditures</dt><dd class="text-slate-600 mt-1">2025 release · Federal + state-local + combined per-pupil dollars.</dd></div>
+    <div><dt class="font-medium">Teacher quality</dt><dd class="text-slate-600 mt-1">2025 release · % inexperienced teachers, % inexperienced principals, % out of certification.</dd></div>
+    <div><dt class="font-medium">HS graduation rate</dt><dd class="text-slate-600 mt-1">2025 release · 4-year / 5-year / 6-year cohort rates by subgroup.</dd></div>
+    <div><dt class="font-medium">College/Career/Civic Readiness</dt><dd class="text-slate-600 mt-1">2025 release · HS accountability index weighting graduates by credential earned.</dd></div>
+  </dl>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Other boundaries &amp; geocoding</h2>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    <div><dt class="font-medium">2010 NTA polygons</dt><dd class="text-slate-600 mt-1">2010 vintage · Pulled from a <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/nycehs/NYC_geography">community mirror</a> — NYC retired the 2010 NTA dataset from Open Data when the 2020 NTA spec shipped, but our school-location data still uses 2010-era NTA names, so we need the 2010 polygons to draw the neighborhood pages.</dd></div>
+    <div><dt class="font-medium">NYC GeoSearch (runtime)</dt><dd class="text-slate-600 mt-1">Current · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://geosearch.planninglabs.nyc.gov">geosearch.planninglabs.nyc.gov</a> · NYC Planning Labs' address geocoder, called at runtime when a user submits an address to <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/find">/find</a>.</dd></div>
+  </dl>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">A note on years</h2>
+  <p class="text-sm text-slate-600">
+    NYC and NYSED publish each dataset on its own cadence. Some are current to the month
+    (the staffing report is mid-2025-26), some are years stale (the DOE per-school portal scrape
+    is roughly 2016). We don't try to harmonize: the most recent year available for each
+    source is what we use, and the year is always listed alongside the data — on this page,
+    on individual school pages (in the small "provenance" caption under each section), and
+    on neighborhood pages.
+  </p>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Source code</h2>
+  <p class="text-sm text-slate-600">
+    This site is open source under
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a>
+    — the same license as the upstream <code>nycschools</code> package.
+    Per AGPL §13, the corresponding source for every page you can see lives at
+    <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nyc-schools-agentic">github.com/kleinmatic/nyc-schools-agentic</a>.
+    The MCP server at <code>/mcp/</code> exposes the same service-layer functions to agents.
+  </p>
+</section>
+{% endblock %}
