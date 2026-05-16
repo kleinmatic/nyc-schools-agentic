@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="mb-8">
-  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← back to search</a>
   <h1 class="display-headline mt-4">Data Sources</h1>
   <p class="display-deck">
     Every dataset behind this site, with the year it's from and a link to the original source.
@@ -50,14 +50,14 @@
     <div><dt class="font-medium">ES attendance zones</dt><dd class="text-slate-600 mt-1">2024-25 · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/api/geospatial/cmjf-yawu?method=export&amp;format=GeoJSON">cmjf-yawu</a> · Elementary school zone polygons for the address-based "where is this kid zoned?" lookup.</dd></div>
     <div><dt class="font-medium">MS attendance zones</dt><dd class="text-slate-600 mt-1">2024-25 · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/api/geospatial/t26j-jbq7?method=export&amp;format=GeoJSON">t26j-jbq7</a> · Middle school zone polygons. Districts 1, 7, 15 use choice-based admissions so they have no MS zones.</dd></div>
     <div><dt class="font-medium">Co-Location Report</dt><dd class="text-slate-600 mt-1">2020-21 (latest published; DOE has retired the series) · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.cityofnewyork.us/d/ugqd-j3dx">ugqd-j3dx</a> · Maps each school to one or more building IDs; powers the "Co-located" list on every school page.</dd></div>
-    <div><dt class="font-medium">Guidance Counselor &amp; Social Worker staffing</dt><dd class="text-slate-600 mt-1">2025-26 (mid-year reporting) · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://infohub.nyced.org/reports/government-reports/guidance-counselor-reporting">DOE InfoHub</a> · Per-school FTE counts and pupil-per-staff ratios. Updated annually.</dd></div>
+    <div><dt class="font-medium">Guidance Counselor & Social Worker staffing</dt><dd class="text-slate-600 mt-1">2025-26 (mid-year reporting) · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://infohub.nyced.org/reports/government-reports/guidance-counselor-reporting">DOE InfoHub</a> · Per-school FTE counts and pupil-per-staff ratios. Updated annually.</dd></div>
   </dl>
 </section>
 
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">NYSED School Report Card Database</h2>
   <p class="text-sm text-slate-600 mb-4">
-    All accountability tables under "Spending &amp; staffing" / NYSED on school pages come
+    All accountability tables under "Spending & staffing" / NYSED on school pages come
     from the
     <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.nysed.gov/downloads.php">NYSED Report Card Database</a>,
     a single Microsoft Access file the State publishes annually (~370 MB zipped). Loader is
@@ -75,7 +75,7 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Other Boundaries &amp; Geocoding</h2>
+  <h2 class="text-lg font-semibold mb-3">Other Boundaries & Geocoding</h2>
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     <div><dt class="font-medium">2010 NTA polygons</dt><dd class="text-slate-600 mt-1">2010 vintage · Pulled from a <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/nycehs/NYC_geography">community mirror</a> — NYC retired the 2010 NTA dataset from Open Data when the 2020 NTA spec shipped, but our school-location data still uses 2010-era NTA names, so we need the 2010 polygons to draw the neighborhood pages.</dd></div>
     <div><dt class="font-medium">NYC GeoSearch (runtime)</dt><dd class="text-slate-600 mt-1">Current · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://geosearch.planninglabs.nyc.gov">geosearch.planninglabs.nyc.gov</a> · NYC Planning Labs' address geocoder, called at runtime when a user submits an address to <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/find">/find</a>.</dd></div>

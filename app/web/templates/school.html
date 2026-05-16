@@ -34,7 +34,7 @@
     <div class="font-medium leading-tight text-slate-900">{{ extreme.school_name|pretty }}</div>
     <div class="font-mono text-[11px] text-slate-500 mt-0.5">{{ extreme.dbn }}</div>
     <div class="text-amber-600 font-serif text-2xl mt-2 leading-none">{{ extreme.value_display }}</div>
-    <div class="text-[10px] text-blue-600 mt-3">View school &rarr;</div>
+    <div class="text-[10px] text-blue-600 mt-3">View school →</div>
   </a>
 </div>
 {% endmacro %}
@@ -199,7 +199,7 @@
 {% set latest_demo = school.demographics_by_year[-1] if school.demographics_by_year else none %}
 
 <div class="mb-8">
-  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← back to search</a>
   <h1 class="text-3xl font-semibold mt-2">{{ s.school_name|pretty }}</h1>
   <div class="text-sm text-slate-500 mt-2">
     {{ term("DBN", "District-Borough-Number — NYC's primary key for schools, formatted as <district><borough letter><school number>. Borough letters: M Manhattan, X Bronx, K Brooklyn, Q Queens, R Staten Island.") }}: <span class="font-mono">{{ s.dbn }}</span>
@@ -214,7 +214,7 @@
     <a href="https://insideschools.org/school/{{ s.dbn }}" target="_blank" rel="noopener"
        class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 underline decoration-blue-200 hover:decoration-blue-600 underline-offset-2">
       View on InsideSchools.org
-      <span class="text-xs">&#8599;</span>
+      <span class="text-xs">↗</span>
     </a>
   </div>
 </div>
@@ -275,10 +275,10 @@
 {% if school.staffing %}
 {% set st = school.staffing %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Counseling &amp; Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Counseling & Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
   {{ provenance(
     ["staffing"],
-    "NYC DOE InfoHub annual Guidance Counselor &amp; Social Worker report. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
+    "NYC DOE InfoHub annual Guidance Counselor & Social Worker report. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
   ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if st.total_gc is not none %}<div>{{ card_label(term("GC", "Guidance counselor — supports students academically, socially, and emotionally. NYC DOE staffs these as full-time, part-time, bilingual, and various specialized roles (high needs, bridging the gap, etc.)") ~ " FTE") }}{{ card_value("%.1f"|format(st.total_gc)) }}</div>{% endif %}
@@ -462,7 +462,7 @@
 {# ---------- Location ---------- #}
 {% if loc %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Location &amp; Neighborhood</h2>
+  <h2 class="text-lg font-semibold mb-3">Location & Neighborhood</h2>
   {{ provenance(
     ["school_locations.geojson"],
     "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
@@ -562,7 +562,7 @@
 {# ---------- NYSED expenditures + teacher quality ---------- #}
 {% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Spending &amp; Staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Spending & Staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-expenditures-per-pupil.feather", "nysed-src-2025-inexperienced-teachers-and-principals.feather", "nysed-src-2025-teachers-teaching-out-of-certification.feather"],
     "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area."
@@ -597,7 +597,7 @@
     {% endif %}
     {% if ny.teacher_quality or ny.out_of_cert %}
     <div class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
-      <h3 class="font-medium mb-3">Teacher &amp; principal experience</h3>
+      <h3 class="font-medium mb-3">Teacher & principal experience</h3>
       <table class="min-w-full text-sm">
         <thead class="text-xs uppercase tracking-wide text-slate-500">
           <tr>
@@ -876,7 +876,7 @@
 {# ---------- SHSAT ---------- #}
 {% if school.shsat %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} Applicants &amp; Offers</h2>
+  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} Applicants & Offers</h2>
   {{ provenance(
     ["shsat-applicants.csv"],
     "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2."

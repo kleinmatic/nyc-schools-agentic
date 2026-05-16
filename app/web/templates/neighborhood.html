@@ -45,7 +45,7 @@
 
 {% block content %}
 <div class="mb-8">
-  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← back to search</a>
   <h1 class="text-3xl font-semibold mt-2">{{ nbh.nta_name|pretty }}</h1>
   <div class="text-sm text-slate-600 mt-1">
     {% if nbh.boro %}{{ nbh.boro }} · {% endif %}{{ nbh.n_schools }} schools
@@ -113,8 +113,8 @@
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
     subdomains: "abcd", maxZoom: 20,
     attribution:
-      '&copy; <a href="https://openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors ' +
-      '&copy; <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
+      '© <a href="https://openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors ' +
+      '© <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
   }).addTo(map);
 
   // Each layer in its own try/catch — one broken polygon shouldn't kill the
