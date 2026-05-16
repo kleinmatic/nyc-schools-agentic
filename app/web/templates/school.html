@@ -4,9 +4,12 @@
 
 {% macro card_label(label) %}<dt class="text-xs text-slate-500 uppercase tracking-wide">{{ label|safe }}</dt>{% endmacro %}
 {% macro card_value(value) %}<dd class="text-lg font-medium">{{ value }}</dd>{% endmacro %}
-{% macro pct(v) %}{% if v is not none %}{{ "%.1f"|format(v * 100) }}%{% else %}N/A{% endif %}{% endmacro %}
-{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}N/A{% endif %}{% endmacro %}
-{% macro money(v) %}{% if v is not none %}${{ "{:,.0f}".format(v) }}{% else %}N/A{% endif %}{% endmacro %}
+{# Missing-value placeholders are wrapped in slate-300 so they recede when
+   you're scanning a column of real numbers — readable on demand, ignorable
+   at a glance. Macros return Markup so the <span> isn't escaped. #}
+{% macro pct(v) %}{% if v is not none %}{{ "%.1f"|format(v * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}{% endmacro %}
+{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}{% endmacro %}
+{% macro money(v) %}{% if v is not none %}${{ "{:,.0f}".format(v) }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}{% endmacro %}
 {% macro chip(label, value) %}
 {% if value %}<div class="inline-flex flex-col gap-0.5 mr-4 mb-3"><span class="text-xs text-slate-500 uppercase tracking-wide">{{ label }}</span><span class="text-sm">{{ value }}</span></div>{% endif %}
 {% endmacro %}
@@ -232,7 +235,7 @@
       <div>{{ card_label("Year") }}{{ card_value(latest_demo.ay ~ "-" ~ "%02d"|format((latest_demo.ay+1) % 100)) }}</div>
       <div>{{ card_label("Enrollment") }}{{ card_value(num(latest_demo.total_enrollment)) }}</div>
       <div>{{ card_label("Poverty") }}{{ card_value(pct(latest_demo.poverty_pct)) }}</div>
-      <div>{{ card_label(term("ENI", "Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale; 1 = highest need. Computed from students living in temporary housing, eligible for HRA/SNAP, or in low-income census tracts.")) }}{{ card_value("%.2f"|format(latest_demo.eni) if latest_demo.eni is not none else "N/A") }}</div>
+      <div>{{ card_label(term("ENI", "Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale; 1 = highest need. Computed from students living in temporary housing, eligible for HRA/SNAP, or in low-income census tracts.")) }}{% if latest_demo.eni is not none %}{{ card_value("%.2f"|format(latest_demo.eni)) }}{% else %}{{ card_value('<span class="text-slate-300">N/A</span>'|safe) }}{% endif %}</div>
       <div>{{ card_label(term("ELL", "English Language Learner — students whose home language isn't English and who score below proficient on a NYS English-proficiency screener.")) }}{{ card_value(pct(latest_demo.ell_pct)) }}</div>
       <div>{{ card_label(term("SWD", "Students With Disabilities — students with an Individualized Education Program (IEP) receiving special-education services.")) }}{{ card_value(pct(latest_demo.swd_pct)) }}</div>
     {% endif %}
@@ -276,10 +279,10 @@
 {% if school.staffing %}
 {% set st = school.staffing %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Counseling & Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Counseling & Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }} mid-year)</h2>
   {{ provenance(
     ["staffing"],
-    "NYC DOE InfoHub annual Guidance Counselor & Social Worker report. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
+    "NYC DOE InfoHub annual Guidance Counselor & Social Worker report. Mid-year reporting: this is the " ~ st.ay ~ "-" ~ "%02d"|format((st.ay + 1) % 100) ~ " snapshot published in Feb " ~ (st.ay + 1) ~ ", not a full-year average. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
   ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if st.total_gc is not none %}<div>{{ card_label(term("GC", "Guidance counselor — supports students academically, socially, and emotionally. NYC DOE staffs these as full-time, part-time, bilingual, and various specialized roles (high needs, bridging the gap, etc.)") ~ " FTE") }}{{ card_value("%.1f"|format(st.total_gc)) }}</div>{% endif %}
@@ -616,7 +619,7 @@
             <td class="py-1 font-mono text-xs">{{ tq.year }}</td>
             <td class="py-1 text-right">{{ num(tq.num_teachers) }}</td>
             <td class="py-1 text-right">{{ pct(tq.pct_inexp_teachers) }}</td>
-            <td class="py-1 text-right">{{ pct(oc.pct_out_of_cert) if oc else "N/A" }}</td>
+            <td class="py-1 text-right">{% if oc %}{{ pct(oc.pct_out_of_cert) }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
             <td class="py-1 text-right">{{ pct(tq.pct_inexp_principals) }}</td>
           </tr>
           {% endfor %}
@@ -712,8 +715,8 @@
         {% for r in school.class_size %}
         <tr>
           <td class="px-4 py-2">{{ r.grade }}</td>
-          <td class="px-4 py-2">{{ r.program_type or "N/A" }}</td>
-          <td class="px-4 py-2">{{ r.subject or "N/A" }}</td>
+          <td class="px-4 py-2">{% if r.program_type %}{{ r.program_type }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+          <td class="px-4 py-2">{% if r.subject %}{{ r.subject }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
           <td class="px-4 py-2 text-right">{{ num(r.students_n) }}</td>
           <td class="px-4 py-2 text-right">{{ num(r.classes_n) }}</td>
           <td class="px-4 py-2 text-right">{% if r.avg_class_size is not none %}{{ "%.1f"|format(r.avg_class_size) }}{% else %}—{% endif %}</td>
@@ -972,7 +975,7 @@
           <td class="px-4 py-2">{{ r.subgroup }}</td>
           <td class="px-4 py-2 text-right">{{ num(r.cohort_size) }}</td>
           <td class="px-4 py-2 text-right">{% if r.index_score is not none %}{{ "%.1f"|format(r.index_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ r.level if r.level is not none else "N/A" }}</td>
+          <td class="px-4 py-2 text-right">{% if r.level is not none %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -1005,7 +1008,7 @@
         {% for r in ny.chronic_absenteeism %}
         <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
           <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
-          <td class="px-4 py-2 text-xs">{{ r.level or "N/A" }}</td>
+          <td class="px-4 py-2 text-xs">{% if r.level %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
           <td class="px-4 py-2">{{ r.subgroup }}</td>
           <td class="px-4 py-2 text-right">{{ num(r.enrollment) }}</td>
           <td class="px-4 py-2 text-right">{{ num(r.absent_count) }}</td>

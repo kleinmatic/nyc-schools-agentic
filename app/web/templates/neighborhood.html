@@ -13,7 +13,7 @@
 
 {# Format helpers — pct returns "83.4%", currency "$12,345", ratio "12.34". #}
 {% macro fmt(value, kind) %}
-{%- if value is none -%}N/A
+{%- if value is none -%}<span class="text-slate-300">N/A</span>
 {%- elif kind == "pct" -%}{{ "%.1f"|format(value * 100) }}%
 {%- elif kind == "currency" -%}${{ "{:,.0f}".format(value) }}
 {%- elif kind == "ratio" -%}{{ "%.2f"|format(value) }}
@@ -21,7 +21,7 @@
 {%- endif -%}
 {% endmacro %}
 
-{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}N/A{% endif %}{% endmacro %}
+{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}{% endmacro %}
 
 {# Peer-marker card — adapted from the school page. Triangle on a HIGH ←→
    LOW number line; rank #1 = highest value sits on the right. #}
@@ -66,7 +66,7 @@
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">How This Neighborhood Compares</h2>
   <p class="text-xs text-slate-500 mb-4">
-    Each card shows this neighborhood's average for a metric and its rank among NYC's NTAs (Neighborhood Tabulation Areas) that have at least 5 contributing schools. Triangle position runs HIGH (right) to LOW (left); rank #1 = highest value.
+    Each card shows this neighborhood's average for a metric and its rank among NYC's NTAs (Neighborhood Tabulation Areas) that have at least 5 contributing schools. Triangle position runs HIGH (right) to LOW (left); rank #1 = highest value. Each metric uses its own latest available year — vintages vary across metrics (e.g. demographics through 2024-25, 3-8 state tests through 2021-22, attendance from the DOE snapshot circa 2016).
   </p>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for r in nbh.peer_ranks %}
@@ -206,7 +206,7 @@
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">School-by-School</h2>
   <p class="text-xs text-slate-500 mb-4">
-    Latest-year headline metrics per school. ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "N/A" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
+    Latest-year headline metrics per school. Each metric uses its own latest available year — vintages vary (e.g. demographics through 2024-25, 3-8 state tests through 2021-22, attendance from the DOE snapshot circa 2016). ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "N/A" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
   </p>
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     {# Sortable: click any header. Each <td> carries data-sort-value with the
@@ -230,7 +230,7 @@
             <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name|pretty }}</a>
             <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
           </td>
-          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ (s.school_level|level) or "N/A" }}</td>
+          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{% if s.school_level %}{{ s.school_level|level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
           <td class="px-4 py-2 text-right" data-sort-value="{{ s.total_enrollment if s.total_enrollment is not none else '' }}">{{ num(s.total_enrollment) }}</td>
           {% for m in nbh.metric_names %}
             <td class="px-4 py-2 text-right" data-sort-value="{{ s.metrics.get(m) if s.metrics.get(m) is not none else '' }}">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>
