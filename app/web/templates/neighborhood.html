@@ -13,7 +13,7 @@
 
 {# Format helpers — pct returns "83.4%", currency "$12,345", ratio "12.34". #}
 {% macro fmt(value, kind) %}
-{%- if value is none -%}—
+{%- if value is none -%}N/A
 {%- elif kind == "pct" -%}{{ "%.1f"|format(value * 100) }}%
 {%- elif kind == "currency" -%}${{ "{:,.0f}".format(value) }}
 {%- elif kind == "ratio" -%}{{ "%.2f"|format(value) }}
@@ -21,7 +21,7 @@
 {%- endif -%}
 {% endmacro %}
 
-{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}—{% endif %}{% endmacro %}
+{% macro num(v) %}{% if v is not none %}{{ "{:,}".format(v) }}{% else %}N/A{% endif %}{% endmacro %}
 
 {# Peer-marker card — adapted from the school page. Triangle on a HIGH ←→
    LOW number line; rank #1 = highest value sits on the right. #}
@@ -149,7 +149,7 @@
     "6-12":       "6-12",
     "K-12":       "K-12",
   };
-  const displayLevel = lvl => lvl ? (levelLabels[lvl] || lvl) : "—";
+  const displayLevel = lvl => lvl ? (levelLabels[lvl] || lvl) : "N/A";
   const escapeHtml = s => String(s).replace(/[&<>"']/g, c => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
@@ -206,7 +206,7 @@
 <section class="mb-10">
   <h2 class="text-lg font-semibold mb-3">School-by-School</h2>
   <p class="text-xs text-slate-500 mb-4">
-    Latest-year headline metrics per school. ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "—" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
+    Latest-year headline metrics per school. ELA / math = 3-8 state tests (apply to elementary, middle, K-8). Regents ≥65 = HS passing rate. "N/A" means the metric doesn't apply at this school's grade band, or the school had no contributing data.
   </p>
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     {# Sortable: click any header. Each <td> carries data-sort-value with the
@@ -230,7 +230,7 @@
             <a href="/school/{{ s.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ s.school_name|pretty }}</a>
             <span class="font-mono text-[11px] text-slate-400 ml-1">{{ s.dbn }}</span>
           </td>
-          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ (s.school_level|level) or "—" }}</td>
+          <td class="px-4 py-2 text-slate-600" data-sort-value="{{ s.school_level or '' }}">{{ (s.school_level|level) or "N/A" }}</td>
           <td class="px-4 py-2 text-right" data-sort-value="{{ s.total_enrollment if s.total_enrollment is not none else '' }}">{{ num(s.total_enrollment) }}</td>
           {% for m in nbh.metric_names %}
             <td class="px-4 py-2 text-right" data-sort-value="{{ s.metrics.get(m) if s.metrics.get(m) is not none else '' }}">{{ fmt(s.metrics.get(m), nbh.metric_formats[m]) }}</td>
