@@ -271,6 +271,27 @@
 </section>
 {% endif %}
 
+{# ---------- Counseling + support staff ---------- #}
+{% if school.staffing %}
+{% set st = school.staffing %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Counseling &amp; support staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
+  {{ provenance(
+    ["staffing"],
+    "NYC DOE InfoHub annual Guidance Counselor &amp; Social Worker report. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
+  ) }}
+  <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
+    {% if st.total_gc is not none %}<div>{{ card_label(term("GC", "Guidance counselor — supports students academically, socially, and emotionally. NYC DOE staffs these as full-time, part-time, bilingual, and various specialized roles (high needs, bridging the gap, etc.)") ~ " FTE") }}{{ card_value("%.1f"|format(st.total_gc)) }}</div>{% endif %}
+    {% if st.total_sw is not none %}<div>{{ card_label(term("SW", "Social worker — provides mental health and crisis intervention support. Like guidance counselors, FTE-based.") ~ " FTE") }}{{ card_value("%.1f"|format(st.total_sw)) }}</div>{% endif %}
+    {% if st.ratio_gc_only is not none %}<div>{{ card_label("Pupils per GC") }}{{ card_value("%.0f"|format(st.ratio_gc_only)) }}</div>{% endif %}
+    {% if st.ratio_sw_only is not none %}<div>{{ card_label("Pupils per SW") }}{{ card_value("%.0f"|format(st.ratio_sw_only)) }}</div>{% endif %}
+    {% if st.ratio_gc_sw is not none %}<div>{{ card_label("Pupils per GC + SW") }}{{ card_value("%.0f"|format(st.ratio_gc_sw)) }}</div>{% endif %}
+    {% if st.school_psychologist_mandated %}<div>{{ card_label("School psychologist") }}{{ card_value(st.school_psychologist_mandated) }}</div>{% endif %}
+    {% if st.cbo_partner_mental_health %}<div class="sm:col-span-2 lg:col-span-2">{{ card_label("CBO partner") }}{{ card_value(st.cbo_partner_mental_health) }}</div>{% endif %}
+  </dl>
+</section>
+{% endif %}
+
 {# ---------- HS directory overview ---------- #}
 {% if hs %}
 <section class="mb-10">

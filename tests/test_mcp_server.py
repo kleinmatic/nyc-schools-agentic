@@ -32,6 +32,8 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "school_peers",
         "schools_in_neighborhood",
         "get_neighborhood",
+        "school_staffing",
+        "co_located_schools",
     }
 
 
@@ -226,6 +228,24 @@ async def test_get_neighborhood_tool_returns_full_report(mcp_client):
     # Boundary is a GeoJSON Polygon for mapping.
     assert r.data.boundary is not None
     assert r.data.boundary["type"] == "Polygon"
+
+
+async def test_school_staffing_tool_returns_fte_counts(mcp_client):
+    r = await mcp_client.call_tool("school_staffing", {"dbn": "75K372"})
+    assert r.data is not None
+    # PS 372 had 1.0 GC + 1.3 SW per 2025-26 reporting; shape check only,
+    # not the exact numbers (data refreshes annually).
+    assert r.data.total_gc is not None
+    assert r.data.total_sw is not None
+    assert r.data.ay > 2020
+
+
+async def test_co_located_schools_tool_returns_building_mates(mcp_client):
+    """PS 372 shares building K113 with M.S. 113 per the 2020-21 report."""
+    r = await mcp_client.call_tool("co_located_schools", {"dbn": "75K372"})
+    assert r.data
+    names = {s.school_name for s in r.data}
+    assert any("M.S. 113" in n for n in names), f"got {names}"
 
 
 async def test_get_neighborhood_tool_unknown_query_returns_none(mcp_client):

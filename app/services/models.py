@@ -489,6 +489,27 @@ class ZonedSearchResult(BaseModel):
     ms_district: Optional[int] = None
 
 
+class StaffingInfo(BaseModel):
+    """One school's Guidance Counselor + Social Worker FTE breakdown for
+    one academic year. Source: NYC DOE InfoHub Guidance Counselor &
+    Social Worker Report. Ratios are DOE-computed using same-year
+    enrollment; the ASCA recommends 250:1."""
+    ay: int
+    total_gc: Optional[float] = None        # FTE
+    total_sw: Optional[float] = None        # FTE
+    total_gc_sw: Optional[float] = None     # FTE, incl. assistant roles
+    full_time_gc: Optional[float] = None
+    full_time_sw: Optional[float] = None
+    part_time_gc: Optional[float] = None
+    part_time_sw: Optional[float] = None
+    enrollment: Optional[int] = None        # same-year enrollment used by DOE for ratios
+    ratio_gc_sw: Optional[float] = None     # pupils per combined GC+SW FTE
+    ratio_gc_only: Optional[float] = None
+    ratio_sw_only: Optional[float] = None
+    school_psychologist_mandated: Optional[str] = None
+    cbo_partner_mental_health: Optional[str] = None
+
+
 class CoLocatedSchool(BaseModel):
     """A school that shares a building with the focal school. NYC DOE
     publishes the building-ID mapping in its Co-Location Reports —
@@ -504,6 +525,7 @@ class SchoolDetail(BaseModel):
     snapshot: Optional[SnapshotInfo] = None
     location: Optional[LocationInfo] = None
     co_located: list[CoLocatedSchool] = []
+    staffing: Optional[StaffingInfo] = None
     ela: list[ExamRow] = []
     math: list[ExamRow] = []
     regents: list[RegentsRow] = []

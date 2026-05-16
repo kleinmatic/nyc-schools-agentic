@@ -26,6 +26,7 @@ class DataStore:
     regents: pd.DataFrame
     class_size: pd.DataFrame
     ptr: pd.DataFrame
+    staffing: pd.DataFrame
     locations: gpd.GeoDataFrame
     shsat: pd.DataFrame
     budgets: pd.DataFrame
@@ -59,7 +60,7 @@ def is_loaded() -> bool:
 
 _TABLES = (
     "demographics", "snapshots", "exams_ela", "exams_math", "regents",
-    "class_size", "ptr", "shsat", "budgets",
+    "class_size", "ptr", "shsat", "budgets", "staffing",
     "nysed_essa_status", "nysed_essa_subgroup", "nysed_chronic",
     "nysed_expenditures", "nysed_inexp_teachers", "nysed_out_of_cert",
     "nysed_hs_grad", "nysed_hs_cccr",
@@ -90,6 +91,7 @@ def load() -> DataStore:
         regents=tables["regents"],
         class_size=tables["class_size"],
         ptr=tables["ptr"],
+        staffing=tables["staffing"],
         locations=gpd.read_file(cdd / "school-locations.geojson"),
         shsat=tables["shsat"],
         budgets=tables["budgets"],
@@ -117,7 +119,7 @@ def summary() -> str:
         f"demo={len(_store.demographics):,} snap={len(_store.snapshots):,} "
         f"ela={len(_store.ela):,} math={len(_store.math):,} reg={len(_store.regents):,} "
         f"cs={len(_store.class_size):,} ptr={len(_store.ptr):,} loc={len(_store.locations):,} "
-        f"shsat={len(_store.shsat):,} budgets={len(_store.budgets):,} hs_dir={len(_store.hs_directory):,} "
+        f"shsat={len(_store.shsat):,} budgets={len(_store.budgets):,} staffing={len(_store.staffing):,} hs_dir={len(_store.hs_directory):,} "
         f"nysed: essa={len(_store.nysed_essa_status):,} essa_sg={len(_store.nysed_essa_subgroup):,} "
         f"chronic={len(_store.nysed_chronic):,} exp={len(_store.nysed_expenditures):,} "
         f"inexp={len(_store.nysed_inexp_teachers):,} oct={len(_store.nysed_out_of_cert):,} "

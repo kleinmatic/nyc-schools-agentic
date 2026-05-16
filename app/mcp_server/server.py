@@ -21,6 +21,7 @@ from ..services.analytics import (
 )
 from ..services.models import (
     BoroughGrid,
+    CoLocatedSchool,
     GeocodingResult,
     HsListing,
     MetricRow,
@@ -31,9 +32,12 @@ from ..services.models import (
     RankedSchool,
     SchoolDetail,
     SchoolSummary,
+    StaffingInfo,
     ZonedSearchResult,
 )
+from ..services.schools import co_located_schools as _co_located_schools
 from ..services.schools import get_school as _get_school
+from ..services.schools import school_staffing as _school_staffing
 from ..services.schools import search_schools as _search_schools
 from ..services.zoning import find_zoned_schools as _find_zoned_schools
 from ..services.zoning import geocode as _geocode
@@ -316,6 +320,41 @@ def get_neighborhood(
     threshold, or when no schools live in the matched NTA at the
     requested level."""
     return _get_neighborhood(query=query, level=level)
+
+
+@mcp.tool
+def school_staffing(dbn: str) -> Optional[StaffingInfo]:
+    """Counseling + social-work staffing for one school: FTE counts and
+    pupils-per-staff ratios.
+
+    Source: NYC DOE InfoHub annual Guidance Counselor & Social Worker
+    report (most recent year on file). Returns FTE counts for the two
+    main roles (GC, SW) plus full-time/part-time breakdowns, plus
+    DOE-computed ratios using same-year enrollment. The American School
+    Counselor Association recommends 250:1 — useful as a benchmark.
+
+    Also returns the school psychologist + CBO partner fields for
+    completeness when the user asks about mental-health resources.
+
+    Returns None if the school isn't in the report (newly opened, etc.)."""
+    return _school_staffing(dbn)
+
+
+@mcp.tool
+def co_located_schools(dbn: str) -> list[CoLocatedSchool]:
+    """Schools sharing a building with the given school.
+
+    Source: NYC DOE 2020-21 Co-Location Report (latest published). Each
+    school's "building IDs" (e.g. K113, K834) identify the physical
+    buildings it occupies; schools with overlapping IDs share that
+    building. Co-locations rarely shift year-over-year, so the 2020-21
+    snapshot is still informative.
+
+    Use for "what other schools are in this building" and as context
+    for shared-space dynamics (PS/MS co-occupations, charter+district
+    splits, etc.). Empty list if the school isn't in the report or
+    occupies its building alone."""
+    return _co_located_schools(dbn)
 
 
 @mcp.tool

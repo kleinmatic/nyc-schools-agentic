@@ -23,7 +23,7 @@ DATA_DIR = REPO_ROOT / "school-data"
 DATA_DIR.mkdir(exist_ok=True)
 os.environ["NYC_SCHOOLS_DATA_DIR"] = str(DATA_DIR)
 
-from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat, nysed_src
+from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat, nysed_src, staffing
 
 
 def fetch_hs_directory(ay: int = 2021):
@@ -74,6 +74,19 @@ def fetch_zone_polygons(level: str, year: int = 2024):
 NTA_2010_URL = "https://raw.githubusercontent.com/nycehs/NYC_geography/master/NTA.geo.json"
 
 
+def fetch_staffing(ay: int = 2025):
+    """Pull DOE Guidance Counselor + Social Worker FTE counts for the
+    given AY; persist as feather under school-data/. URL/format changes
+    annually — upstream `nycschools.staffing` knows the URL table."""
+    cache_path = DATA_DIR / f"staffing-{ay}.feather"
+    if cache_path.exists():
+        import pandas as pd
+        return pd.read_feather(cache_path)
+    df = staffing.load_staffing(ay=ay)
+    df.reset_index(drop=True).to_feather(cache_path)
+    return df
+
+
 def fetch_nta_polygons():
     """Pull the 2010 NTA boundary GeoJSON if not already cached."""
     import requests
@@ -104,6 +117,7 @@ LOADERS = [
     ("es_zones_2024", lambda: fetch_zone_polygons("es", 2024)),
     ("ms_zones_2024", lambda: fetch_zone_polygons("ms", 2024)),
     ("nta_2010", fetch_nta_polygons),
+    ("staffing_2025", lambda: fetch_staffing(2025)),
 ]
 
 failures = []

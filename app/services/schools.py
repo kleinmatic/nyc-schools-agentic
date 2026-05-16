@@ -36,6 +36,7 @@ from .models import (
     SchoolSummary,
     ShsatYear,
     SnapshotInfo,
+    StaffingInfo,
     SubgroupStatus,
     TeacherQualityYear,
 )
@@ -937,6 +938,32 @@ def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
     return out
 
 
+def _staffing_for(dbn: str) -> Optional[StaffingInfo]:
+    """Latest-year Guidance Counselor + Social Worker FTE counts plus
+    DOE-computed pupil ratios."""
+    df = data.get_store().staffing
+    rows = df[df["dbn"].str.upper() == dbn.upper()]
+    if rows.empty:
+        return None
+    latest = rows.sort_values("ay").iloc[-1]
+    return StaffingInfo(
+        ay=int(latest["ay"]),
+        total_gc=_opt_float(latest.get("total_gc")),
+        total_sw=_opt_float(latest.get("total_sw")),
+        total_gc_sw=_opt_float(latest.get("total_gc_sw")),
+        full_time_gc=_opt_float(latest.get("full_time_gc")),
+        full_time_sw=_opt_float(latest.get("full_time_sw")),
+        part_time_gc=_opt_float(latest.get("part_time_gc")),
+        part_time_sw=_opt_float(latest.get("part_time_sw")),
+        enrollment=_opt_int(latest.get("enrollment")),
+        ratio_gc_sw=_opt_float(latest.get("ratio_gc_sw")),
+        ratio_gc_only=_opt_float(latest.get("ratio_gc_only")),
+        ratio_sw_only=_opt_float(latest.get("ratio_sw_only")),
+        school_psychologist_mandated=_opt_str(latest.get("school_psychologist_mandated")),
+        cbo_partner_mental_health=_opt_str(latest.get("cbo_partner_mental_health")),
+    )
+
+
 def _co_located_for(dbn: str) -> list[CoLocatedSchool]:
     """Schools sharing a building with `dbn`. NYC DOE's Co-Location Reports
     list each school's building IDs (e.g. PS 372 occupies K113 + K834).
@@ -972,6 +999,18 @@ def _co_located_for(dbn: str) -> list[CoLocatedSchool]:
 
 # ----- top-level -----
 
+def school_staffing(dbn: str) -> Optional[StaffingInfo]:
+    """Guidance Counselor + Social Worker FTE breakdown + pupil ratios for
+    a single school. Latest year on file. Returns None if no row matches."""
+    return _staffing_for(dbn)
+
+
+def co_located_schools(dbn: str) -> list[CoLocatedSchool]:
+    """Schools sharing a building with `dbn`. Empty list if none or if
+    the school isn't in the DOE Co-Location Report."""
+    return _co_located_for(dbn)
+
+
 def get_school(dbn: str) -> Optional[SchoolDetail]:
     """Return the full report card for a DBN, or None if not found.
 
@@ -994,6 +1033,7 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         snapshot=_snapshot_for(dbn),
         location=_location_for(dbn),
         co_located=_co_located_for(dbn),
+        staffing=_staffing_for(dbn),
         ela=_exam_rows_for(dbn, store.ela),
         math=_exam_rows_for(dbn, store.math),
         regents=_regents_for(dbn),

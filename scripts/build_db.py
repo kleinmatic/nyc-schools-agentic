@@ -117,6 +117,29 @@ def build_ptr():
     return class_size.load_ptr()[["dbn", "ay", "ptr"]]
 
 
+def build_staffing(ay: int = 2025):
+    """GC + SW FTE counts plus DOE-computed pupil ratios. Reads the
+    feather built by scripts/fetch_data.py and coerces ratio columns to
+    numeric (the DOE spreadsheet leaves them as 'N/A' strings when a
+    school has zero of that staff type)."""
+    import pandas as pd
+    df = pd.read_feather(SOURCE / f"staffing-{ay}.feather")
+    keep = [
+        "dbn", "school_name", "location_type", "ay",
+        "total_gc", "total_sw", "total_gc_sw",
+        "full_time_gc", "full_time_sw", "part_time_gc", "part_time_sw",
+        "bilingual_gc", "bilingual_sw",
+        "school_psychologist_mandated", "cbo_partner_mental_health",
+        "enrollment", "ratio_gc_sw", "ratio_gc_only", "ratio_sw_only",
+    ]
+    df = df[[c for c in keep if c in df.columns]].copy()
+    # Coerce ratio columns to numeric — "N/A" strings become NaN.
+    for col in ("ratio_gc_sw", "ratio_gc_only", "ratio_sw_only", "enrollment"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
 def build_shsat():
     from nycschools import shsat
     df = shsat.load_admission_offers()
@@ -184,6 +207,7 @@ GEO_COPIES = [
     ("nyc-school-zones-es-2024.geojson", "school-zones-es.geojson"),
     ("nyc-school-zones-ms-2024.geojson", "school-zones-ms.geojson"),
     ("nyc-nta-2010.geojson", "nta-2010.geojson"),
+    ("nyc-co-location-2020-21.csv", "co-locations.csv"),
     ("hs-directory-2021.feather", "hs-directory.feather"),
 ]
 
@@ -202,6 +226,7 @@ INDEX_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_ptr_dbn ON ptr(dbn);",
     "CREATE INDEX IF NOT EXISTS idx_shsat_dbn ON shsat(dbn);",
     "CREATE INDEX IF NOT EXISTS idx_budgets_dbn ON budgets(dbn);",
+    "CREATE INDEX IF NOT EXISTS idx_staffing_dbn ON staffing(dbn);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_essa_cd ON nysed_essa_status(ENTITY_CD);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_essa_sg_cd ON nysed_essa_subgroup(ENTITY_CD);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_chronic_cd ON nysed_chronic(ENTITY_CD);",
@@ -228,6 +253,7 @@ def main():
         "ptr": build_ptr(),
         "shsat": build_shsat(),
         "budgets": build_budgets(),
+        "staffing": build_staffing(),
     }
 
     # NYSED tables (already NYC-filtered).
