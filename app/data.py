@@ -41,6 +41,7 @@ class DataStore:
     es_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
     ms_zones: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
     nta_polygons: gpd.GeoDataFrame = field(default_factory=lambda: gpd.GeoDataFrame())
+    co_locations: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 _store: Optional[DataStore] = None
@@ -104,6 +105,7 @@ def load() -> DataStore:
         es_zones=gpd.read_file(cdd / "school-zones-es.geojson"),
         ms_zones=gpd.read_file(cdd / "school-zones-ms.geojson"),
         nta_polygons=gpd.read_file(cdd / "nta-2010.geojson"),
+        co_locations=pd.read_csv(cdd / "co-locations.csv", dtype=str),
     )
     return _store
 
@@ -121,5 +123,5 @@ def summary() -> str:
         f"inexp={len(_store.nysed_inexp_teachers):,} oct={len(_store.nysed_out_of_cert):,} "
         f"grad={len(_store.nysed_hs_grad):,} cccr={len(_store.nysed_hs_cccr):,} "
         f"es_zones={len(_store.es_zones):,} ms_zones={len(_store.ms_zones):,} "
-        f"ntas={len(_store.nta_polygons):,}"
+        f"ntas={len(_store.nta_polygons):,} colocs={len(_store.co_locations):,}"
     )

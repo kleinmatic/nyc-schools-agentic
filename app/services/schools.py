@@ -17,6 +17,7 @@ from .models import (
     CccrRow,
     ChronicAbsenteeismRow,
     ClassSizeRow,
+    CoLocatedSchool,
     DemographicsYear,
     EssaStatus,
     ExamRow,
@@ -936,6 +937,39 @@ def _peer_ranks_for(dbn: str) -> dict[str, PeerRank]:
     return out
 
 
+def _co_located_for(dbn: str) -> list[CoLocatedSchool]:
+    """Schools sharing a building with `dbn`. NYC DOE's Co-Location Reports
+    list each school's building IDs (e.g. PS 372 occupies K113 + K834).
+    Schools with any overlapping building ID are co-located. Excludes the
+    focal school itself."""
+    df = data.get_store().co_locations
+    if df.empty:
+        return []
+    self_row = df[df["dbn"].str.upper() == dbn.upper()]
+    if self_row.empty:
+        return []
+    self_buildings = {
+        b.strip() for b in (self_row.iloc[0]["building_ids"] or "").split(",") if b.strip()
+    }
+    if not self_buildings:
+        return []
+    out: list[CoLocatedSchool] = []
+    for _, r in df.iterrows():
+        if r["dbn"].upper() == dbn.upper():
+            continue
+        peer_buildings = {
+            b.strip() for b in (r["building_ids"] or "").split(",") if b.strip()
+        }
+        shared = sorted(self_buildings & peer_buildings)
+        if shared:
+            out.append(CoLocatedSchool(
+                dbn=r["dbn"], school_name=r["school_name"],
+                building_ids=shared,
+            ))
+    out.sort(key=lambda s: s.school_name)
+    return out
+
+
 # ----- top-level -----
 
 def get_school(dbn: str) -> Optional[SchoolDetail]:
@@ -959,6 +993,7 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         demographics_by_year=_demographics_for(dbn),
         snapshot=_snapshot_for(dbn),
         location=_location_for(dbn),
+        co_located=_co_located_for(dbn),
         ela=_exam_rows_for(dbn, store.ela),
         math=_exam_rows_for(dbn, store.math),
         regents=_regents_for(dbn),

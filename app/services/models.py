@@ -489,11 +489,21 @@ class ZonedSearchResult(BaseModel):
     ms_district: Optional[int] = None
 
 
+class CoLocatedSchool(BaseModel):
+    """A school that shares a building with the focal school. NYC DOE
+    publishes the building-ID mapping in its Co-Location Reports —
+    schools sharing one or more building IDs co-occupy that building."""
+    dbn: str
+    school_name: str
+    building_ids: list[str] = []  # the shared building IDs (intersect with focal)
+
+
 class SchoolDetail(BaseModel):
     summary: SchoolSummary
     demographics_by_year: list[DemographicsYear]
     snapshot: Optional[SnapshotInfo] = None
     location: Optional[LocationInfo] = None
+    co_located: list[CoLocatedSchool] = []
     ela: list[ExamRow] = []
     math: list[ExamRow] = []
     regents: list[RegentsRow] = []

@@ -458,6 +458,12 @@
     {% if loc.latitude is not none and loc.longitude is not none %}
       <div><dt class="text-slate-500">Coordinates</dt><dd><a class="underline font-mono text-xs" href="https://www.openstreetmap.org/?mlat={{ loc.latitude }}&mlon={{ loc.longitude }}#map=17/{{ loc.latitude }}/{{ loc.longitude }}">{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</a></dd></div>
     {% endif %}
+    {% if school.co_located %}
+      <div class="sm:col-span-2"><dt class="text-slate-500">{{ term("Co-located", "Schools sharing one or more buildings with this school. NYC DOE assigns each building a code (e.g. K113); schools with overlapping codes share that physical building. Source: 2020-21 Co-Location Report (Open Data dataset ugqd-j3dx) — most recent year published.") }}</dt><dd>
+        {% for c in school.co_located %}<a href="/school/{{ c.dbn }}" class="text-blue-600 hover:text-blue-800 underline decoration-blue-200">{{ c.school_name|pretty }}</a> <span class="font-mono text-[11px] text-slate-400">{{ c.dbn }} · {{ c.building_ids|join(', ') }}</span>{% if not loop.last %},{% endif %}
+        {% endfor %}
+      </dd></div>
+    {% endif %}
   </dl>
 </section>
 {% endif %}
