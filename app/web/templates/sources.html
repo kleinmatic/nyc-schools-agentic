@@ -4,7 +4,7 @@
 {% block content %}
 <div class="mb-8">
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">&larr; back to search</a>
-  <h1 class="display-headline mt-4">Data sources</h1>
+  <h1 class="display-headline mt-4">Data Sources</h1>
   <p class="display-deck">
     Every dataset behind this site, with the year it's from and a link to the original source.
     Vintages don't line up across sources — NYC publishes each on its own cadence — so we list
@@ -41,7 +41,7 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Direct from NYC DOE / Open Data</h2>
+  <h2 class="text-lg font-semibold mb-3">Direct From NYC DOE / Open Data</h2>
   <p class="text-sm text-slate-600 mb-4">
     Datasets we pull directly (without going through the <code>nycschools</code> upstream),
     typically because they post-date the package's last release or aren't routed through it.
@@ -75,7 +75,7 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Other boundaries &amp; geocoding</h2>
+  <h2 class="text-lg font-semibold mb-3">Other Boundaries &amp; Geocoding</h2>
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     <div><dt class="font-medium">2010 NTA polygons</dt><dd class="text-slate-600 mt-1">2010 vintage · Pulled from a <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/nycehs/NYC_geography">community mirror</a> — NYC retired the 2010 NTA dataset from Open Data when the 2020 NTA spec shipped, but our school-location data still uses 2010-era NTA names, so we need the 2010 polygons to draw the neighborhood pages.</dd></div>
     <div><dt class="font-medium">NYC GeoSearch (runtime)</dt><dd class="text-slate-600 mt-1">Current · <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://geosearch.planninglabs.nyc.gov">geosearch.planninglabs.nyc.gov</a> · NYC Planning Labs' address geocoder, called at runtime when a user submits an address to <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/find">/find</a>.</dd></div>
@@ -83,7 +83,7 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">A note on years</h2>
+  <h2 class="text-lg font-semibold mb-3">A Note on Years</h2>
   <p class="text-sm text-slate-600">
     NYC and NYSED publish each dataset on its own cadence. Some are current to the month
     (the staffing report is mid-2025-26), some are years stale (the DOE per-school portal scrape
@@ -95,7 +95,7 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Source code</h2>
+  <h2 class="text-lg font-semibold mb-3">Source Code</h2>
   <p class="text-sm text-slate-600">
     This site is open source under
     <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a>

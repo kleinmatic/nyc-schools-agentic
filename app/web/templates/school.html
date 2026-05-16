@@ -221,7 +221,7 @@
 
 {# ---------- Quick stats ---------- #}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Quick stats</h2>
+  <h2 class="text-lg font-semibold mb-3">Quick Stats</h2>
   {{ provenance(
     ["school-demographics.csv", "snapshot.feather", "ptr.csv", "hs-directory-2021.feather"],
     "Roll-up of latest-year metrics from multiple sources — NYC DOE demographic snapshot (2024-25), DOE official snapshot (~2016 vintage), pupil:teacher ratio (2022-23), and HS directory (AY 2021) for graduation/college-career figures on high schools."
@@ -258,7 +258,7 @@
 {# ---------- Peer comparison ---------- #}
 {% if school.peer_ranks %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Compared to peers</h2>
+  <h2 class="text-lg font-semibold mb-3">Compared to Peers</h2>
   {{ provenance(
     ["school-demographics.csv"],
     "Where this school's value falls among same-school-level peers (e.g. all NYC elementary schools, all middle schools, or all high schools). The triangle shows position from HIGH (left) to LOW (right) of the cohort distribution; rank #1 = highest value. Cohort will become user-selectable (district / borough / geofence) once those views land."
@@ -275,7 +275,7 @@
 {% if school.staffing %}
 {% set st = school.staffing %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Counseling &amp; support staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Counseling &amp; Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }})</h2>
   {{ provenance(
     ["staffing"],
     "NYC DOE InfoHub annual Guidance Counselor &amp; Social Worker report. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
@@ -295,7 +295,7 @@
 {# ---------- HS directory overview ---------- #}
 {% if hs %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">High school directory ({{ hs.ay }})</h2>
+  <h2 class="text-lg font-semibold mb-3">High School Directory ({{ hs.ay }})</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
     "NYC DOE High School Directory, the source for the 8th-grader-facing admissions guide. Pulled from NYC Open Data (resource 8b6c-7uty). 442 schools × 449 columns covering programs, AP courses, sports, transit, etc. AY 2021 is the latest cached year."
@@ -345,7 +345,7 @@
 {# ---------- HS programs ---------- #}
 {% if hs.programs %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Admissions programs</h2>
+  <h2 class="text-lg font-semibold mb-3">Admissions Programs</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
     "Each program is a distinct application path with its own seats, applicants, and admissions criteria. Reshaped from the directory's wide-format columns (program{N}, eligibility{N}, seats9ge{N}, requirement_{j}_{N}, etc.) into a list."
@@ -380,7 +380,7 @@
 {# ---------- HS academic offerings ---------- #}
 {% if hs.advanced_placement_courses or hs.language_classes or hs.academic_opportunities or hs.diploma_endorsements or hs.ell_programs %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Academic offerings</h2>
+  <h2 class="text-lg font-semibold mb-3">Academic Offerings</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
     "AP courses, language classes, ELL programs, diploma endorsements, and academic opportunities published in the directory. Comma-separated strings as supplied by the DOE — we don't normalize."
@@ -423,7 +423,7 @@
 {# ---------- HS admissions extras ---------- #}
 {% if hs and (hs.diversity_in_admissions is not none or hs.diversity_details or hs.school_10th_seats) %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Admissions notes</h2>
+  <h2 class="text-lg font-semibold mb-3">Admissions Notes</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
     "Diversity-in-admissions priority and 10th-grade seat availability flags."
@@ -440,7 +440,7 @@
 {# ---------- DOE snapshot ---------- #}
 {% if snap %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">School info</h2>
+  <h2 class="text-lg font-semibold mb-3">School Info</h2>
   {{ provenance(
     ["snapshot.feather"],
     "Scraped from the NYC DOE per-school portal pages. Most rows are dated to 2016 in the upstream cache, so this section is older than NYSED data — useful for principal name, admissions method, and quality-review URL but stale for performance metrics."
@@ -462,7 +462,7 @@
 {# ---------- Location ---------- #}
 {% if loc %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Location &amp; neighborhood</h2>
+  <h2 class="text-lg font-semibold mb-3">Location &amp; Neighborhood</h2>
   {{ provenance(
     ["school_locations.geojson"],
     "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
@@ -492,7 +492,7 @@
 {# ---------- Schools nearby (NTA + district peers) ---------- #}
 {% if peer_neighborhood or peer_district %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Schools nearby</h2>
+  <h2 class="text-lg font-semibold mb-3">Schools Nearby</h2>
   <p class="text-xs text-slate-500 mb-4">
     Same-level schools in this school's neighborhood and district, with comparable headline metrics.
     Districts (1-32) are NYC's geographic admissions zones for elementary and middle school —
@@ -510,7 +510,7 @@
 {# ---------- Galaxy budget ---------- #}
 {% if school.budget %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Galaxy budget ({{ school.budget.ay }}-{{ "%02d"|format((school.budget.ay+1) % 100) }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Galaxy Budget ({{ school.budget.ay }}-{{ "%02d"|format((school.budget.ay+1) % 100) }})</h2>
   {{ provenance(
     ["galaxy-budget.csv"],
     "Scraped from the NYC DOE Galaxy budget portal — line-item budget per (school × academic year). Currently 2022-23 only. Note: the dollar column ships as currency strings ('$ 187,530') in upstream; we parse to floats client-side. The category breakdown shows where each school's allocation goes."
@@ -562,7 +562,7 @@
 {# ---------- NYSED expenditures + teacher quality ---------- #}
 {% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Spending &amp; staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
+  <h2 class="text-lg font-semibold mb-3">Spending &amp; Staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-expenditures-per-pupil.feather", "nysed-src-2025-inexperienced-teachers-and-principals.feather", "nysed-src-2025-teachers-teaching-out-of-certification.feather"],
     "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area."
@@ -636,7 +636,7 @@
 {# ---------- Demographics history ---------- #}
 {% if school.demographics_by_year %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Demographics by year</h2>
+  <h2 class="text-lg font-semibold mb-3">Demographics by Year</h2>
   {{ provenance(
     ["school-demographics.csv"],
     "NYC DOE Demographic Snapshot. Annual roll-up per (school × year) covering total enrollment, race/ethnicity, gender, ELL, SWD, poverty count, and ENI (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0-1 scale). Years 2005-2024."
@@ -679,7 +679,7 @@
 {# ---------- Class size ---------- #}
 {% if school.class_size %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Class size{% if school.class_size_year %} ({{ school.class_size_year }}-{{ "%02d"|format((school.class_size_year+1) % 100) }}){% endif %}</h2>
+  <h2 class="text-lg font-semibold mb-3">Class Size{% if school.class_size_year %} ({{ school.class_size_year }}-{{ "%02d"|format((school.class_size_year+1) % 100) }}){% endif %}</h2>
   {{ provenance(
     ["school-class-size.csv"],
     "NYC DOE average class size by (grade × subject × program type) from the InfoHub 2022-23 release. Program types break out Gen Ed, ICT (integrated co-teaching), and self-contained classrooms. Currently only the latest year is loaded."
@@ -735,7 +735,7 @@
 {# ---------- Exams: ELA ---------- #}
 {% if school.ela %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">3–8 ELA exam — All Students</h2>
+  <h2 class="text-lg font-semibold mb-3">3–8 ELA Exam — All Students</h2>
   {{ provenance(
     ["nyc-ela.csv"],
     "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv."
@@ -785,7 +785,7 @@
 {# ---------- Exams: Math ---------- #}
 {% if school.math %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">3–8 Math exam — All Students</h2>
+  <h2 class="text-lg font-semibold mb-3">3–8 Math Exam — All Students</h2>
   {{ provenance(
     ["nyc-math.csv"],
     "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv."
@@ -835,7 +835,7 @@
 {# ---------- Regents ---------- #}
 {% if school.regents %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Regents exams — All Students</h2>
+  <h2 class="text-lg font-semibold mb-3">Regents Exams — All Students</h2>
   {{ provenance(
     ["nyc-regents.csv"],
     "NYS Regents exam results, from NYC DOE InfoHub. Years 2014-2022. Score thresholds: 65 = passing; 80 = mastery (Advanced Designation eligibility). College-ready cutoffs vary by exam."
@@ -876,7 +876,7 @@
 {# ---------- SHSAT ---------- #}
 {% if school.shsat %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} applicants &amp; offers</h2>
+  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} Applicants &amp; Offers</h2>
   {{ provenance(
     ["shsat-applicants.csv"],
     "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2."
@@ -911,7 +911,7 @@
 {# ---------- NYSED HS Graduation Rate ---------- #}
 {% if ny and ny.hs_graduation %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">HS graduation rate ({{ term("NYSED", "New York State Education Department.") }})</h2>
+  <h2 class="text-lg font-semibold mb-3">HS Graduation Rate ({{ term("NYSED", "New York State Education Department.") }})</h2>
   {{ provenance(
     ["nysed-src-2025-acc-hs-graduation-rate.feather"],
     "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts."
@@ -983,7 +983,7 @@
 {# ---------- NYSED chronic absenteeism ---------- #}
 {% if ny and ny.chronic_absenteeism %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Chronic absenteeism</h2>
+  <h2 class="text-lg font-semibold mb-3">Chronic Absenteeism</h2>
   {{ provenance(
     ["nysed-src-2025-acc-em-chronic-absenteeism.feather", "nysed-src-2025-acc-hs-chronic-absenteeism.feather"],
     "NYSED ESSA chronic absenteeism — students absent ≥10% of enrolled days. Each row is one (year × school level × demographic subgroup). Schools spanning grades may report both EM (elementary/middle) and HS rows."
@@ -1020,7 +1020,7 @@
 {# ---------- NYSED ESSA accountability (universal) ---------- #}
 {% if ny and ny.essa_status %}
 <section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">NYS {{ term("ESSA", "Every Student Succeeds Act — the federal education accountability law (2015) that replaced No Child Left Behind. NY computes designations under it annually.") }} accountability</h2>
+  <h2 class="text-lg font-semibold mb-3">NYS {{ term("ESSA", "Every Student Succeeds Act — the federal education accountability law (2015) that replaced No Child Left Behind. NY computes designations under it annually.") }} Accountability</h2>
   {{ provenance(
     ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
     "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI."

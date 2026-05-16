@@ -3,16 +3,17 @@
 {% block content %}
 {% if not query %}
 <section class="mb-10 text-center">
-  <p class="eyebrow mb-3">An accountability database</p>
+  <p class="eyebrow mb-3">An Accountability Database</p>
   <h1 class="display-headline">Search NYC’s 1,500+ Public Schools</h1>
+  <p class="text-sm text-slate-500 mt-3">By Scott Klein · Updated May 15, 2026</p>
   <p class="display-deck mx-auto">
     Demographics, test results, attendance, metrics that help you navigate the system.
     Here you'll find every NYC public school, searchable for parents and queryable
-    by agents over <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic#mcp-server">MCP</a> -- and soon, A2A.
+    by agents over <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic#mcp-server">MCP</a> — and soon, A2A.
   </p>
 </section>
 {% else %}
-<h1 class="text-2xl font-semibold mb-2">Find a school</h1>
+<h1 class="text-2xl font-semibold mb-2">Find a School</h1>
 <p class="text-sm text-slate-500 mb-6">By name (e.g. <em>Midwood High School</em>), short name (<em>PS 321</em>), or DBN (<em>15K321</em>).</p>
 {% endif %}
 
@@ -38,7 +39,7 @@
 </div>
 
 <div class="mt-12 pt-6 border-t border-slate-200">
-  <h2 class="text-lg font-semibold mb-1">Search by address</h2>
+  <h2 class="text-lg font-semibold mb-1">Search by Address</h2>
   <p class="text-sm text-slate-500 mb-4">For elementary and middle schoolers — find the schools your home address is zoned for.</p>
   <form action="/find" method="get">
     <input
@@ -54,7 +55,7 @@
 
 {% if leaderboards %}
 <div class="mt-12 pt-6 border-t border-slate-200">
-  <h2 class="text-lg font-semibold mb-1">Accountability dashboard</h2>
+  <h2 class="text-lg font-semibold mb-1">Accountability Dashboard</h2>
   <p class="text-sm text-slate-500 mb-6">
     A few angles on NYC public school performance. Each row links to that school's full report.
     For deeper queries — different metrics, lower-ranked schools, cross-school correlations —
@@ -68,7 +69,7 @@
 
 {% if borough_grid or nta_leaderboards %}
 <div class="mt-12 pt-6 border-t border-slate-200">
-  <h2 class="text-lg font-semibold mb-1">By place</h2>
+  <h2 class="text-lg font-semibold mb-1">By Place</h2>
   <p class="text-sm text-slate-500 mb-6">
     Aggregations across boroughs and neighborhoods.
     Neighborhood = NTA (Neighborhood Tabulation Area), NYC's official boundaries; cohorts
