@@ -38,12 +38,12 @@ def test_home_renders_accountability_dashboard(client):
     with all 4 table titles visible."""
     r = client.get("/")
     assert r.status_code == 200
-    assert "Accountability dashboard" in r.text
+    assert "Accountability Dashboard" in r.text
     for fragment in (
-        "Top high schools by Regents passing rate",
-        "most chronic absenteeism",
-        "Highest-need high schools",
-        "Top elementary schools by ELA proficiency",
+        "Top High Schools by Regents Passing Rate",
+        "Most Chronic Absenteeism",
+        "Highest-Need High Schools",
+        "Top Elementary Schools by ELA Proficiency",
     ):
         assert fragment in r.text, f"missing leaderboard: {fragment!r}"
     # Top of the Regents leaderboard reliably includes one of the
@@ -55,10 +55,10 @@ def test_home_renders_place_based_leaderboards(client):
     """Borough grid + 2 NTA leaderboards under the 'By place' section."""
     r = client.get("/")
     for fragment in (
-        "By place",
-        "Boroughs at a glance",
-        "Top neighborhoods — high schools",
-        "Top neighborhoods — elementary schools",
+        "By Place",
+        "Boroughs at a Glance",
+        "Top Neighborhoods — High Schools",
+        "Top Neighborhoods — Elementary Schools",
     ):
         assert fragment in r.text, f"missing place section: {fragment!r}"
     # Borough grid: 5 boroughs, each as a <td>.
@@ -70,7 +70,7 @@ def test_school_page_includes_neighborhood_peers(client):
     """ES school page should show the 'Schools nearby' section with both
     NTA and district cohorts, and highlight the focal school."""
     r = client.get("/school/15K321")
-    assert "Schools nearby" in r.text
+    assert "Schools Nearby" in r.text
     assert "Park Slope-Gowanus" in r.text  # NTA label
     assert "District 15" in r.text
     # Focal-school highlight appears once per cohort.
@@ -81,7 +81,7 @@ def test_high_school_page_omits_district_peer_cohort(client):
     """HS aren't district-zoned (city-wide choice), so school page should
     skip the district cohort but still show the NTA cohort."""
     r = client.get("/school/02M475")  # Stuyvesant
-    assert "Schools nearby" in r.text
+    assert "Schools Nearby" in r.text
     # Exactly one peer-cohort heading (the NTA one); no "District N" label.
     import re
     district_labels = re.findall(r"District \d+", r.text)
@@ -96,7 +96,7 @@ def test_search_with_query_hides_dashboard(client):
     results take focus."""
     r = client.get("/search", params={"q": "stuyvesant"})
     assert r.status_code == 200
-    assert "Accountability dashboard" not in r.text
+    assert "Accountability Dashboard" not in r.text
 
 
 def test_search_with_empty_query_keeps_dashboard(client):
@@ -104,7 +104,7 @@ def test_search_with_empty_query_keeps_dashboard(client):
     is back to "browse mode."""
     r = client.get("/search", params={"q": ""})
     assert r.status_code == 200
-    assert "Accountability dashboard" in r.text
+    assert "Accountability Dashboard" in r.text
 
 
 def test_search_html_returns_results(client):
@@ -125,7 +125,7 @@ def test_school_page_renders(client):
     r = client.get("/school/15K321")
     assert r.status_code == 200
     assert "15K321" in r.text
-    assert "Demographics by year" in r.text
+    assert "Demographics by Year" in r.text
 
 
 def test_school_page_includes_all_sections(client):
@@ -133,20 +133,20 @@ def test_school_page_includes_all_sections(client):
     assert r.status_code == 200
     # Distinctive substrings rather than full headers — heading text is now
     # broken up by inline term() popover triggers (e.g. "NYS <btn>ESSA</btn>
-    # accountability").
+    # Accountability").
     for fragment in (
-        "Quick stats",
+        "Quick Stats",
         ">ESSA</button>",
-        "Chronic absenteeism",
+        "Chronic Absenteeism",
         "Spending",
-        "staffing",
-        "School info",
+        "Staffing",
+        "School Info",
         "Location",
-        "ELA exam",
-        "Math exam",
-        "Class size",
-        "Galaxy budget",
-        "Demographics by year",
+        "ELA Exam",
+        "Math Exam",
+        "Class Size",
+        "Galaxy Budget",
+        "Demographics by Year",
     ):
         assert fragment in r.text, f"missing section fragment: {fragment}"
 
@@ -155,13 +155,13 @@ def test_high_school_page_includes_hs_only_sections(client):
     r = client.get("/school/22K405")  # Midwood
     assert r.status_code == 200
     for fragment in (
-        "High school directory",
+        "High School Directory",
         "Performance",
-        "Admissions programs",
-        "Academic offerings",
+        "Admissions Programs",
+        "Academic Offerings",
         "Athletics",
-        "Regents exams",
-        "HS graduation rate",
+        "Regents Exams",
+        "HS Graduation Rate",
         "Civic Readiness",
     ):
         assert fragment in r.text, f"missing HS-only section fragment: {fragment}"

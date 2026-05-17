@@ -247,12 +247,12 @@ def _beds_to_str(b) -> Optional[str]:
 
 
 def _candidate_schools(level: Optional[str], borough: Optional[str], store) -> pd.DataFrame:
-    """One row per active school: dbn, school_name, school_level, beds, boro.
-    `beds` is normalized to the 12-char string form NYSED tables key on,
-    or None when missing. Filtered to active schools (latest demographics
-    >= 2022) plus the optional level / borough filters."""
+    """One row per active school: dbn, school_name, school_level, beds, boro,
+    total_enrollment. `beds` is normalized to the 12-char string form NYSED
+    tables key on, or None when missing. Filtered to active schools (latest
+    demographics >= 2022) plus the optional level / borough filters."""
     df = store.demographics
-    cols = ["dbn", "school_name", "school_level", "beds", "boro", "ay"]
+    cols = ["dbn", "school_name", "school_level", "beds", "boro", "ay", "total_enrollment"]
     df = df[[c for c in cols if c in df.columns]].copy()
     df = df.sort_values("ay").drop_duplicates("dbn", keep="last")
     df = df[df["ay"] >= _ACTIVE_SCHOOL_MIN_AY]
@@ -473,14 +473,14 @@ for _m in METRIC_NAMES:
 
 _HOMEPAGE_NTA_LEADERBOARDS = (
     {
-        "title": "Top neighborhoods — high schools",
+        "title": "Top Neighborhoods — High Schools",
         "description": "Average Regents passing rate (≥65) across high schools in each NTA. NTAs with fewer than 5 high schools excluded.",
         "metric": "regents_pct_above_64",
         "level": "high",
         "year_label": "2022",
     },
     {
-        "title": "Top neighborhoods — elementary schools",
+        "title": "Top Neighborhoods — Elementary Schools",
         "description": "Average ELA proficiency (Level 3-4) across elementary schools in each NTA.",
         "metric": "ela_pct_proficient",
         "level": "elementary",
@@ -662,23 +662,15 @@ _NEIGHBORHOOD_METRICS: tuple[str, ...] = (
 )
 
 
-def _metrics_for_neighborhood(
+def _peer_rank_metrics_for_neighborhood(
     schools: list[SchoolSummary], level: Optional[str]
 ) -> tuple[str, ...]:
-    """Pick the metric set most useful for an NTA's school mix.
+    """The metric set used for the NTA's *peer-rank cards* — a single
+    tuple, chosen for the NTA's dominant school level (or the explicit
+    `level` filter if passed). One coherent set of metrics ranks the
+    neighborhood against other neighborhoods.
 
-    Priority order:
-    1. If `level` is an explicit recognized peer-level filter, use that
-       level's metric tuple (e.g. HS gets Regents + grad).
-    2. Otherwise, use the dominant `school_level` among the NTA's schools.
-       An NTA whose schools are mostly elementary shows the ES peer set,
-       even when `level=None` is passed.
-    3. Fall back to `_NEIGHBORHOOD_METRICS` if no clear winner (e.g. the
-       NTA has only unknown-level schools).
-
-    Eliminates most of the "—" cells in the school table — the old logic
-    always asked for ELA + math + Regents regardless of grade band, so a
-    HS-only NTA's table was nearly empty."""
+    Falls back to `_NEIGHBORHOOD_METRICS` if no clear winner."""
     if level and level in _PEER_METRICS_BY_LEVEL:
         return _PEER_METRICS_BY_LEVEL[level]
     counts = Counter(s.school_level for s in schools if s.school_level)
@@ -687,6 +679,30 @@ def _metrics_for_neighborhood(
         if dominant in _PEER_METRICS_BY_LEVEL:
             return _PEER_METRICS_BY_LEVEL[dominant]
     return _NEIGHBORHOOD_METRICS
+
+
+def _table_metrics_for_neighborhood(
+    schools: list[SchoolSummary], level: Optional[str]
+) -> tuple[str, ...]:
+    """The metric set used for the *per-school table* — UNION of every
+    level's peer metric set that's actually represented in the NTA.
+
+    So a mixed ES + HS neighborhood shows BOTH ELA/math AND Regents/grad
+    columns; each school fills the ones that apply to its level, and the
+    rest render as the (now-muted) N/A spans. The previous "use the
+    dominant level's set only" logic dropped data for non-dominant
+    schools — a HS in a mostly-ES NTA appeared empty even though the
+    school's own page showed full data."""
+    if level and level in _PEER_METRICS_BY_LEVEL:
+        return _PEER_METRICS_BY_LEVEL[level]
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in schools:
+        for m in _PEER_METRICS_BY_LEVEL.get(s.school_level or "", ()):
+            if m not in seen:
+                out.append(m)
+                seen.add(m)
+    return tuple(out) if out else _NEIGHBORHOOD_METRICS
 
 
 def _format_metric_value(value: float, fmt: str) -> str:
@@ -762,10 +778,13 @@ def get_neighborhood(
     if not schools:
         return None
 
-    # Choose the metric set based on the NTA's school mix (or the
-    # explicit `level` if the caller passed one). HS-dominant NTAs get
-    # Regents + grad; ES/MS-dominant get ELA + math.
-    metric_set = _metrics_for_neighborhood(schools, level)
+    # Two metric sets: one for the peer-rank cards (chosen by dominant
+    # level so the NTA gets ranked on one coherent set of metrics), and
+    # the UNION of all relevant metric sets for the per-school table
+    # (so a HS in a mostly-ES neighborhood doesn't appear empty just
+    # because the dominant ES set excludes Regents / grad).
+    peer_rank_metrics = _peer_rank_metrics_for_neighborhood(schools, level)
+    table_metrics = _table_metrics_for_neighborhood(schools, level)
 
     # Focal NTA polygon for the map. None if no boundary on file (a handful
     # of "park-cemetery-etc-*" NTAs don't have a single contiguous polygon).
@@ -791,7 +810,7 @@ def get_neighborhood(
         lat = float(loc["latitude"]) if loc is not None and pd.notna(loc.get("latitude")) else None
         lon = float(loc["longitude"]) if loc is not None and pd.notna(loc.get("longitude")) else None
         metrics = {
-            m: _compute_metric(m, s.dbn, beds, store) for m in metric_set
+            m: _compute_metric(m, s.dbn, beds, store) for m in table_metrics
         }
         rows.append(NeighborhoodSchool(
             dbn=s.dbn, school_name=s.school_name, school_level=s.school_level,
@@ -802,7 +821,7 @@ def get_neighborhood(
     # Peer ranks vs other NTAs. Drop any metric where this NTA doesn't
     # appear in the ranked aggregate (e.g. <5 schools contributing).
     peer_ranks: list[NeighborhoodPeerRank] = []
-    for m in metric_set:
+    for m in peer_rank_metrics:
         rank = _neighborhood_peer_rank(top_name, m, level)
         if rank:
             peer_ranks.append(rank)
@@ -813,9 +832,9 @@ def get_neighborhood(
         n_schools=len(rows),
         other_candidates=others,
         peer_ranks=peer_ranks,
-        metric_names=list(metric_set),
-        metric_labels={m: METRIC_LABELS.get(m, m) for m in metric_set},
-        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in metric_set},
+        metric_names=list(table_metrics),
+        metric_labels={m: METRIC_LABELS.get(m, m) for m in table_metrics},
+        metric_formats={m: METRIC_FORMATS.get(m, "pct") for m in table_metrics},
         schools=rows,
         boundary=boundary,
     )
@@ -972,7 +991,7 @@ VALID_ACCESSIBILITY = ("Fully Accessible", "Partially Accessible", "Not Accessib
 # is refreshed (see README "Refreshing data").
 _HOMEPAGE_LEADERBOARDS = (
     {
-        "title": "Top high schools by Regents passing rate",
+        "title": "Top High Schools by Regents Passing Rate",
         "description": "Mean share of students scoring ≥65 across all Regents exams.",
         "metric": "regents_pct_above_64",
         "level": "high",
@@ -982,7 +1001,7 @@ _HOMEPAGE_LEADERBOARDS = (
         "year_label": "2022",
     },
     {
-        "title": "High schools with the most chronic absenteeism",
+        "title": "High Schools With the Most Chronic Absenteeism",
         "description": (
             "Share of students absent ≥18 days. Higher is worse — but the top of "
             "this list is dominated by transfer / alternative schools (D79, charter "
@@ -997,7 +1016,7 @@ _HOMEPAGE_LEADERBOARDS = (
         "year_label": "2024-25",
     },
     {
-        "title": "Highest-need high schools",
+        "title": "Highest-Need High Schools",
         "description": (
             "Top of the Economic Need Index — NYC DOE's composite poverty / "
             "disadvantage measure. Transfer schools rank high here for the same "
@@ -1011,7 +1030,7 @@ _HOMEPAGE_LEADERBOARDS = (
         "year_label": "2024-25",
     },
     {
-        "title": "Top elementary schools by ELA proficiency",
+        "title": "Top Elementary Schools by ELA Proficiency",
         "description": "NYS 3-8 ELA — share of students at Level 3 or 4 across all grades.",
         "metric": "ela_pct_proficient",
         "level": "elementary",

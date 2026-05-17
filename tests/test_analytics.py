@@ -335,19 +335,36 @@ def test_get_neighborhood_boundary_falls_back_to_none_when_polygon_missing(monke
     assert r.peer_ranks
 
 
-def test_get_neighborhood_metric_set_matches_dominant_level():
-    """Park Slope-Gowanus is dominated by elementary schools — the page
-    should default to the ES peer metric set (ELA + math, no Regents)."""
+def test_get_neighborhood_table_metric_set_unions_levels():
+    """Mixed-level NTAs like Park Slope-Gowanus have ES, MS, AND HS
+    schools. The per-school table's metric set is the UNION across all
+    represented levels — so a HS school doesn't appear empty just
+    because the dominant level is elementary. ELA/math + Regents/grad
+    all show up; each row fills the cells that apply."""
     r = get_neighborhood("park slope")
     assert r is not None
     assert "ela_pct_proficient" in r.metric_names
     assert "math_pct_proficient" in r.metric_names
-    assert "regents_pct_above_64" not in r.metric_names
+    assert "regents_pct_above_64" in r.metric_names
+    assert "graduation_rate_4yr" in r.metric_names
+
+
+def test_get_neighborhood_peer_ranks_use_dominant_level_set():
+    """Peer-rank cards rank the NTA against other NTAs on one coherent
+    metric set — chosen by the dominant school level. For an ES-dominant
+    NTA, Regents and graduation rate aren't represented in peer ranks
+    even though they're in the per-school table."""
+    r = get_neighborhood("park slope")
+    assert r is not None
+    rank_metrics = {pr.metric for pr in r.peer_ranks}
+    assert "ela_pct_proficient" in rank_metrics
+    assert "math_pct_proficient" in rank_metrics
+    assert "regents_pct_above_64" not in rank_metrics
 
 
 def test_get_neighborhood_with_explicit_high_level_switches_metric_set():
-    """Forcing level='high' selects the HS peer metric set even in an
-    NTA where another level dominates."""
+    """Forcing level='high' selects the HS peer metric set — both the
+    table and the peer ranks restrict to it."""
     r = get_neighborhood("park slope", level="high")
     assert r is not None
     assert "regents_pct_above_64" in r.metric_names
