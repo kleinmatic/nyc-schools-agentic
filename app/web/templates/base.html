@@ -116,6 +116,24 @@
         translate: -50% .5rem;
       }
     }
+    /* WebMCP agent-activated indicator. Hidden by default; revealed via
+       :tool-form-active (CSS-only, instant) or via .active toggled by the
+       toolactivated event (JS, persists past autosubmit). */
+    .agent-active-pill {
+      display: none;
+      margin-top: 0.75rem;
+      padding: 0.5rem 1rem;
+      background-color: #7c3aed;
+      color: white;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 0.5rem;
+      border: none;
+    }
+    form:tool-form-active + .agent-active-pill,
+    .agent-active-pill.active {
+      display: inline-block;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
@@ -134,5 +152,14 @@
     Data via <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> and a half-dozen NYC / NYS sources — <a class="underline" href="/sources">full list with vintages</a>.
     AGPL-3.0; <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic">corresponding source</a>.
   </footer>
+  <script>
+    // Reveal the matching .agent-active-pill when an agent invokes a WebMCP
+    // tool on this page. The pill persists until next navigation — for
+    // autosubmit forms, :tool-form-active is too fleeting to perceive.
+    window.addEventListener('toolactivated', (e) => {
+      document.querySelector(`.agent-active-pill[data-toolname="${e.toolName}"]`)
+        ?.classList.add('active');
+    });
+  </script>
 </body>
 </html>

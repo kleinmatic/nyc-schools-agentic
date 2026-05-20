@@ -38,6 +38,7 @@
     hx-push-url="true"
   >
 </form>
+<button type="button" class="agent-active-pill" data-toolname="search-schools-by-name" disabled aria-live="polite">Agent activated!</button>
 
 <div id="results">
   {% include "partials/results.html" %}
@@ -60,6 +61,7 @@
     >
     <button type="submit" class="mt-3 px-4 py-2 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-700">Find zoned schools →</button>
   </form>
+  <button type="button" class="agent-active-pill" data-toolname="find-zoned-schools-by-address" disabled aria-live="polite">Agent activated!</button>
 </div>
 
 {% if leaderboards %}
