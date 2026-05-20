@@ -22,6 +22,8 @@ def client():
         ("/zoned", "find-zoned-schools-by-address"),
         ("/search", "search-schools-by-name"),
         ("/search", "find-zoned-schools-by-address"),
+        ("/", "search-schools-by-name"),
+        ("/", "find-zoned-schools-by-address"),
     ],
 )
 def test_webmcp_toolname_present(client, path, expected_tool):
@@ -30,7 +32,7 @@ def test_webmcp_toolname_present(client, path, expected_tool):
     assert f'toolname="{expected_tool}"' in r.text
 
 
-@pytest.mark.parametrize("path", ["/zoned", "/search"])
+@pytest.mark.parametrize("path", ["/", "/zoned", "/search"])
 def test_webmcp_form_carries_description_and_autosubmit(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -38,7 +40,7 @@ def test_webmcp_form_carries_description_and_autosubmit(client, path):
     assert "toolautosubmit" in r.text
 
 
-@pytest.mark.parametrize("path", ["/zoned", "/search"])
+@pytest.mark.parametrize("path", ["/", "/zoned", "/search"])
 def test_webmcp_input_has_param_description(client, path):
     r = client.get(path)
     assert r.status_code == 200
