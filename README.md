@@ -41,7 +41,7 @@ Routes you'll have:
 - `/` — search + accountability dashboard. Search box (htmx live results) at top; below it, two stacked sets of leaderboards. **Accountability dashboard** (4 school-level tables: top HS by Regents passing rate; HS with most chronic absenteeism; highest-need HS by ENI; top elementary by ELA proficiency) and **By place** (5-borough overview grid; top NTAs for HS Regents and ES ELA). The dashboard hides on `/search?q=…` so search results take focus, and reappears when the query is cleared.
 - `/search?q=...` — same search; returns an htmx partial when called with `HX-Request: true`.
 - `/school/{dbn}` — school detail (e.g. `/school/15K321`). Sections include quick stats, single-metric peer-rank markers, exam history, NYSED accountability, location, **Schools nearby** (a multi-metric peer-comparison table for same-NTA peers + same-district peers for ES/MS), Galaxy budget, demographics by year. HS pages add the HS Directory + admissions programs sections; HS pages skip the same-district peer table since HS is city-wide choice.
-- `/find?address=...` — address-based zoned-school lookup.
+- `/zoned?address=...` — address-based zoned-school lookup (`/find` 301-redirects here for legacy bookmarks).
 - `/mcp/` — MCP server over Streamable HTTP (see [MCP server](#mcp-server) below).
 - `/healthz` — liveness check.
 - `/docs` — auto-generated OpenAPI / Swagger UI (FastAPI default).
@@ -250,7 +250,7 @@ uv run pytest
 # 4. MANUAL smoke test — boot the app, click through a few schools.
 uv run uvicorn app.main:app --reload
 # Visit http://localhost:8000, search "Midwood High School", click through.
-# Visit http://localhost:8000/find?address=180+7+Ave+Brooklyn — should show PS 321.
+# Visit http://localhost:8000/zoned?address=180+7+Ave+Brooklyn — should show PS 321.
 # Verify the school page renders all sections you expect.
 
 # 5. Commit. Files in data/ go through Git LFS automatically (see .gitattributes).
@@ -269,7 +269,7 @@ Upstream's bulk-archive bootstrap downloads a single `.7z` from a Google Drive l
 
 ## Exploring the data
 
-Easiest path is the running app — `/`, `/search?q=...`, `/school/15K321`, `/find?address=...`. For ad-hoc inspection of the SQLite directly:
+Easiest path is the running app — `/`, `/search?q=...`, `/school/15K321`, `/zoned?address=...`. For ad-hoc inspection of the SQLite directly:
 
 ```bash
 sqlite3 data/data.sqlite
@@ -475,8 +475,8 @@ Available in upstream `nycschools` but not currently wired into the app:
 │   │   └── analytics.py   # cross-school: top_schools, bulk_metrics, neighborhoods,
 │   │                      # peer cohorts, homepage leaderboard sets
 │   ├── web/               # thin Jinja-rendering adapters
-│   │   ├── routes.py      # /, /search, /school/{dbn}, /find
-│   │   └── templates/     # base, search, school, find + partials/
+│   │   ├── routes.py      # /, /search, /school/{dbn}, /zoned
+│   │   └── templates/     # base, search, school, zoned + partials/
 │   └── mcp_server/        # FastMCP adapter, mounted at /mcp/ (Streamable HTTP)
 │       ├── __init__.py
 │       └── server.py      # 11 tools, all thin wrappers over services/

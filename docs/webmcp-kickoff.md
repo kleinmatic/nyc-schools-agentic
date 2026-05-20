@@ -24,7 +24,7 @@ Universal alternative if the plugin install hits issues: `npx modern-web-guidanc
 
 ## Then: phase 1
 
-`find.html` and `search.html` only. Two GET forms, three annotations (the `/find` form appears in both templates and shares one tool name). Diff is small.
+`zoned.html` (formerly `find.html`) and `search.html` only. Two GET forms, three annotations (the `/zoned` form appears in both templates and shares one tool name). Diff is small.
 
 - Annotate per the (now-authoritative) Modern Web Guidance examples.
 - `make lint && make test`.

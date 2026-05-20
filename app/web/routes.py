@@ -2,7 +2,7 @@
 import itertools
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
@@ -103,13 +103,13 @@ async def search(request: Request, q: str = ""):
     return templates.TemplateResponse(request, template, ctx)
 
 
-@router.get("/find", response_class=HTMLResponse)
-async def find_by_address(request: Request, address: str = ""):
+@router.get("/zoned", response_class=HTMLResponse)
+async def zoned_page(request: Request, address: str = ""):
     geo = await geocode(address) if address.strip() else None
     result = find_zoned_schools(geo.lat, geo.lon) if geo else None
     return templates.TemplateResponse(
         request,
-        "find.html",
+        "zoned.html",
         {
             "address": address,
             "geo": geo,
@@ -117,6 +117,14 @@ async def find_by_address(request: Request, address: str = ""):
             "uid": _make_uid(),
         },
     )
+
+
+@router.get("/find")
+async def find_legacy_redirect(address: str = ""):
+    """Old URL — kept as a permanent redirect so any inbound links and
+    bookmarks continue to work after the /find → /zoned rename."""
+    target = f"/zoned?address={address}" if address else "/zoned"
+    return RedirectResponse(url=target, status_code=301)
 
 
 @router.get("/school/{dbn}", response_class=HTMLResponse)
