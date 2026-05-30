@@ -10,9 +10,8 @@ primary_region = "ewr"   # Newark, NJ — closest to NYC
 [http_service]
   internal_port = 8000
   force_https = true
-  # Always-on. Cold-start was sub-2s but first-time visitors hitting the
-  # spin-up read it as "broken." Keep one machine warm 24/7 — ~$7/mo at
-  # shared-cpu-1x + 1GB.
+  # Always-on single machine. Demo-grade reliability without the cost of
+  # rolling-deploy redundancy. ~$31/mo at performance-1x + 2GB.
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 1
@@ -25,5 +24,10 @@ primary_region = "ewr"   # Newark, NJ — closest to NYC
     path = "/healthz"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"   # ~250 MB at startup; 1GB leaves headroom for pandas peaks
+  size = "performance-1x"   # Dedicated 1 vCPU + 2GB. shared-cpu-1x's 6.25%
+                            # baseline throttled pandas-heavy cold-start to
+                            # ~230s, flapping healthchecks. Dedicated vCPU
+                            # restores local-class performance (~10-15s
+                            # cold start). warm_caches() also runs off the
+                            # lifespan critical path now — see main.py.
+  memory = "2gb"
