@@ -201,15 +201,17 @@ def _opt_pct(v) -> Optional[float]:
 
 
 def _to_summary(row) -> SchoolSummary:
+    district = _opt_int(row.get("district"))
     return SchoolSummary(
         dbn=row["dbn"],
         school_name=row["school_name"],
         short_name=_opt_str(row.get("short_name")),
-        district=_opt_int(row.get("district")),
+        district=district,
         boro=_opt_str(row.get("boro")),
         school_level=_opt_str(row.get("school_level")),
         total_enrollment=_opt_int(row.get("total_enrollment")),
         zip=_opt_str(row.get("zip")),
+        is_d75=district == 75,
     )
 
 

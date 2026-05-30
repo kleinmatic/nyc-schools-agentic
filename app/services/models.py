@@ -15,6 +15,12 @@ class SchoolSummary(BaseModel):
     school_level: Optional[str] = None
     total_enrollment: Optional[int] = None
     zip: Optional[str] = None
+    # D75 = NYC's citywide specialized special-education district. D75
+    # schools serve students with the most significant disabilities
+    # (autism, multiple disabilities, severe emotional disturbance) and
+    # are placed by the Committee on Special Education, not by zoning or
+    # choice. Derived from district == 75.
+    is_d75: bool = False
 
 
 class DemographicsYear(BaseModel):
