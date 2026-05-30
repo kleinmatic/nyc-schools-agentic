@@ -395,6 +395,76 @@ def co_located_schools(dbn: str) -> list[CoLocatedSchool]:
     return _co_located_schools(dbn)
 
 
+@mcp.prompt(
+    name="iep_or_special_needs",
+    description=(
+        "Workflow for answering a parent who is evaluating NYC public "
+        "schools for a child with an IEP or special needs (e.g. "
+        "emotional-regulation issues, learning disability, autism, "
+        "speech). Pass the concern and, optionally, an address and the "
+        "child's grade level."
+    ),
+)
+def iep_or_special_needs(
+    concern: str,
+    address: Optional[str] = None,
+    grade_level: Optional[str] = None,
+) -> str:
+    addr_block = (
+        f"- Parent address: {address}\n"
+        "- Start by calling `find_schools_for_address` with that "
+        "address to get the zoned ES and MS (HS is city-wide choice, "
+        "so for a HS-age child skip to candidate-search via "
+        "`list_high_schools` or `search_schools` instead).\n"
+        if address
+        else "- No address provided. If the parent has one, ask for it "
+             "and re-run; without it, anchor on neighborhood "
+             "(`schools_in_neighborhood`) or a specific school name "
+             "(`search_schools`).\n"
+    )
+    grade_block = (
+        f"- Grade level: {grade_level}. Filter to schools that serve "
+        f"that grade.\n"
+        if grade_level
+        else ""
+    )
+
+    return f"""You are helping a parent of a NYC public-school student who has an IEP or special needs. The parent's concern, in their own words: "{concern}".
+
+{addr_block}{grade_block}
+## What this question actually has two halves
+
+1. **Inputs — what supports does the school have?** Adult-staffing, mental-health partners, physical accessibility, co-located specialized programs.
+2. **Outcomes — how do kids with IEPs actually do here?** Subgroup graduation, attendance, accountability status.
+
+A parent usually conflates the two. Surface both — labeled.
+
+## Tool plan
+
+For each candidate school (one tool call per school is fine — these are cheap):
+
+- `school_swd_outcomes(dbn)` — graduation/attendance/CCCR/ESSA broken out for just the Students-With-Disabilities subgroup. Read `notes` and surface them verbatim. If `is_d75=true`, flag prominently — D75 is a different placement system.
+- `school_staffing(dbn)` — Guidance Counselor + Social Worker FTE and pupils-per-staff ratios. ASCA-recommended ratio is 250:1; report whether the school meets it. Also surface `school_psychologist_mandated` and `cbo_partner_mental_health` if either is populated — these are direct signals for emotional/behavioral support.
+- `co_located_schools(dbn)` — if a D75 program shares the building, name it. That's often the nearby specialized option a parent should know about even if not the focal school.
+- `get_school(dbn)` — only if the parent asks for school-wide context (overall demographics, programs, etc.). It's a heavy payload; don't pull it for every candidate.
+
+For HS specifically: `list_high_schools(accessibility="Fully Accessible")` if the concern involves physical access, and check each HS's HS Directory `admissions` block for inclusion / ICT / specialized-program language via `get_school`.
+
+## Things to tell the parent up front
+
+- **`swd_pct` (enrollment %) is NOT the same as how well SWDs do.** A school can be 25% SWD and have very different SWD outcomes than another 25%-SWD school.
+- **"Students with Disabilities" lumps every IEP together** — a kid with a speech accommodation and a kid in a 12:1:1 self-contained class are in the same subgroup number. Read the number with that caveat.
+- **NYSED suppresses small cells** (~<30 SWDs in the cohort). Missing data ≠ bad school; it means the subgroup is small. Don't infer outcomes from absence.
+- **What this tool surface CANNOT tell you**: it does NOT have program-mix detail (ICT vs SETSS vs 12:1:1 vs self-contained), specific behavioral supports, or restorative-justice / SEL adoption. For those, the parent should ask the school directly — frame what's surfaced here as "the data half" of the question.
+
+## Format the response
+
+- One section per candidate school.
+- Within each, two subheads — "Supports on paper" (staffing, accessibility, co-located programs) and "Outcomes for kids with IEPs" (SWD-subgroup metrics).
+- End with a short "questions to ask the school" list — things only a building visit can answer.
+"""
+
+
 @mcp.tool
 def school_peers(
     dbn: str,
