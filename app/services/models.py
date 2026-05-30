@@ -280,6 +280,73 @@ class NysedReport(BaseModel):
     hs_cccr: list[CccrRow] = []
 
 
+class SwdGradOutcome(BaseModel):
+    year: int
+    cohort: str                            # "4-Year" | "5-Year" | "6-Year"
+    cohort_count: Optional[int] = None     # SWD N — the denominator
+    grad_count: Optional[int] = None
+    grad_rate: Optional[float] = None      # fraction in [0, 1]
+    suppressed: bool = False               # cohort present but rate redacted
+
+
+class SwdChronicOutcome(BaseModel):
+    year: int
+    enrollment: Optional[int] = None
+    absent_count: Optional[int] = None
+    absent_rate: Optional[float] = None    # fraction in [0, 1]
+    suppressed: bool = False
+
+
+class SwdCccrOutcome(BaseModel):
+    """College/Career/Civic Readiness for the SWD subgroup. `index_score`
+    is a NYSED-weighted count (Advanced Regents > Regents > local > IEP,
+    with AP/IB/CTE/biliteracy bonuses); `level` is the 1-4 accountability
+    band assigned to that index."""
+    year: int
+    cohort_size: Optional[int] = None
+    index_score: Optional[float] = None
+    level: Optional[int] = None            # 1-4 (4 highest)
+
+
+class SwdEssaOutcome(BaseModel):
+    year: int
+    school_type: Optional[str] = None      # "EM" | "HS"
+    overall_status: str
+
+
+class SwdOutcomes(BaseModel):
+    """Subgroup-specific outcomes for Students With Disabilities at one
+    school. Pairs with `swd_pct` from demographics to answer 'how do kids
+    with IEPs do here?' — not just 'are there kids with IEPs here?'.
+
+    Source: NYSED School Report Card Database, "Students with Disabilities"
+    subgroup. NYSED redacts cells where the SWD cohort is below the N-size
+    threshold (~30 students for most metrics); redacted cells come back
+    with `suppressed=True` and no rate value.
+
+    SWD lumps every IEP together — from a speech-only accommodation through
+    a 12:1:1 self-contained class. A single subgroup number across that
+    range is coarse; pair it with the school's overall demographics and
+    (for HS) the HS Directory programs to read it well.
+    """
+    dbn: str
+    school_name: str
+    is_d75: bool                           # placement system differs entirely
+
+    # Inputs — who's enrolled
+    swd_enrollment_pct: Optional[float] = None  # latest demographics year, 0..1
+    swd_enrollment_ay: Optional[int] = None
+
+    # Outcomes — each is the latest year on file for the SWD subgroup
+    graduation: list[SwdGradOutcome] = []        # 4-Year first, then 5, then 6
+    chronic_absenteeism: Optional[SwdChronicOutcome] = None
+    cccr: Optional[SwdCccrOutcome] = None
+    essa_status: Optional[SwdEssaOutcome] = None
+
+    # Caveats the rendering layer should surface verbatim
+    notes: list[str] = []
+
+
 class PeerExtreme(BaseModel):
     """The extreme (top or bottom) school in a peer cohort, surfaced under
     the LOW / HIGH labels of a peer_marker for hover/tap context."""

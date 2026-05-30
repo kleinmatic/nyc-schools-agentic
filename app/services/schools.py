@@ -38,8 +38,16 @@ from .models import (
     SnapshotInfo,
     StaffingInfo,
     SubgroupStatus,
+    SwdCccrOutcome,
+    SwdChronicOutcome,
+    SwdEssaOutcome,
+    SwdGradOutcome,
+    SwdOutcomes,
     TeacherQualityYear,
 )
+
+_SWD_SUBGROUP = "Students with Disabilities"
+_GRAD_COHORT_ORDER = {"4-Year": 0, "5-Year": 1, "6-Year": 2}
 
 DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
 _BUDGET_RE = re.compile(r"[^0-9.\-]")
@@ -1000,6 +1008,151 @@ def _co_located_for(dbn: str) -> list[CoLocatedSchool]:
 
 
 # ----- top-level -----
+
+def _swd_grad_for(beds: str) -> list[SwdGradOutcome]:
+    df = data.get_store().nysed_hs_grad
+    rows = df[(df["ENTITY_CD"] == beds) & (df["SUBGROUP_NAME"] == _SWD_SUBGROUP)]
+    if rows.empty:
+        return []
+    latest_year = int(rows["YEAR"].astype(int).max())
+    latest = rows[rows["YEAR"].astype(int) == latest_year]
+    out: list[SwdGradOutcome] = []
+    for _, r in latest.iterrows():
+        cohort = _opt_str(r.get("COHORT")) or "Unknown"
+        rate = _opt_pct(r.get("GRAD_RATE"))
+        cohort_count = _opt_int(r.get("COHORT_COUNT"))
+        out.append(SwdGradOutcome(
+            year=latest_year,
+            cohort=cohort,
+            cohort_count=cohort_count,
+            grad_count=_opt_int(r.get("GRAD_COUNT")),
+            grad_rate=rate,
+            suppressed=rate is None and (cohort_count or 0) > 0,
+        ))
+    out.sort(key=lambda g: _GRAD_COHORT_ORDER.get(g.cohort, 99))
+    return out
+
+
+def _swd_chronic_for(beds: str) -> Optional[SwdChronicOutcome]:
+    df = data.get_store().nysed_chronic
+    rows = df[(df["ENTITY_CD"] == beds) & (df["SUBGROUP_NAME"] == _SWD_SUBGROUP)]
+    if rows.empty:
+        return None
+    latest_year = int(rows["YEAR"].astype(int).max())
+    r = rows[rows["YEAR"].astype(int) == latest_year].iloc[0]
+    enrollment = _opt_int(r.get("ENROLLMENT"))
+    rate = _opt_pct(r.get("ABSENT_RATE"))
+    return SwdChronicOutcome(
+        year=latest_year,
+        enrollment=enrollment,
+        absent_count=_opt_int(r.get("ABSENT_COUNT")),
+        absent_rate=rate,
+        suppressed=rate is None and (enrollment or 0) > 0,
+    )
+
+
+def _swd_cccr_for(beds: str) -> Optional[SwdCccrOutcome]:
+    df = data.get_store().nysed_hs_cccr
+    rows = df[(df["ENTITY_CD"] == beds) & (df["SUBGROUP_NAME"] == _SWD_SUBGROUP)]
+    if rows.empty:
+        return None
+    latest_year = int(rows["YEAR"].astype(int).max())
+    r = rows[rows["YEAR"].astype(int) == latest_year].iloc[0]
+    return SwdCccrOutcome(
+        year=latest_year,
+        cohort_size=_opt_int(r.get("COHORT")),
+        index_score=_opt_float(r.get("INDEX")),
+        level=_opt_int(r.get("LEVEL")),
+    )
+
+
+def _swd_essa_for(beds: str) -> Optional[SwdEssaOutcome]:
+    df = data.get_store().nysed_essa_subgroup
+    rows = df[(df["ENTITY_CD"] == beds) & (df["SUBGROUP_NAME"] == _SWD_SUBGROUP)]
+    if rows.empty:
+        return None
+    latest_year = int(rows["YEAR"].astype(int).max())
+    r = rows[rows["YEAR"].astype(int) == latest_year].iloc[0]
+    status = _opt_str(r.get("OVERALL_STATUS"))
+    if not status:
+        return None
+    return SwdEssaOutcome(
+        year=latest_year,
+        school_type=_opt_str(r.get("SCHOOL_TYPE")),
+        overall_status=status,
+    )
+
+
+def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
+    """Outcomes specifically for the Students-With-Disabilities subgroup
+    at one school. Returns None if the DBN isn't found. Schools without
+    NYSED coverage (or with no SWD cohort) return a populated object
+    with empty/None outcome fields and an explanatory note."""
+    store = data.get_store()
+    rows = store.demographics[store.demographics["dbn"] == dbn]
+    if rows.empty:
+        return None
+    latest = rows.sort_values("ay").iloc[-1]
+    summary = _to_summary(latest)
+
+    notes: list[str] = []
+    if summary.is_d75:
+        notes.append(
+            "District 75 is NYC's citywide specialized special-education "
+            "district. Students are placed by the Committee on Special "
+            "Education, not by zoning or choice, and accountability is "
+            "reported under different rules — direct comparison to "
+            "non-D75 schools should be read with care."
+        )
+    notes.append(
+        "'Students with Disabilities' is every student with an IEP, from a "
+        "speech-only accommodation through a 12:1:1 self-contained class. "
+        "A single number across that range is coarse."
+    )
+
+    beds = _beds_for(dbn)
+    graduation: list[SwdGradOutcome] = []
+    chronic: Optional[SwdChronicOutcome] = None
+    cccr: Optional[SwdCccrOutcome] = None
+    essa: Optional[SwdEssaOutcome] = None
+    if beds:
+        graduation = _swd_grad_for(beds)
+        chronic = _swd_chronic_for(beds)
+        cccr = _swd_cccr_for(beds)
+        essa = _swd_essa_for(beds)
+
+    any_suppressed = (
+        any(g.suppressed for g in graduation)
+        or (chronic is not None and chronic.suppressed)
+    )
+    if any_suppressed:
+        notes.append(
+            "NYSED suppresses cells where the SWD cohort is below the "
+            "N-size threshold (~30 students for most metrics). Suppressed "
+            "rates are shown as N/A but the cohort size is reported when "
+            "available."
+        )
+    if beds and not (graduation or chronic or cccr or essa):
+        notes.append(
+            "No NYSED Students-with-Disabilities outcomes are reported "
+            "for this school — likely because the SWD cohort is small "
+            "enough to be suppressed for every metric, or the school "
+            "doesn't report under NYSED's accountability schedule."
+        )
+
+    return SwdOutcomes(
+        dbn=summary.dbn,
+        school_name=summary.school_name,
+        is_d75=summary.is_d75,
+        swd_enrollment_pct=_opt_float(latest.get("swd_pct")),
+        swd_enrollment_ay=_opt_int(latest.get("ay")),
+        graduation=graduation,
+        chronic_absenteeism=chronic,
+        cccr=cccr,
+        essa_status=essa,
+        notes=notes,
+    )
+
 
 def school_staffing(dbn: str) -> Optional[StaffingInfo]:
     """Guidance Counselor + Social Worker FTE breakdown + pupil ratios for
