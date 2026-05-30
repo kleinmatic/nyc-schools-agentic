@@ -210,6 +210,19 @@ def test_non_d75_school_omits_d75_badge(client):
     assert 'rounded-full text-xs font-medium bg-amber-50 text-amber-900' not in r.text
 
 
+@pytest.mark.parametrize("path", ["/", "/school/15K321", "/sources"])
+def test_footer_shows_deploy_marker(client, path):
+    """Every full HTML page footer surfaces the deploy version so we can
+    tell at a glance which commit is live. Local TestClient runs have no
+    GIT_COMMIT_SHA env set, so the marker reads `dev`."""
+    r = client.get(path)
+    assert r.status_code == 200
+    assert "Deploy" in r.text
+    # Local runs render the literal "dev" since no CI build-arg threaded
+    # a real SHA in. In prod the same template renders a 7-char SHA.
+    assert ">dev<" in r.text or "/commit/" in r.text
+
+
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200

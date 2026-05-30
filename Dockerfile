@@ -40,6 +40,13 @@ COPY data/ ./data/
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
+# Build-time commit SHA stamped into the image so the running app can
+# surface it in the footer ("which deploy am I hitting?"). CI passes
+# --build-arg COMMIT_SHA=${{ github.sha }} in main.yml. Default "dev"
+# for local builds where we don't bother to thread the SHA in.
+ARG COMMIT_SHA=dev
+ENV GIT_COMMIT_SHA=$COMMIT_SHA
+
 EXPOSE 8000
 # --proxy-headers + --forwarded-allow-ips='*': Fly terminates TLS at its
 # edge, so uvicorn sees plain HTTP from the proxy. These flags make

@@ -1,11 +1,19 @@
 """HTML routes. Thin adapters over services/schools.py — no business logic here."""
 import itertools
+import os
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
+
+# Build-time SHA stamped into the Docker image by the CI deploy step
+# (--build-arg COMMIT_SHA=${{ github.sha }}). The 7-char short form is
+# what GitHub/Fly UIs show, so the footer matches at a glance. Falls
+# back to "dev" for local uvicorn runs where the env var isn't set.
+COMMIT_SHA_FULL = os.environ.get("GIT_COMMIT_SHA", "dev")
+COMMIT_SHA_SHORT = COMMIT_SHA_FULL[:7] if COMMIT_SHA_FULL != "dev" else "dev"
 from ..services.analytics import (
     get_neighborhood,
     homepage_borough_grid,
@@ -56,6 +64,8 @@ def _pretty(value):
 
 templates.env.filters["level"] = _level_label
 templates.env.filters["pretty"] = _pretty
+templates.env.globals["commit_sha_short"] = COMMIT_SHA_SHORT
+templates.env.globals["commit_sha_full"] = COMMIT_SHA_FULL
 
 
 def _is_htmx(request: Request) -> bool:

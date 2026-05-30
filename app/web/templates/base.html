@@ -156,6 +156,14 @@
   <footer class="max-w-4xl mx-auto px-6 py-8 text-xs text-slate-400">
     Data via <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> and a half-dozen NYC / NYS sources — <a class="underline" href="/sources">full list with vintages</a>.
     AGPL-3.0; <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic">corresponding source</a>.
+    <span class="ml-2 text-slate-300">·</span>
+    Deploy
+    {% if commit_sha_short == "dev" %}
+      <code class="font-mono text-[11px] text-slate-500">dev</code>
+    {% else %}
+      <a class="font-mono text-[11px] text-slate-500 underline decoration-slate-300 hover:decoration-slate-500"
+         href="https://github.com/kleinmatic/nyc-schools-agentic/commit/{{ commit_sha_full }}">{{ commit_sha_short }}</a>
+    {% endif %}
   </footer>
   <script>
     // Reveal the matching .agent-active-pill when an agent invokes a WebMCP
