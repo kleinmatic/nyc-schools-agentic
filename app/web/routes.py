@@ -13,7 +13,7 @@ from ..services.analytics import (
     homepage_neighborhood_leaderboards,
     school_peers,
 )
-from ..services.schools import get_school, search_schools
+from ..services.schools import get_school, school_swd_outcomes, search_schools
 from ..services.zoning import find_zoned_schools, geocode
 from .charts import (
     citywide_level_breakdown,
@@ -147,6 +147,7 @@ async def school_page(request: Request, dbn: str):
                 school_peers(dbn, scope="district")
                 if detail.summary.school_level not in ("high",) else None
             ),
+            "swd": school_swd_outcomes(dbn),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
             "ela_citywide_levels": citywide_level_breakdown("ela"),

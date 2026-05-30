@@ -205,6 +205,13 @@
 <div class="mb-8">
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← back to search</a>
   <h1 class="text-3xl font-semibold mt-2">{{ s.school_name|pretty }}</h1>
+  {% if s.is_d75 %}
+  <div class="mt-2">
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-900 border border-amber-200">
+      {{ term("District 75", "NYC's citywide specialized special-education district. Serves students with the most significant disabilities (autism, multiple disabilities, severe emotional disturbance). Placement is by the Committee on Special Education, not by zoning or choice; accountability is reported under different rules — direct comparison to non-D75 schools should be made with care.") }}
+    </span>
+  </div>
+  {% endif %}
   <div class="text-sm text-slate-500 mt-2">
     {{ term("DBN", "District-Borough-Number — NYC's primary key for schools, formatted as <district><borough letter><school number>. Borough letters: M Manhattan, X Bronx, K Brooklyn, Q Queens, R Staten Island.") }}: <span class="font-mono">{{ s.dbn }}</span>
   </div>
@@ -293,6 +300,83 @@
     {% if st.school_psychologist_mandated %}<div>{{ card_label("School psychologist") }}{{ card_value(st.school_psychologist_mandated) }}</div>{% endif %}
     {% if st.cbo_partner_mental_health %}<div class="sm:col-span-2 lg:col-span-2">{{ card_label("CBO partner") }}{{ card_value(st.cbo_partner_mental_health) }}</div>{% endif %}
   </dl>
+</section>
+{% endif %}
+
+{# ---------- Outcomes for Students With Disabilities ---------- #}
+{% if swd %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Outcomes for Students With Disabilities</h2>
+  {{ provenance(
+    ["school-demographics.csv", "nysed_chronic", "nysed_hs_grad", "nysed_hs_cccr", "nysed_essa_subgroup"],
+    "Mixed vintages — SWD enrollment share from the DOE demographic snapshot (AY 2024-25); subgroup outcomes from NYSED School Report Card Database (latest available per metric, typically AY 2024-25). The same accountability metrics the rest of this page reports for All Students, filtered here to just the Students-with-Disabilities subgroup."
+  ) }}
+
+  <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5 mb-4">
+    {% if swd.swd_enrollment_pct is not none %}
+      <div>
+        {{ card_label(term("SWD", "Students With Disabilities — students with an Individualized Education Program (IEP) receiving special-education services.") ~ " enrollment") }}
+        {{ card_value(pct(swd.swd_enrollment_pct)) }}
+      </div>
+    {% endif %}
+    {% if swd.chronic_absenteeism %}
+      {% set ca = swd.chronic_absenteeism %}
+      <div>
+        {{ card_label("SWD chronic absent (" ~ ca.year ~ ")") }}
+        {% if ca.suppressed %}{{ card_value('<span class="text-slate-300">Suppressed</span>'|safe) }}{% else %}{{ card_value(pct(ca.absent_rate)) }}{% endif %}
+        {% if ca.enrollment is not none %}<div class="text-xs text-slate-500 mt-0.5">N = {{ "{:,}".format(ca.enrollment) }}</div>{% endif %}
+      </div>
+    {% endif %}
+    {% if swd.cccr %}
+      {% set c = swd.cccr %}
+      <div>
+        {{ card_label(term("CCCR", "College/Career/Civic Readiness — a NYSED accountability indicator weighting graduates by credential earned (Advanced Regents > Regents > local > IEP, with bonuses for AP/IB/CTE/biliteracy seal).") ~ " level (" ~ c.year ~ ")") }}
+        {% if c.level is not none %}{{ card_value(c.level ~ " of 4") }}{% else %}{{ card_value('<span class="text-slate-300">N/A</span>'|safe) }}{% endif %}
+        {% if c.cohort_size is not none %}<div class="text-xs text-slate-500 mt-0.5">N = {{ "{:,}".format(c.cohort_size) }}</div>{% endif %}
+      </div>
+    {% endif %}
+    {% if swd.essa_status %}
+      {% set e = swd.essa_status %}
+      <div class="sm:col-span-2">
+        {{ card_label(term("ESSA", "Every Student Succeeds Act — the federal education accountability law. NYSED computes a designation per subgroup annually.") ~ " status (" ~ e.year ~ ")") }}
+        {{ card_value(e.overall_status) }}
+      </div>
+    {% endif %}
+  </dl>
+
+  {% if swd.graduation %}
+  <div class="bg-white border border-slate-200 rounded-lg p-5 mb-4">
+    <h3 class="text-base font-medium mb-3">SWD Graduation Rate ({{ swd.graduation[0].year }} Cohort)</h3>
+    <table class="w-full text-sm">
+      <thead class="text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+        <tr>
+          <th class="text-left py-2 pr-3 font-normal">Cohort</th>
+          <th class="text-right py-2 px-3 font-normal">N</th>
+          <th class="text-right py-2 px-3 font-normal">Graduated</th>
+          <th class="text-right py-2 pl-3 font-normal">Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in swd.graduation %}
+        <tr class="border-b border-slate-100 last:border-0">
+          <td class="py-2 pr-3">{{ g.cohort }}</td>
+          <td class="py-2 px-3 text-right">{{ num(g.cohort_count) }}</td>
+          <td class="py-2 px-3 text-right">{{ num(g.grad_count) }}</td>
+          <td class="py-2 pl-3 text-right font-medium">
+            {% if g.suppressed %}<span class="text-slate-300">Suppressed</span>{% else %}{{ pct(g.grad_rate) }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if swd.notes %}
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-950 space-y-2">
+    {% for n in swd.notes %}<p class="leading-relaxed">{{ n }}</p>{% endfor %}
+  </div>
+  {% endif %}
 </section>
 {% endif %}
 
