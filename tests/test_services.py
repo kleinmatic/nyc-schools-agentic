@@ -1,5 +1,5 @@
 """Smoke tests for the service layer. Hits real cached data."""
-from app.services.schools import get_school, search_schools
+from app.services.schools import get_school, school_swd_outcomes, search_schools
 
 
 def test_search_by_short_name_finds_ps_321():
@@ -318,3 +318,58 @@ def test_middle_or_high_school_has_shsat_or_empty():
     assert detail is not None
     for r in detail.shsat:
         assert r.ay > 2000
+
+
+def test_is_d75_flag_derives_from_district_75():
+    """75K004 is a D75 school; 15K462 is not."""
+    d75 = get_school("75K004")
+    assert d75 is not None and d75.summary.is_d75 is True
+    assert d75.summary.district == 75
+
+    not_d75 = get_school("15K462")
+    assert not_d75 is not None and not_d75.summary.is_d75 is False
+
+
+def test_school_swd_outcomes_returns_none_for_unknown_dbn():
+    assert school_swd_outcomes("99Z999") is None
+
+
+def test_school_swd_outcomes_for_hs_includes_subgroup_metrics():
+    """A regular HS with substantive SWD enrollment should have grad +
+    chronic + ESSA SWD rows; small-cohort cells may be suppressed."""
+    out = school_swd_outcomes("15K462")
+    assert out is not None
+    assert out.is_d75 is False
+    assert out.swd_enrollment_pct is not None and 0 <= out.swd_enrollment_pct <= 1
+    assert out.graduation, "expected grad cohorts for an HS"
+    # 4-Year should come first in the ordered cohort list.
+    assert out.graduation[0].cohort == "4-Year"
+    assert out.chronic_absenteeism is not None
+    assert out.essa_status is not None
+    # The "SWD lumps all IEPs" caveat is always emitted.
+    assert any("speech-only" in n for n in out.notes)
+
+
+def test_school_swd_outcomes_marks_suppressed_cells():
+    """Stuyvesant has a tiny SWD cohort; the 4-Year grad cell is redacted
+    by NYSED but the cohort_count survives — that's the suppressed=True
+    contract."""
+    out = school_swd_outcomes("02M475")
+    assert out is not None
+    grad4 = next((g for g in out.graduation if g.cohort == "4-Year"), None)
+    assert grad4 is not None
+    # Either the rate is present, or it's suppressed with N still reported.
+    if grad4.grad_rate is None:
+        assert grad4.suppressed is True
+    # Suppression note is appended once any cell is suppressed.
+    if any(g.suppressed for g in out.graduation):
+        assert any("suppresses cells" in n for n in out.notes)
+
+
+def test_school_swd_outcomes_for_d75_emits_placement_caveat():
+    """D75 schools get the placement-system caveat unconditionally,
+    regardless of whether NYSED reports outcomes."""
+    out = school_swd_outcomes("75K004")
+    assert out is not None
+    assert out.is_d75 is True
+    assert any("District 75" in n for n in out.notes)

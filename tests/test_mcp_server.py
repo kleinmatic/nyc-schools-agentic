@@ -33,6 +33,7 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "schools_in_neighborhood",
         "get_neighborhood",
         "school_staffing",
+        "school_swd_outcomes",
         "co_located_schools",
     }
 
@@ -246,6 +247,52 @@ async def test_co_located_schools_tool_returns_building_mates(mcp_client):
     assert r.data
     names = {s.school_name for s in r.data}
     assert any("M.S. 113" in n for n in names), f"got {names}"
+
+
+async def test_school_swd_outcomes_tool_returns_subgroup_metrics(mcp_client):
+    r = await mcp_client.call_tool("school_swd_outcomes", {"dbn": "15K462"})
+    assert r.data is not None
+    assert r.data.is_d75 is False
+    assert r.data.swd_enrollment_pct is not None
+    assert r.data.graduation, "expected SWD grad cohorts on an HS"
+    assert r.data.essa_status is not None
+    assert r.data.notes
+
+
+async def test_school_swd_outcomes_tool_flags_d75(mcp_client):
+    r = await mcp_client.call_tool("school_swd_outcomes", {"dbn": "75K004"})
+    assert r.data is not None
+    assert r.data.is_d75 is True
+    assert any("District 75" in n for n in r.data.notes)
+
+
+async def test_school_swd_outcomes_tool_returns_none_for_unknown_dbn(mcp_client):
+    r = await mcp_client.call_tool("school_swd_outcomes", {"dbn": "99Z999"})
+    assert r.data is None
+
+
+async def test_iep_prompt_registered_and_renders_with_arguments(mcp_client):
+    """The IEP / special-needs prompt should be discoverable via prompts/list
+    and render with the parent's concern interpolated into the body."""
+    prompts = await mcp_client.list_prompts()
+    names = {p.name for p in prompts}
+    assert "iep_or_special_needs" in names
+
+    rendered = await mcp_client.get_prompt(
+        "iep_or_special_needs",
+        {
+            "concern": "emotional regulation",
+            "address": "195 14th Street, Brooklyn",
+            "grade_level": "rising 6th",
+        },
+    )
+    body = "".join(m.content.text for m in rendered.messages if hasattr(m.content, "text"))
+    assert "emotional regulation" in body
+    assert "195 14th Street, Brooklyn" in body
+    assert "rising 6th" in body
+    # The prompt names the specific tools an agent should call.
+    for tool in ("school_swd_outcomes", "school_staffing", "co_located_schools"):
+        assert tool in body, f"prompt should mention {tool}"
 
 
 async def test_get_neighborhood_tool_unknown_query_returns_none(mcp_client):

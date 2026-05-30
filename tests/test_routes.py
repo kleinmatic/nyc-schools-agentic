@@ -178,6 +178,36 @@ def test_school_page_404(client):
     assert r.status_code == 404
 
 
+def test_school_page_renders_swd_outcomes_section(client):
+    """Regular HS with SWD enrollment gets the new SWD-outcomes section."""
+    r = client.get("/school/15K462")
+    assert r.status_code == 200
+    assert "Outcomes for Students With Disabilities" in r.text
+    # The 4/5/6-year cohort table appears for any HS with grad data.
+    assert "SWD Graduation Rate" in r.text
+    # Suppression rendering uses the slate-300 "Suppressed" treatment.
+    assert "Suppressed" in r.text
+
+
+def test_d75_school_shows_badge_and_swd_section(client):
+    """D75 school shows the amber District-75 badge in the page header
+    and the SWD-outcomes section with the placement-system caveat."""
+    r = client.get("/school/75K004")
+    assert r.status_code == 200
+    # Badge text — the term() popover wraps it, so the literal "District 75"
+    # substring appears as the trigger label.
+    assert "District 75" in r.text
+    assert "Outcomes for Students With Disabilities" in r.text
+
+
+def test_non_d75_school_omits_d75_badge(client):
+    """Non-D75 schools should never show the District-75 badge — and there
+    are no other references to District 75 on the page either."""
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    assert "District 75" not in r.text
+
+
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200
