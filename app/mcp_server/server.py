@@ -33,11 +33,13 @@ from ..services.models import (
     SchoolDetail,
     SchoolSummary,
     StaffingInfo,
+    SwdOutcomes,
     ZonedSearchResult,
 )
 from ..services.schools import co_located_schools as _co_located_schools
 from ..services.schools import get_school as _get_school
 from ..services.schools import school_staffing as _school_staffing
+from ..services.schools import school_swd_outcomes as _school_swd_outcomes
 from ..services.schools import search_schools as _search_schools
 from ..services.zoning import find_zoned_schools as _find_zoned_schools
 from ..services.zoning import geocode as _geocode
@@ -338,6 +340,42 @@ def school_staffing(dbn: str) -> Optional[StaffingInfo]:
 
     Returns None if the school isn't in the report (newly opened, etc.)."""
     return _school_staffing(dbn)
+
+
+@mcp.tool
+def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
+    """Outcomes for the Students-With-Disabilities (SWD) subgroup at one
+    school — distinct from `swd_pct` on the school summary.
+
+    `swd_pct` answers "are there kids with IEPs here?" (an enrollment
+    share). This tool answers "how do kids with IEPs *do* here?" by
+    surfacing the same accountability metrics the rest of the app
+    reports for "All Students", but filtered to just the SWD subgroup:
+    4/5/6-year graduation rate, chronic absenteeism, CCCR index +
+    level, and the school's ESSA-subgroup accountability status. NYSED
+    School Report Card Database; latest year per metric.
+
+    Use for any question about IEPs, special education, or how
+    students with disabilities are served. Pair with `school_staffing`
+    (counselor + social-worker FTE) for adult-support inputs, and with
+    `co_located_schools` since a co-located D75 program is often the
+    nearby specialized option.
+
+    Caveats baked into the response:
+    - NYSED redacts cells where the SWD cohort is below ~30 students;
+      those come back with `suppressed=true` and the cohort N when
+      available.
+    - "SWD" lumps every IEP together — a speech-only accommodation
+      through a 12:1:1 self-contained class. The number is coarse.
+    - D75 schools (`is_d75=true`) are the citywide specialized
+      special-ed district; placement is by the Committee on Special
+      Education, not by zoning or choice, and direct comparison to
+      non-D75 schools should be made with care.
+
+    Returns None only if the DBN doesn't exist; schools without NYSED
+    SWD data return a populated object with empty outcome fields and
+    an explanatory note in `notes`."""
+    return _school_swd_outcomes(dbn)
 
 
 @mcp.tool
