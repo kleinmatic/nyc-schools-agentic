@@ -491,6 +491,7 @@ _HOMEPAGE_NTA_LEADERBOARDS = (
 _HOMEPAGE_BOROUGH_METRICS = ("eni", "attendance_rate", "regents_pct_above_64", "graduation_rate_4yr")
 
 
+@lru_cache(maxsize=4)
 def homepage_neighborhood_leaderboards(per_table: int = 5) -> list[NeighborhoodLeaderboard]:
     out: list[NeighborhoodLeaderboard] = []
     for cfg in _HOMEPAGE_NTA_LEADERBOARDS:
@@ -509,6 +510,7 @@ def homepage_neighborhood_leaderboards(per_table: int = 5) -> list[NeighborhoodL
     return out
 
 
+@lru_cache(maxsize=1)
 def homepage_borough_grid() -> BoroughGrid:
     """Single 5-borough overview across HS-level outcomes + equity."""
     return borough_summary(metrics=list(_HOMEPAGE_BOROUGH_METRICS), level="high")
@@ -1042,6 +1044,7 @@ _HOMEPAGE_LEADERBOARDS = (
 )
 
 
+@lru_cache(maxsize=4)
 def homepage_leaderboards(per_table: int = 5) -> HomepageLeaderboards:
     """Curated set of accountability tables for the homepage dashboard.
     Same shape every render — leaderboards aren't filterable here; for
