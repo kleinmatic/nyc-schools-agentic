@@ -65,6 +65,7 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 | `get_school` | `dbn: str` | `SchoolDetail \| None` | Full report for one school: demographics by year, exams, Regents, class size, budget, NYSED accountability, peer ranks. **Heavy** — 8–14 K tokens per call. |
 | `find_schools_for_address` | `address: str` | `FindSchoolsForAddressResult \| None` | Geocode a NYC address → return its zoned ES + MS schools. The natural entry point for "where should I send my kid?" |
 | `geocode_address` | `address: str` | `GeocodingResult \| None` | Plain geocode escape hatch. Most callers want `find_schools_for_address` instead. |
+| `school_swd_outcomes` | `dbn: str` | `SwdOutcomes \| None` | Outcomes for the Students-With-Disabilities subgroup at one school (grad rate, chronic absenteeism, CCCR, ESSA status). Distinct from `swd_pct` on the summary — that's enrollment share, this is *how SWDs do*. Surfaces an `is_d75` flag and honors NYSED N-size suppression. The right tool for IEP / special-needs questions. |
 
 **Cross-school analytics & browse**
 
@@ -86,6 +87,14 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 > **Neighborhood / zone vocabulary used across these tools:** *Neighborhood* = NTA (Neighborhood Tabulation Area), NYC's official 195 neighborhoods — closest formal proxy to colloquial neighborhood names. *District* = one of NYC's 32 geographic school districts; the natural admissions zone for elementary and middle schools.
 
 Tool input/output schemas are auto-generated from the Pydantic models in [`app/services/models.py`](./app/services/models.py) and exposed via the standard MCP `list_tools` / `tools/list` calls.
+
+#### Prompts
+
+The server also exposes MCP **prompts** — parameterized starter templates a client (Claude Desktop, etc.) can surface to a user.
+
+| Prompt | Arguments | Use for |
+|---|---|---|
+| `iep_or_special_needs` | `concern` (required), `address?`, `grade_level?` | A parent evaluating schools for a child with an IEP or special needs. Orients the assistant: separates input-side supports (`school_staffing`, accessibility, co-located D75 programs) from outcome-side data (`school_swd_outcomes`); flags the standard caveats (enrollment % ≠ outcomes, "SWD" lumps every IEP together, NYSED small-cell suppression, D75 as a separate placement system); names what the data layer *cannot* answer (program mix, behavioral supports, restorative-justice adoption) so the assistant doesn't overclaim. |
 
 #### Metric vocabulary
 
