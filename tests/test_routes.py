@@ -201,11 +201,13 @@ def test_d75_school_shows_badge_and_swd_section(client):
 
 
 def test_non_d75_school_omits_d75_badge(client):
-    """Non-D75 schools should never show the District-75 badge — and there
-    are no other references to District 75 on the page either."""
+    """Non-D75 schools should never show the District-75 badge. Match the
+    badge container class combo rather than the literal "District 75"
+    string — the latter legitimately appears in the WebMCP imperative
+    tool's description text on every school page."""
     r = client.get("/school/15K321")
     assert r.status_code == 200
-    assert "District 75" not in r.text
+    assert 'rounded-full text-xs font-medium bg-amber-50 text-amber-900' not in r.text
 
 
 def test_healthz(client):

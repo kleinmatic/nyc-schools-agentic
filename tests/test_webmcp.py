@@ -89,6 +89,20 @@ def test_webmcp_toolname_is_unique_per_page(client, path, toolname):
     )
 
 
+@pytest.mark.parametrize("dbn", ["15K321", "75K004", "02M475"])
+def test_school_page_registers_imperative_current_school_tool(client, dbn):
+    """School pages register a WebMCP imperative tool that returns the
+    current school's identity + SWD outcomes + staffing so an in-browser
+    agent has page context without DOM access."""
+    r = client.get(f"/school/{dbn}")
+    assert r.status_code == 200
+    assert "navigator.modelContext" in r.text
+    assert 'registerTool' in r.text
+    assert 'name: "get_current_school_details"' in r.text
+    # DBN must appear in the embedded JSON context payload.
+    assert f'"dbn": "{dbn}"' in r.text
+
+
 def test_find_legacy_redirects_to_zoned(client):
     r = client.get("/find", follow_redirects=False)
     assert r.status_code == 301

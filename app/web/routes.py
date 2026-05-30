@@ -127,6 +127,43 @@ async def find_legacy_redirect(address: str = ""):
     return RedirectResponse(url=target, status_code=301)
 
 
+def _agent_context_for_school(detail, swd):
+    """Compact dict embedded in the school page for the WebMCP imperative
+    `get_current_school_details` tool. What an in-browser agent needs to
+    answer a "tell me about THIS school" question in one call — without
+    DOM access or a round-trip to /mcp/. Mirrors what's already rendered
+    on the page; nothing private here."""
+    s = detail.summary
+    loc = detail.location
+    st = detail.staffing
+    return {
+        "dbn": s.dbn,
+        "school_name": s.school_name,
+        "short_name": s.short_name,
+        "school_level": s.school_level,
+        "level_label": _level_label(s.school_level),
+        "borough": s.boro,
+        "district": s.district,
+        "is_d75": s.is_d75,
+        "neighborhood_nta": loc.nta_name if loc else None,
+        "url_path": f"/school/{s.dbn}",
+        "latest_year": detail.demographics_by_year[-1].ay if detail.demographics_by_year else None,
+        "total_enrollment": s.total_enrollment,
+        "swd_enrollment_pct": swd.swd_enrollment_pct if swd else None,
+        "swd_outcomes": swd.model_dump() if swd else None,
+        "staffing": st.model_dump() if st else None,
+        "co_located_schools": [
+            {
+                "dbn": c.dbn,
+                "school_name": c.school_name,
+                "is_d75": c.dbn.startswith("75"),
+                "shared_building_ids": c.building_ids,
+            }
+            for c in detail.co_located
+        ],
+    }
+
+
 @router.get("/school/{dbn}", response_class=HTMLResponse)
 async def school_page(request: Request, dbn: str):
     detail = get_school(dbn)
@@ -135,6 +172,7 @@ async def school_page(request: Request, dbn: str):
             content=f"<h1>School not found</h1><p>No school with DBN <code>{dbn}</code>.</p>",
             status_code=404,
         )
+    swd = school_swd_outcomes(dbn)
     return templates.TemplateResponse(
         request, "school.html",
         {
@@ -147,7 +185,8 @@ async def school_page(request: Request, dbn: str):
                 school_peers(dbn, scope="district")
                 if detail.summary.school_level not in ("high",) else None
             ),
-            "swd": school_swd_outcomes(dbn),
+            "swd": swd,
+            "agent_context": _agent_context_for_school(detail, swd),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
             "ela_citywide_levels": citywide_level_breakdown("ela"),

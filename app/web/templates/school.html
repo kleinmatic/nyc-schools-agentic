@@ -1157,4 +1157,23 @@
   Data: NYC DOE InfoHub, NYC Open Data, NYSED. Pulled via the
   <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> package.
 </p>
+
+{# WebMCP imperative tool — registers a JS tool that returns the current
+   school's details so an in-browser agent answering "is this school right
+   for my kid" knows what page it's on without DOM access or /mcp/. Same
+   data the page renders; nothing private. Feature-detected — silent
+   no-op in browsers without WebMCP support. #}
+<script>
+(function() {
+  if (!('modelContext' in navigator) || !('registerTool' in navigator.modelContext)) return;
+  const CONTEXT = {{ agent_context | tojson }};
+  navigator.modelContext.registerTool({
+    name: "get_current_school_details",
+    description: "Returns full details about the school the user is currently viewing on this page — DBN, name, level, neighborhood, demographics, Students-With-Disabilities subgroup outcomes, counseling/social-worker staffing ratios, District 75 flag, and co-located schools. Always call this FIRST when the user asks about \"this school\" or any context-dependent question about the school they're viewing.",
+    inputSchema: { type: "object", properties: {} },
+    execute() { return CONTEXT; },
+    annotations: { readOnlyHint: true }
+  });
+})();
+</script>
 {% endblock %}
