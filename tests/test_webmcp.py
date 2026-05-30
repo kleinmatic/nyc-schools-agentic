@@ -101,8 +101,11 @@ def test_school_page_registers_imperative_current_school_tool(client, dbn):
     assert 'name: "get_current_school_details"' in r.text
     # DBN must appear in the embedded JSON context payload.
     assert f'"dbn": "{dbn}"' in r.text
-    # peer_ranks is the journalism layer — must be in the always-first tool.
+    # All four comparison dimensions must travel in the always-first tool.
     assert '"peer_ranks":' in r.text
+    assert '"peer_neighborhood":' in r.text
+    assert '"peer_district":' in r.text
+    assert '"co_located_schools":' in r.text
 
 
 def test_school_page_registers_swd_specific_tool_when_outcomes_exist(client):

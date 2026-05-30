@@ -1069,17 +1069,20 @@ def _swd_cccr_for(beds: str) -> Optional[SwdCccrOutcome]:
 
 def _swd_cohort_narrative(rank: int, total: int, value: float, cohort_median: float, higher_is_better: bool, level_label: str) -> str:
     """Pre-compute a journalism-ready string the agent (and template) can
-    surface verbatim. Quartile labels are direction-aware: for 'higher
-    is better' metrics, top quartile = best; for 'lower is better' metrics
-    (chronic absent), bottom-of-distribution = best."""
+    surface verbatim. Direction-neutral language: "highest quartile",
+    "lowest quartile", "above the median", "below the median" — never
+    "best" / "worst" / "better" / "worse". The metric label already
+    tells the reader what the number means; the journalist's job is to
+    locate it in the distribution, not assign a verdict."""
+    # rank #1 = highest value (regardless of metric direction). Quartile
+    # labels are positional, not evaluative.
     quartile = min(3, (rank - 1) * 4 // total) if total > 0 else 0
-    if higher_is_better:
-        bucket = ["top quartile", "second quartile (above median)",
-                  "third quartile (below median)", "bottom quartile (lowest)"][quartile]
-    else:
-        # rank #1 = highest absent rate = worst
-        bucket = ["worst quartile (highest)", "above the median",
-                  "below the median", "best quartile (lowest)"][quartile]
+    bucket = [
+        "highest quartile",
+        "above the median",
+        "below the median",
+        "lowest quartile",
+    ][quartile]
     median_pct = f"{cohort_median * 100:.1f}%"
     value_pct = f"{value * 100:.1f}%"
     return (

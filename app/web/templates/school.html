@@ -1132,7 +1132,7 @@
   ) }}
   {% call explainer() %}
     <p><strong>ESSA</strong> = the federal Every Student Succeeds Act (2015), which replaced No Child Left Behind. It tells each state to identify schools needing extra support based on multiple performance indicators — test scores, growth, English-learner progress, attendance, graduation rate. NYSED computes the designation annually for every NY public school.</p>
-    <p>Four tiers, best to worst:</p>
+    <p>Four tiers, from lowest intervention to highest:</p>
     <ul class="list-disc list-inside ml-2">
       <li><strong>Local Support and Improvement (LSI)</strong> — the default, good-standing tier. The school is meeting its accountability targets across all indicators and demographic subgroups. No federal flag. The name sounds ominous but it just means the school handles its own continuous improvement <em>locally</em>, with no state or federal intervention required. ~80%+ of NY schools sit here.</li>
       <li><strong>Targeted Support and Improvement (TSI)</strong> — at least one demographic subgroup (students with disabilities, English-language learners, a racial group, etc.) is performing in the bottom tier. The school must write a subgroup-focused improvement plan.</li>
@@ -1189,7 +1189,16 @@
   const CONTEXT = {{ agent_context | tojson }};
   navigator.modelContext.registerTool({
     name: "get_current_school_details",
-    description: "Returns details about the school the user is currently viewing — DBN, name, level, neighborhood, demographics, counseling/social-worker staffing, District 75 flag, co-located schools, AND peer_ranks (this school's rank against same-school-level NYC peers on each headline metric). Always call this FIRST when the user asks about \"this school\" or any context-dependent question. Quote the cohort rank alongside any metric you mention — never report a stat without saying where it falls vs NYC peers.",
+    description: [
+      "Returns details about the school the user is currently viewing — identity, demographics, counseling staffing, District 75 flag, and FOUR comparison dimensions the agent should pick from based on the question.",
+      "ALWAYS call this FIRST on any school-page question.",
+      "JOURNALISM RULE: never report a stat in isolation. Every number must be paired with where it falls in a comparable cohort. Use neutral positional language (highest/lowest/above-median/below-median), not evaluative (best/worst/better/worse).",
+      "Comparison dimensions and when to use each:",
+      "  • peer_ranks — citywide rank vs all same-level NYC schools on each headline metric (ENI, ELA, math, PTR, chronic absent). Each entry carries rank, total, and the highest/lowest school by name. Use for 'how does this school rank in NYC?'",
+      "  • peer_neighborhood — every school in the same NTA at the same school level, with per-school metrics. Use for 'compared to other schools in [neighborhood]'. Hand-compute rank or pick out specific peers.",
+      "  • peer_district — every school in the same geographic district at the same level, with metrics. Use for 'in District X' questions. NULL for HS (city-wide choice — say so).",
+      "  • co_located_schools — schools sharing this building (each entry includes is_d75). Use for 'what other schools are in this building?' and to call out D75 special-ed programs co-located here when relevant."
+    ].join("\n"),
     inputSchema: { type: "object", properties: {} },
     execute() { return CONTEXT; },
     annotations: { readOnlyHint: true }
@@ -1204,7 +1213,12 @@
   const SWD_CONTEXT = {{ agent_swd_context | tojson }};
   navigator.modelContext.registerTool({
     name: "get_swd_outcomes_for_current_school",
-    description: "Returns Students-With-Disabilities (SWD) subgroup outcomes for the school the user is viewing — graduation cohorts, chronic absenteeism, CCCR level, ESSA status, AND cohort_context per metric (rank vs same-level NYC SWD cohort, citywide median, extreme high/low schools, pre-computed narrative). Call this when the user mentions an IEP, special-education needs, a learning delay or disability, emotional regulation, autism, speech delays, or asks how this school serves students with disabilities. Surface the cohort_context narratives verbatim — they are pre-written for journalistic context. Do NOT call this for generic questions about the school.",
+    description: [
+      "Returns Students-With-Disabilities (SWD) subgroup outcomes for this school — graduation cohorts, chronic absenteeism, CCCR level, ESSA status — PLUS cohort_context per metric with rank vs the same-level NYC SWD subgroup, citywide median, and the highest/lowest schools by name.",
+      "Call this when the user mentions an IEP, special education, a learning delay or disability, emotional regulation, autism, speech delays, or asks how this school serves students with disabilities.",
+      "Surface cohort_context.narrative strings verbatim — they are pre-written in neutral, journalistic language (highest/lowest quartile, above/below the median). Do not paraphrase as 'best' / 'worst' / 'better' / 'worse'.",
+      "Do NOT call this for generic non-IEP questions about the school."
+    ].join("\n"),
     inputSchema: { type: "object", properties: {} },
     execute() { return SWD_CONTEXT; },
     annotations: { readOnlyHint: true }

@@ -49,13 +49,13 @@ METRIC_DESCRIPTIONS: dict[str, str] = {
     "eni": "Economic Need Index, 0..1 (latest year). NYC DOE's poverty composite. Use for equity ranking.",
     "poverty_pct": "Share of students directly certified via HRA/SNAP/Medicaid (0..1, latest year). Stricter than the older FRPL definition.",
     "attendance_rate": "Daily attendance rate, 0..1, from DOE school snapshot (mostly AY 2016 vintage).",
-    "chronic_absent_rate": "Share of students absent ≥18 days (0..1, NYSED latest year, All Students). Lower is better.",
+    "chronic_absent_rate": "Share of students absent ≥18 days (0..1, NYSED latest year, All Students). Lower values mean fewer chronically-absent students; pass ascending=True to top_schools to lead with the lowest.",
     "ela_pct_proficient": "Share of students at NYS ELA Level 3-4 (0..1, All Grades, latest year). ES/MS/K-8/6-12 only.",
     "math_pct_proficient": "Share of students at NYS Math Level 3-4 (0..1, All Grades, latest year). ES/MS/K-8/6-12 only.",
     "regents_pct_above_64": "Mean Regents passing rate (≥65) across all exams (0..1, latest year). HS / 6-12 only.",
     "regents_pct_above_79": "Mean Regents mastery rate (≥80) across all exams (0..1, latest year). HS / 6-12 only.",
     "graduation_rate_4yr": "4-year cohort graduation rate (NYSED, latest year, All Students, 0..1). HS / 6-12 only.",
-    "pupil_teacher_ratio": "Pupils per teacher (latest year). Lower is generally seen as better.",
+    "pupil_teacher_ratio": "Pupils per teacher (latest year). Lower values mean fewer students per teacher.",
     "pct_inexperienced_teachers": "Share of teachers with <4 years experience (NYSED, latest year, 0..1).",
     "pct_out_of_cert_teachers": "Share of teachers teaching outside their certification area (NYSED, latest year, 0..1).",
     "per_pupil_expenditure": "Per-pupil expenditure, federal + state + local combined ($/year, NYSED, latest year).",
@@ -1005,9 +1005,9 @@ _HOMEPAGE_LEADERBOARDS = (
     {
         "title": "High Schools With the Most Chronic Absenteeism",
         "description": (
-            "Share of students absent ≥18 days. Higher is worse — but the top of "
-            "this list is dominated by transfer / alternative schools (D79, charter "
-            "transfer schools) whose admissions design selects for students already "
+            "Share of students absent ≥18 days, highest first. The top of this list "
+            "is dominated by transfer / alternative schools (D79, charter transfer "
+            "schools) whose admissions design selects for students already "
             "disengaged from school."
         ),
         "metric": "chronic_absent_rate",

@@ -394,17 +394,23 @@ def test_swd_cohort_context_present_for_chronic_absent():
     assert "quartile" in ctx.narrative or "median" in ctx.narrative
 
 
-def test_swd_cohort_context_narrative_direction_matches_metric():
-    """For chronic absent (lower is better), a low-absent school should be
-    described as 'best quartile' or 'below the median' — the narrative
-    must not call a strong school 'worst quartile' just because rank=1."""
-    out = school_swd_outcomes("15K321")  # PS 321 has very low chronic absent
-    assert out is not None
-    ctx = out.cohort_context.get("swd_chronic_absent_rate")
-    assert ctx is not None
-    # PS 321's SWD chronic absent rate is well below the citywide median,
-    # so the narrative should be on the favorable end, never "worst".
-    assert "worst" not in ctx.narrative.lower()
+def test_swd_cohort_context_narrative_uses_neutral_journalistic_language():
+    """Narratives describe POSITION in a distribution, not a verdict.
+    Conclusory words ("best", "worst", "better", "worse") are banned
+    — house style. Use highest/lowest/above/below instead."""
+    banned = {"best", "worst", "better", "worse"}
+    # Spot-check across schools at multiple levels and outcome shapes.
+    for dbn in ("15K321", "15K462", "02M475", "02M033"):
+        out = school_swd_outcomes(dbn)
+        if not out:
+            continue
+        for ctx in out.cohort_context.values():
+            words = set(ctx.narrative.lower().split())
+            collisions = words & banned
+            assert not collisions, (
+                f"{dbn}/{ctx.metric}: narrative contains conclusory word(s) "
+                f"{collisions}: {ctx.narrative!r}"
+            )
 
 
 def test_swd_cohort_context_absent_for_school_without_data():

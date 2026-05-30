@@ -137,19 +137,25 @@ async def find_legacy_redirect(address: str = ""):
     return RedirectResponse(url=target, status_code=301)
 
 
-def _agent_context_for_school(detail, swd):
+def _agent_context_for_school(detail, swd, peer_neighborhood, peer_district):
     """Generic per-school context for the WebMCP imperative tool that's
     "always called first" on a school page. Identity + demographics +
-    counseling staffing + peer ranks + co-located schools — enough for an
-    agent to answer non-special-ed questions about THIS school. SWD-
-    specific outcomes split into a separate tool (see
-    `_agent_swd_context_for_school`) so agents only pull the heavier
-    SWD-with-comparisons payload when the user identifies as needing
-    special-education context.
+    staffing + the FOUR comparison dimensions an agent might need:
 
-    `peer_ranks` is the journalism layer: every numeric stat already has
-    rank/total/extremes vs same-school-level NYC peers. Agents should
-    quote these comparisons, not raw values in isolation."""
+      1) `peer_ranks` — citywide rank against same-level NYC schools on
+         each headline metric (ENI, ELA, math, PTR, chronic absent).
+         Use for "how does this school rank in NYC?"
+      2) `peer_neighborhood` — every school in the same NTA at the same
+         level, with metrics, so the agent can hand-compute "vs other
+         Park Slope ES." Use for neighborhood-scoped questions.
+      3) `peer_district` — same for the same geographic district. Use
+         for "in District 15." Null for HS (city-wide choice).
+      4) `co_located_schools` — schools sharing this building. Use for
+         "what other schools are here?" — especially the D75 case.
+
+    SWD-specific outcomes go in a separate tool (see
+    `_agent_swd_context_for_school`) so agents only pull the heavier
+    SWD-with-comparisons payload on IEP / special-ed questions."""
     s = detail.summary
     loc = detail.location
     st = detail.staffing
@@ -167,11 +173,9 @@ def _agent_context_for_school(detail, swd):
         "latest_year": detail.demographics_by_year[-1].ay if detail.demographics_by_year else None,
         "total_enrollment": s.total_enrollment,
         "swd_enrollment_pct": swd.swd_enrollment_pct if swd else None,
-        # Generic peer ranks vs same-level NYC schools — ENI, ELA/math
-        # proficiency, PTR, chronic absent (All Students). Each entry
-        # carries rank/total + the extreme high/low school by name. The
-        # agent should pair every metric it mentions with the rank.
         "peer_ranks": {k: v.model_dump() for k, v in detail.peer_ranks.items()},
+        "peer_neighborhood": peer_neighborhood.model_dump() if peer_neighborhood else None,
+        "peer_district": peer_district.model_dump() if peer_district else None,
         "staffing": st.model_dump() if st else None,
         "co_located_schools": [
             {
@@ -207,20 +211,22 @@ async def school_page(request: Request, dbn: str):
             status_code=404,
         )
     swd = school_swd_outcomes(dbn)
+    peer_neighborhood = school_peers(dbn, scope="neighborhood")
+    # District peers are most meaningful for ES/MS — HS is city-wide
+    # choice. Non-HS get the second cohort; HS just shows the NTA peers.
+    peer_district = (
+        school_peers(dbn, scope="district")
+        if detail.summary.school_level not in ("high",) else None
+    )
     return templates.TemplateResponse(
         request, "school.html",
         {
             "school": detail,
             "uid": _make_uid(),
-            "peer_neighborhood": school_peers(dbn, scope="neighborhood"),
-            # District peers are most meaningful for ES/MS — HS is city-wide
-            # choice. Non-HS get the second cohort; HS just shows the NTA peers.
-            "peer_district": (
-                school_peers(dbn, scope="district")
-                if detail.summary.school_level not in ("high",) else None
-            ),
+            "peer_neighborhood": peer_neighborhood,
+            "peer_district": peer_district,
             "swd": swd,
-            "agent_context": _agent_context_for_school(detail, swd),
+            "agent_context": _agent_context_for_school(detail, swd, peer_neighborhood, peer_district),
             "agent_swd_context": _agent_swd_context_for_school(swd),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
