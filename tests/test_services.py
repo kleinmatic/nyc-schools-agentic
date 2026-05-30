@@ -373,3 +373,43 @@ def test_school_swd_outcomes_for_d75_emits_placement_caveat():
     assert out is not None
     assert out.is_d75 is True
     assert any("District 75" in n for n in out.notes)
+
+
+def test_swd_cohort_context_present_for_chronic_absent():
+    """Most ES/MS/HS schools with a non-suppressed SWD chronic-absent value
+    pick up a cohort_context entry. Sanity-check rank bounds + that the
+    extremes carry both a name and a DBN."""
+    out = school_swd_outcomes("15K321")  # PS 321 — well-attended ES
+    assert out is not None
+    ctx = out.cohort_context.get("swd_chronic_absent_rate")
+    assert ctx is not None
+    assert ctx.higher_is_better is False
+    assert 1 <= ctx.rank <= ctx.cohort_size
+    assert ctx.cohort_size >= 50  # plenty of NYC ES with SWD chronic data
+    assert 0 <= ctx.value <= 1
+    assert 0 <= ctx.cohort_median <= 1
+    assert ctx.extreme_high and ctx.extreme_high.dbn and ctx.extreme_high.school_name
+    assert ctx.extreme_low and ctx.extreme_low.dbn and ctx.extreme_low.school_name
+    # narrative is the journalism layer — should be quotable.
+    assert "quartile" in ctx.narrative or "median" in ctx.narrative
+
+
+def test_swd_cohort_context_narrative_direction_matches_metric():
+    """For chronic absent (lower is better), a low-absent school should be
+    described as 'best quartile' or 'below the median' — the narrative
+    must not call a strong school 'worst quartile' just because rank=1."""
+    out = school_swd_outcomes("15K321")  # PS 321 has very low chronic absent
+    assert out is not None
+    ctx = out.cohort_context.get("swd_chronic_absent_rate")
+    assert ctx is not None
+    # PS 321's SWD chronic absent rate is well below the citywide median,
+    # so the narrative should be on the favorable end, never "worst".
+    assert "worst" not in ctx.narrative.lower()
+
+
+def test_swd_cohort_context_absent_for_school_without_data():
+    """D75 / very-small / not-reported schools come back with empty
+    cohort_context, not crashing or fabricating ranks."""
+    out = school_swd_outcomes("75K004")  # D75 school, no NYSED SWD data
+    assert out is not None
+    assert out.cohort_context == {}

@@ -92,7 +92,7 @@ def test_webmcp_toolname_is_unique_per_page(client, path, toolname):
 @pytest.mark.parametrize("dbn", ["15K321", "75K004", "02M475"])
 def test_school_page_registers_imperative_current_school_tool(client, dbn):
     """School pages register a WebMCP imperative tool that returns the
-    current school's identity + SWD outcomes + staffing so an in-browser
+    current school's identity + peer_ranks + staffing so an in-browser
     agent has page context without DOM access."""
     r = client.get(f"/school/{dbn}")
     assert r.status_code == 200
@@ -101,6 +101,36 @@ def test_school_page_registers_imperative_current_school_tool(client, dbn):
     assert 'name: "get_current_school_details"' in r.text
     # DBN must appear in the embedded JSON context payload.
     assert f'"dbn": "{dbn}"' in r.text
+    # peer_ranks is the journalism layer — must be in the always-first tool.
+    assert '"peer_ranks":' in r.text
+
+
+def test_school_page_registers_swd_specific_tool_when_outcomes_exist(client):
+    """Second WebMCP tool — only registered when there's SWD data to
+    return. Description steers the agent to call it ONLY on IEP/special-ed
+    questions, not on generic ones. PS 321 has SWD data, so it should
+    register the tool."""
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    assert 'name: "get_swd_outcomes_for_current_school"' in r.text
+    # Tool description must name the IEP / special-ed trigger conditions
+    # so the agent doesn't fire it on generic questions.
+    assert "IEP" in r.text
+    # cohort_context must travel in the SWD tool's payload.
+    assert '"cohort_context":' in r.text
+
+
+def test_school_page_renders_swd_cohort_narrative(client):
+    """The 'How This School Compares' section surfaces the pre-computed
+    narrative strings — the journalism layer that pairs every SWD number
+    with a cohort verdict."""
+    r = client.get("/school/15K321")  # PS 321 — strong SWD chronic numbers
+    assert r.status_code == 200
+    assert "How This School Compares" in r.text
+    # narrative string format: "...quartile (lowest/highest) of NYC ... schools
+    # — this school: X.X%; cohort median: X.X%; ranked N of M"
+    assert "quartile" in r.text
+    assert "cohort median:" in r.text
 
 
 def test_find_legacy_redirects_to_zoned(client):

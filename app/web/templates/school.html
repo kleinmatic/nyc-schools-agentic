@@ -321,10 +321,12 @@
     {% endif %}
     {% if swd.chronic_absenteeism %}
       {% set ca = swd.chronic_absenteeism %}
+      {% set ca_ctx = swd.cohort_context.get('swd_chronic_absent_rate') %}
       <div>
         {{ card_label("SWD chronic absent (" ~ ca.year ~ ")") }}
         {% if ca.suppressed %}{{ card_value('<span class="text-slate-300">Suppressed</span>'|safe) }}{% else %}{{ card_value(pct(ca.absent_rate)) }}{% endif %}
         {% if ca.enrollment is not none %}<div class="text-xs text-slate-500 mt-0.5">N = {{ "{:,}".format(ca.enrollment) }}</div>{% endif %}
+        {% if ca_ctx %}<div class="text-xs text-slate-500 mt-0.5">Rank {{ ca_ctx.rank }} of {{ ca_ctx.cohort_size }} · cohort median {{ "%.1f%%"|format(ca_ctx.cohort_median * 100) }}</div>{% endif %}
       </div>
     {% endif %}
     {% if swd.cccr %}
@@ -369,6 +371,21 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+  {% endif %}
+
+  {% if swd.cohort_context %}
+  <div class="bg-white border border-slate-200 rounded-lg p-5 mb-4">
+    <h3 class="text-base font-medium mb-3">How This School Compares</h3>
+    <div class="space-y-3 text-sm">
+      {% for key, ctx in swd.cohort_context.items() %}
+      <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+        <div class="font-medium text-slate-700 sm:w-44 shrink-0">{{ ctx.metric_label }}</div>
+        <div class="text-slate-600">{{ ctx.narrative }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="text-xs text-slate-500 mt-3">Cohort = same-school-level NYC schools with non-suppressed NYSED data for that metric at the Students-With-Disabilities subgroup.</div>
   </div>
   {% endif %}
 
@@ -1158,22 +1175,41 @@
   <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> package.
 </p>
 
-{# WebMCP imperative tool — registers a JS tool that returns the current
-   school's details so an in-browser agent answering "is this school right
-   for my kid" knows what page it's on without DOM access or /mcp/. Same
-   data the page renders; nothing private. Feature-detected — silent
-   no-op in browsers without WebMCP support. #}
+{# Two WebMCP imperative tools — both feature-detected and silent on
+   non-WebMCP browsers. The split lets an agent pull the SWD-specific
+   payload (with cohort comparisons) only when the user identifies as
+   needing special-ed context, instead of paying for it on every page hit. #}
 <script>
 (function() {
   if (!('modelContext' in navigator) || !('registerTool' in navigator.modelContext)) return;
+
+  // Tool 1 — always called first on a school page. Identity + demographics
+  // + counseling staffing + peer_ranks (rank vs same-level NYC schools on
+  // ENI / ELA / math / PTR / chronic absent) + co-located schools.
   const CONTEXT = {{ agent_context | tojson }};
   navigator.modelContext.registerTool({
     name: "get_current_school_details",
-    description: "Returns full details about the school the user is currently viewing on this page — DBN, name, level, neighborhood, demographics, Students-With-Disabilities subgroup outcomes, counseling/social-worker staffing ratios, District 75 flag, and co-located schools. Always call this FIRST when the user asks about \"this school\" or any context-dependent question about the school they're viewing.",
+    description: "Returns details about the school the user is currently viewing — DBN, name, level, neighborhood, demographics, counseling/social-worker staffing, District 75 flag, co-located schools, AND peer_ranks (this school's rank against same-school-level NYC peers on each headline metric). Always call this FIRST when the user asks about \"this school\" or any context-dependent question. Quote the cohort rank alongside any metric you mention — never report a stat without saying where it falls vs NYC peers.",
     inputSchema: { type: "object", properties: {} },
     execute() { return CONTEXT; },
     annotations: { readOnlyHint: true }
   });
+
+  {% if agent_swd_context %}
+  // Tool 2 — called only when the user identifies as needing IEP /
+  // special-education context. Returns the Students-With-Disabilities
+  // subgroup outcomes (grad, chronic, CCCR, ESSA) WITH cohort_context
+  // per metric — rank/median/extremes vs the same-level NYC SWD cohort,
+  // plus a ready-to-quote narrative string.
+  const SWD_CONTEXT = {{ agent_swd_context | tojson }};
+  navigator.modelContext.registerTool({
+    name: "get_swd_outcomes_for_current_school",
+    description: "Returns Students-With-Disabilities (SWD) subgroup outcomes for the school the user is viewing — graduation cohorts, chronic absenteeism, CCCR level, ESSA status, AND cohort_context per metric (rank vs same-level NYC SWD cohort, citywide median, extreme high/low schools, pre-computed narrative). Call this when the user mentions an IEP, special-education needs, a learning delay or disability, emotional regulation, autism, speech delays, or asks how this school serves students with disabilities. Surface the cohort_context narratives verbatim — they are pre-written for journalistic context. Do NOT call this for generic questions about the school.",
+    inputSchema: { type: "object", properties: {} },
+    execute() { return SWD_CONTEXT; },
+    annotations: { readOnlyHint: true }
+  });
+  {% endif %}
 })();
 </script>
 {% endblock %}

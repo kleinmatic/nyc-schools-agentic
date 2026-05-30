@@ -314,6 +314,30 @@ class SwdEssaOutcome(BaseModel):
     overall_status: str
 
 
+class SwdCohortContext(BaseModel):
+    """Where this school's SWD-subgroup value falls against same-school-level
+    NYC schools. The journalism layer: every SWD stat is paired with cohort
+    rank, median, extremes, and a ready-to-quote narrative string so the
+    human page (and the WebMCP agent) report numbers WITH verdicts, not as
+    decontextualized data points.
+
+    Cohort = same-school-level NYC schools with non-suppressed NYSED data
+    for this metric at the SWD subgroup. Suppressed cells are excluded
+    from the cohort (so percentiles aren't distorted by absent data)."""
+    metric: str                            # e.g. "swd_chronic_absent_rate"
+    metric_label: str                      # human label
+    value: float                           # this school's value (0..1 fraction)
+    higher_is_better: bool                 # True for grad rate; False for chronic absent
+    cohort_label: str                      # "NYC elementary schools (SWD subgroup)"
+    cohort_size: int                       # # of schools in the comparable cohort
+    rank: int                              # 1-based; #1 = highest value
+    cohort_median: float                   # fraction
+    cohort_mean: float                     # fraction
+    narrative: str                         # ready-to-quote: "worst quartile..."
+    extreme_high: Optional["PeerExtreme"] = None  # rank #1 (highest value)
+    extreme_low: Optional["PeerExtreme"] = None   # rank #total (lowest value)
+
+
 class SwdOutcomes(BaseModel):
     """Subgroup-specific outcomes for Students With Disabilities at one
     school. Pairs with `swd_pct` from demographics to answer 'how do kids
@@ -342,6 +366,11 @@ class SwdOutcomes(BaseModel):
     chronic_absenteeism: Optional[SwdChronicOutcome] = None
     cccr: Optional[SwdCccrOutcome] = None
     essa_status: Optional[SwdEssaOutcome] = None
+
+    # Per-metric cohort comparison. Keyed by the metric name; populated only
+    # for metrics where this school has a non-suppressed value AND the
+    # cohort has ≥2 non-suppressed peers (otherwise rank is meaningless).
+    cohort_context: dict[str, SwdCohortContext] = {}
 
     # Caveats the rendering layer should surface verbatim
     notes: list[str] = []

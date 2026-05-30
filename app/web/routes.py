@@ -138,11 +138,18 @@ async def find_legacy_redirect(address: str = ""):
 
 
 def _agent_context_for_school(detail, swd):
-    """Compact dict embedded in the school page for the WebMCP imperative
-    `get_current_school_details` tool. What an in-browser agent needs to
-    answer a "tell me about THIS school" question in one call — without
-    DOM access or a round-trip to /mcp/. Mirrors what's already rendered
-    on the page; nothing private here."""
+    """Generic per-school context for the WebMCP imperative tool that's
+    "always called first" on a school page. Identity + demographics +
+    counseling staffing + peer ranks + co-located schools — enough for an
+    agent to answer non-special-ed questions about THIS school. SWD-
+    specific outcomes split into a separate tool (see
+    `_agent_swd_context_for_school`) so agents only pull the heavier
+    SWD-with-comparisons payload when the user identifies as needing
+    special-education context.
+
+    `peer_ranks` is the journalism layer: every numeric stat already has
+    rank/total/extremes vs same-school-level NYC peers. Agents should
+    quote these comparisons, not raw values in isolation."""
     s = detail.summary
     loc = detail.location
     st = detail.staffing
@@ -160,7 +167,11 @@ def _agent_context_for_school(detail, swd):
         "latest_year": detail.demographics_by_year[-1].ay if detail.demographics_by_year else None,
         "total_enrollment": s.total_enrollment,
         "swd_enrollment_pct": swd.swd_enrollment_pct if swd else None,
-        "swd_outcomes": swd.model_dump() if swd else None,
+        # Generic peer ranks vs same-level NYC schools — ENI, ELA/math
+        # proficiency, PTR, chronic absent (All Students). Each entry
+        # carries rank/total + the extreme high/low school by name. The
+        # agent should pair every metric it mentions with the rank.
+        "peer_ranks": {k: v.model_dump() for k, v in detail.peer_ranks.items()},
         "staffing": st.model_dump() if st else None,
         "co_located_schools": [
             {
@@ -172,6 +183,19 @@ def _agent_context_for_school(detail, swd):
             for c in detail.co_located
         ],
     }
+
+
+def _agent_swd_context_for_school(swd):
+    """SWD-specific payload for the second WebMCP tool, registered with a
+    description that tells the agent to call it only when the user
+    identifies as needing IEP / special-education context. Includes
+    `cohort_context` per metric — the journalism layer for SWD numbers
+    (rank vs same-level NYC SWD cohort, citywide median, extremes,
+    pre-computed narrative string). Returns None if the school has no
+    SWD outcomes payload at all."""
+    if swd is None:
+        return None
+    return swd.model_dump()
 
 
 @router.get("/school/{dbn}", response_class=HTMLResponse)
@@ -197,6 +221,7 @@ async def school_page(request: Request, dbn: str):
             ),
             "swd": swd,
             "agent_context": _agent_context_for_school(detail, swd),
+            "agent_swd_context": _agent_swd_context_for_school(swd),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
             "ela_citywide_levels": citywide_level_breakdown("ela"),

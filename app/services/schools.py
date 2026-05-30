@@ -40,6 +40,7 @@ from .models import (
     SubgroupStatus,
     SwdCccrOutcome,
     SwdChronicOutcome,
+    SwdCohortContext,
     SwdEssaOutcome,
     SwdGradOutcome,
     SwdOutcomes,
@@ -1066,6 +1067,141 @@ def _swd_cccr_for(beds: str) -> Optional[SwdCccrOutcome]:
     )
 
 
+def _swd_cohort_narrative(rank: int, total: int, value: float, cohort_median: float, higher_is_better: bool, level_label: str) -> str:
+    """Pre-compute a journalism-ready string the agent (and template) can
+    surface verbatim. Quartile labels are direction-aware: for 'higher
+    is better' metrics, top quartile = best; for 'lower is better' metrics
+    (chronic absent), bottom-of-distribution = best."""
+    quartile = min(3, (rank - 1) * 4 // total) if total > 0 else 0
+    if higher_is_better:
+        bucket = ["top quartile", "second quartile (above median)",
+                  "third quartile (below median)", "bottom quartile (lowest)"][quartile]
+    else:
+        # rank #1 = highest absent rate = worst
+        bucket = ["worst quartile (highest)", "above the median",
+                  "below the median", "best quartile (lowest)"][quartile]
+    median_pct = f"{cohort_median * 100:.1f}%"
+    value_pct = f"{value * 100:.1f}%"
+    return (
+        f"{bucket} of {level_label} (citywide SWD subgroup) — this school: "
+        f"{value_pct}; cohort median: {median_pct}; ranked {rank} of {total}"
+    )
+
+
+_LEVEL_LABEL_PLURAL = {
+    "elementary": "NYC elementary schools",
+    "middle": "NYC middle schools",
+    "high": "NYC high schools",
+    "K-8": "NYC K-8 schools",
+    "6-12": "NYC 6-12 schools",
+}
+
+
+def _swd_cohort_rank_chronic(dbn: str) -> Optional[SwdCohortContext]:
+    """Rank this school's SWD chronic-absenteeism rate vs same-school-level
+    NYC peers, latest NYSED year, SWD subgroup only, suppressed cells
+    excluded from the cohort."""
+    school_level = _school_level_for(dbn)
+    if school_level is None:
+        return None
+    nysed_level = _nysed_level_for(school_level)
+    if nysed_level is None:
+        return None
+    beds = _beds_for(dbn)
+    if beds is None:
+        return None
+    store = data.get_store()
+    same_level = store.demographics[
+        (store.demographics["ay"] == store.demographics["ay"].max())
+        & (store.demographics["school_level"] == school_level)
+    ]
+    same_level_beds = {f"{int(b):012d}" for b in same_level["beds"].dropna()}
+    chronic = store.nysed_chronic
+    latest_year = chronic["YEAR"].max()
+    cohort = chronic[
+        (chronic["YEAR"] == latest_year)
+        & (chronic["LEVEL"] == nysed_level)
+        & (chronic["SUBGROUP_NAME"] == _SWD_SUBGROUP)
+        & (chronic["ENTITY_CD"].isin(same_level_beds))
+        & chronic["ABSENT_RATE"].notna()
+    ]
+    info = _rank_in_cohort(cohort, "ENTITY_CD", beds, "ABSENT_RATE", ascending=False)
+    if info is None:
+        return None
+    rank, total, value, top, bottom = info
+    value_pct = value / 100
+    median_pct = float(cohort["ABSENT_RATE"].median()) / 100
+    mean_pct = float(cohort["ABSENT_RATE"].mean()) / 100
+    fmt = lambda r: f"{float(r['ABSENT_RATE']):.1f}%"
+    level_label = _LEVEL_LABEL_PLURAL.get(school_level, f"NYC {school_level} schools")
+    return SwdCohortContext(
+        metric="swd_chronic_absent_rate",
+        metric_label="SWD chronic absenteeism",
+        value=value_pct,
+        higher_is_better=False,
+        cohort_label=f"{level_label} (Students-With-Disabilities subgroup)",
+        cohort_size=total,
+        rank=rank,
+        cohort_median=median_pct,
+        cohort_mean=mean_pct,
+        narrative=_swd_cohort_narrative(rank, total, value_pct, median_pct,
+                                        higher_is_better=False, level_label=level_label),
+        extreme_high=_extreme_from_row(top, "ENTITY_NAME", "ENTITY_CD", fmt),
+        extreme_low=_extreme_from_row(bottom, "ENTITY_NAME", "ENTITY_CD", fmt),
+    )
+
+
+def _swd_cohort_rank_grad_4yr(dbn: str) -> Optional[SwdCohortContext]:
+    """Rank this school's SWD 4-year graduation rate vs same-school-level
+    NYC HS peers, latest NYSED year, SWD subgroup, suppressed cells
+    excluded. HS / 6-12 only — returns None for other levels."""
+    school_level = _school_level_for(dbn)
+    if school_level not in ("high", "6-12"):
+        return None
+    beds = _beds_for(dbn)
+    if beds is None:
+        return None
+    store = data.get_store()
+    same_level = store.demographics[
+        (store.demographics["ay"] == store.demographics["ay"].max())
+        & (store.demographics["school_level"] == school_level)
+    ]
+    same_level_beds = {f"{int(b):012d}" for b in same_level["beds"].dropna()}
+    grad = store.nysed_hs_grad
+    latest_year = grad["YEAR"].max()
+    cohort = grad[
+        (grad["YEAR"] == latest_year)
+        & (grad["SUBGROUP_NAME"] == _SWD_SUBGROUP)
+        & (grad["COHORT"] == "4-Year")
+        & (grad["ENTITY_CD"].isin(same_level_beds))
+        & grad["GRAD_RATE"].notna()
+    ]
+    info = _rank_in_cohort(cohort, "ENTITY_CD", beds, "GRAD_RATE", ascending=False)
+    if info is None:
+        return None
+    rank, total, value, top, bottom = info
+    value_pct = value / 100
+    median_pct = float(cohort["GRAD_RATE"].median()) / 100
+    mean_pct = float(cohort["GRAD_RATE"].mean()) / 100
+    fmt = lambda r: f"{float(r['GRAD_RATE']):.1f}%"
+    level_label = _LEVEL_LABEL_PLURAL.get(school_level, f"NYC {school_level} schools")
+    return SwdCohortContext(
+        metric="swd_grad_rate_4yr",
+        metric_label="SWD 4-year graduation rate",
+        value=value_pct,
+        higher_is_better=True,
+        cohort_label=f"{level_label} (Students-With-Disabilities subgroup)",
+        cohort_size=total,
+        rank=rank,
+        cohort_median=median_pct,
+        cohort_mean=mean_pct,
+        narrative=_swd_cohort_narrative(rank, total, value_pct, median_pct,
+                                        higher_is_better=True, level_label=level_label),
+        extreme_high=_extreme_from_row(top, "ENTITY_NAME", "ENTITY_CD", fmt),
+        extreme_low=_extreme_from_row(bottom, "ENTITY_NAME", "ENTITY_CD", fmt),
+    )
+
+
 def _swd_essa_for(beds: str) -> Optional[SwdEssaOutcome]:
     df = data.get_store().nysed_essa_subgroup
     rows = df[(df["ENTITY_CD"] == beds) & (df["SUBGROUP_NAME"] == _SWD_SUBGROUP)]
@@ -1140,6 +1276,19 @@ def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
             "doesn't report under NYSED's accountability schedule."
         )
 
+    # Cohort comparisons — the journalism layer. Computed only for metrics
+    # where this school has a non-suppressed value AND ≥2 peers in the
+    # cohort (`_rank_in_cohort` enforces the floor). D75 schools get
+    # comparisons too but the placement caveat in `notes` is the reader's
+    # warning to read them carefully.
+    cohort_context: dict[str, SwdCohortContext] = {}
+    chronic_ctx = _swd_cohort_rank_chronic(dbn)
+    if chronic_ctx:
+        cohort_context[chronic_ctx.metric] = chronic_ctx
+    grad_ctx = _swd_cohort_rank_grad_4yr(dbn)
+    if grad_ctx:
+        cohort_context[grad_ctx.metric] = grad_ctx
+
     return SwdOutcomes(
         dbn=summary.dbn,
         school_name=summary.school_name,
@@ -1150,6 +1299,7 @@ def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
         chronic_absenteeism=chronic,
         cccr=cccr,
         essa_status=essa,
+        cohort_context=cohort_context,
         notes=notes,
     )
 
