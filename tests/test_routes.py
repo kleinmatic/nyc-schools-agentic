@@ -211,7 +211,13 @@ def test_non_d75_school_omits_d75_badge(client):
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "data_loaded": True}
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["data_loaded"] is True
+    # caches_warming may be true (background task still running) or false
+    # (warm completed before this check fires) — both are healthy states.
+    assert isinstance(body["caches_warming"], bool)
+    assert body["caches_warm_s"] is None or body["caches_warm_s"] > 0
 
 
 def test_robots_txt_blocks_training_crawlers_and_allows_search(client):

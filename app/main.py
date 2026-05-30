@@ -1,7 +1,9 @@
 """FastAPI app entry. Loads data on startup, mounts web + MCP routes."""
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI
 from fastmcp.utilities.lifespan import combine_lifespans
@@ -16,19 +18,47 @@ log = logging.getLogger("nyc_schools_agentic")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+# Surface warm-up progress on /healthz so a deploy / monitor can tell
+# warm-vs-cold from outside. State is process-global because warm_caches
+# uses lru_cache (also process-global); there's no shared-state issue.
+_warm_state: dict = {"running": False, "elapsed_s": None}
+
+
+def _run_warm_caches() -> None:
+    """Sync helper that runs in a worker thread so it doesn't block the
+    event loop. pandas releases the GIL inside C extensions, so other
+    requests proceed even while this is grinding."""
+    t = time.monotonic()
+    try:
+        warm_caches()
+        _warm_state["elapsed_s"] = round(time.monotonic() - t, 2)
+        log.info("Caches warm in %.1fs (background)", _warm_state["elapsed_s"])
+    except Exception:
+        log.exception("warm_caches failed in background")
+    finally:
+        _warm_state["running"] = False
+
+
 @asynccontextmanager
 async def data_lifespan(app: FastAPI):
     log.info("Loading committed data from %s ...", config.DB_PATH)
     data.load()
     log.info("Data loaded: %s", data.summary())
-    # Pre-compute the heavy aggregates so the first user request is fast.
-    # Hidden from end-users by Fly's rolling deploy: traffic only switches
-    # to the new machine after /healthz passes (this lifespan completes).
-    t = time.monotonic()
-    warm_caches()
-    log.info("Caches warm in %.1fs", time.monotonic() - t)
-    yield
-    log.info("Shutting down")
+    # warm_caches() runs in the background so /healthz responds the moment
+    # uvicorn binds. First user hit to /, /neighborhood/*, etc. may pay an
+    # un-amortized cost; everything after is fast. This trades a single
+    # cold-request stall for resilience against shared-CPU throttling — at
+    # shared-cpu-1x, blocking warm-up takes ~230s and flaps healthchecks.
+    _warm_state["running"] = True
+    warm_task: Optional[asyncio.Task] = asyncio.create_task(
+        asyncio.to_thread(_run_warm_caches)
+    )
+    try:
+        yield
+    finally:
+        if warm_task and not warm_task.done():
+            warm_task.cancel()
+        log.info("Shutting down")
 
 
 class _McpTrailingSlashMiddleware:
@@ -72,4 +102,9 @@ app.mount("/mcp", mcp_app)
 
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
-    return {"status": "ok", "data_loaded": data.is_loaded()}
+    return {
+        "status": "ok",
+        "data_loaded": data.is_loaded(),
+        "caches_warming": _warm_state["running"],
+        "caches_warm_s": _warm_state["elapsed_s"],
+    }
