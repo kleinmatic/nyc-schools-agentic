@@ -149,6 +149,10 @@
   <main class="max-w-4xl mx-auto px-6 py-8">
     {% block content %}{% endblock %}
   </main>
+  {# Site-wide WebMCP-annotated forms. Any page that already hosts the
+     same toolnames in its content (homepage /, /zoned) overrides this
+     block to empty — WebMCP requires unique toolnames per document. #}
+  {% block global_webmcp_forms %}{% include "partials/_webmcp_global_forms.html" %}{% endblock %}
   <footer class="max-w-4xl mx-auto px-6 py-8 text-xs text-slate-400">
     Data via <a class="underline" href="https://github.com/adelphi-ed-tech/nycschools">nycschools</a> and a half-dozen NYC / NYS sources — <a class="underline" href="/sources">full list with vintages</a>.
     AGPL-3.0; <a class="underline" href="https://github.com/kleinmatic/nyc-schools-agentic">corresponding source</a>.

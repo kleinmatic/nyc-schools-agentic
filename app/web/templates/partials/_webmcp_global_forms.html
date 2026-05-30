@@ -1,0 +1,46 @@
+{# Compact site-wide WebMCP-annotated forms. Included from base.html on
+   every page EXCEPT pages that already host the same toolnames in their
+   primary content (the homepage / and /zoned) — those override the
+   `global_webmcp_forms` block to empty so we never duplicate a toolname
+   within one document (WebMCP spec requires unique toolnames per page).
+
+   Visible UI is intentionally small — these are an "agent-discoverable
+   action surface for any page" first, "extra search affordance for
+   humans" second. Keeps the page hierarchy clean while still meeting
+   the WebMCP rule that every annotated action maps to a real
+   human-browseable page. #}
+<section class="max-w-4xl mx-auto px-6 pt-6 pb-2">
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-slate-200 rounded-lg p-4">
+    <form action="/search" method="get"
+          toolname="search-schools-by-name"
+          tooldescription="Search NYC public schools by name or DBN. Returns a ranked list of matching schools with summary info."
+          toolautosubmit>
+      <label class="text-xs text-slate-500 uppercase tracking-wide block mb-1">Find Another School</label>
+      <input
+        type="search"
+        name="q"
+        autocomplete="off"
+        placeholder="School name, short name, or DBN"
+        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:border-slate-500 focus:outline-none"
+        toolparamdescription="Full or partial school name, common short name, or 6-character DBN. Examples: 'Bronx Science', 'PS 321', '15K321'."
+      >
+    </form>
+    <button type="button" class="agent-active-pill" data-toolname="search-schools-by-name" disabled aria-live="polite">Agent activated!</button>
+
+    <form action="/zoned" method="get"
+          toolname="find-zoned-schools-by-address"
+          tooldescription="Find the NYC public elementary and middle schools zoned to a given street address."
+          toolautosubmit>
+      <label class="text-xs text-slate-500 uppercase tracking-wide block mb-1">Schools by Address</label>
+      <input
+        type="text"
+        name="address"
+        autocomplete="street-address"
+        placeholder="e.g. 180 7th Avenue, Brooklyn"
+        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:border-slate-500 focus:outline-none"
+        toolparamdescription="A street address in any of NYC's five boroughs. Include the borough name. Example: '180 7th Avenue, Brooklyn'."
+      >
+    </form>
+    <button type="button" class="agent-active-pill" data-toolname="find-zoned-schools-by-address" disabled aria-live="polite">Agent activated!</button>
+  </div>
+</section>

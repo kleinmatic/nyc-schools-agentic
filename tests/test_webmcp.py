@@ -19,11 +19,19 @@ def client():
 @pytest.mark.parametrize(
     "path, expected_tool",
     [
+        # Pages that host the toolnames inline in their primary content.
         ("/zoned", "find-zoned-schools-by-address"),
         ("/search", "search-schools-by-name"),
         ("/search", "find-zoned-schools-by-address"),
         ("/", "search-schools-by-name"),
         ("/", "find-zoned-schools-by-address"),
+        # Pages that pick up both toolnames via the base.html global block.
+        ("/school/15K321", "search-schools-by-name"),
+        ("/school/15K321", "find-zoned-schools-by-address"),
+        ("/neighborhood/Park-Slope-Gowanus", "search-schools-by-name"),
+        ("/neighborhood/Park-Slope-Gowanus", "find-zoned-schools-by-address"),
+        ("/sources", "search-schools-by-name"),
+        ("/sources", "find-zoned-schools-by-address"),
     ],
 )
 def test_webmcp_toolname_present(client, path, expected_tool):
@@ -32,7 +40,10 @@ def test_webmcp_toolname_present(client, path, expected_tool):
     assert f'toolname="{expected_tool}"' in r.text
 
 
-@pytest.mark.parametrize("path", ["/", "/zoned", "/search"])
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/zoned", "/search", "/school/15K321", "/neighborhood/Park-Slope-Gowanus", "/sources"],
+)
 def test_webmcp_form_carries_description_and_autosubmit(client, path):
     r = client.get(path)
     assert r.status_code == 200
@@ -40,11 +51,42 @@ def test_webmcp_form_carries_description_and_autosubmit(client, path):
     assert "toolautosubmit" in r.text
 
 
-@pytest.mark.parametrize("path", ["/", "/zoned", "/search"])
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/zoned", "/search", "/school/15K321", "/neighborhood/Park-Slope-Gowanus", "/sources"],
+)
 def test_webmcp_input_has_param_description(client, path):
     r = client.get(path)
     assert r.status_code == 200
     assert "toolparamdescription=" in r.text
+
+
+@pytest.mark.parametrize(
+    "path, toolname",
+    [
+        # Spec compliance: each toolname must appear exactly once per page.
+        # Pages with inline forms (/, /zoned) suppress the global block; pages
+        # without inline forms pick up the single global instance. We match
+        # ` toolname="..."` (leading space) to exclude `data-toolname="..."`
+        # on the agent-active-pill <button> — that's a JS-side selector hook,
+        # not a WebMCP form annotation.
+        ("/", "search-schools-by-name"),
+        ("/", "find-zoned-schools-by-address"),
+        ("/zoned", "find-zoned-schools-by-address"),
+        ("/school/15K321", "search-schools-by-name"),
+        ("/school/15K321", "find-zoned-schools-by-address"),
+        ("/neighborhood/Park-Slope-Gowanus", "search-schools-by-name"),
+        ("/sources", "search-schools-by-name"),
+    ],
+)
+def test_webmcp_toolname_is_unique_per_page(client, path, toolname):
+    r = client.get(path)
+    assert r.status_code == 200
+    needle = f' toolname="{toolname}"'
+    assert r.text.count(needle) == 1, (
+        f"{path}: expected exactly one form-level toolname={toolname!r}, "
+        f"got {r.text.count(needle)}"
+    )
 
 
 def test_find_legacy_redirects_to_zoned(client):
