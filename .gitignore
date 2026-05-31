@@ -32,6 +32,7 @@ local/
 *.local.*
 SECRETS.md
 secrets.md
+tmp/
 
 # --- Data cache (large; rebuilt by scripts/fetch_data.py) ---
 school-data/

@@ -12,7 +12,7 @@ upstream sources   →   school-data/   →   data/   →   running app
                 [build only]      [committed via Git LFS]
 ```
 
-The running app has **zero runtime dependency** on the upstream `nycschools` package or on `school-data/`. It reads from `data/data.sqlite` (LFS-tracked) plus a few small geo / CSV files in `data/` (school locations, school-zone polygons, NTA boundaries, co-location report). Cold-start data load is ~1s; the FastAPI lifespan additionally pre-warms `aggregate_by_neighborhood` (~8s) so the first user request to `/neighborhood/*` or the homepage doesn't pay the cost — see `analytics.warm_caches()`. On Fly the warm-up is hidden by the rolling-deploy strategy (healthcheck blocks traffic until ready).
+The running app has **zero runtime dependency** on the upstream `nycschools` package or on `school-data/`. It reads from `data/data.sqlite` (LFS-tracked) plus a few small geo / CSV files in `data/` (school locations, school-zone polygons, NTA boundaries, co-location report). Cold-start data load is ~1.5s, on the lifespan critical path. `analytics.warm_caches()` runs in a background thread (`asyncio.to_thread`) — `/healthz` returns the moment uvicorn binds and reports the warm state (`caches_warming`, `caches_warm_s`). Warm-up takes ~10s locally and ~40s on Fly's `performance-1x`; the first user hit to `/`, `/neighborhood/*`, or any other heavy aggregation may arrive mid-warm and pay an un-amortized cost, but every request after is cached. Re-blocking warm on the lifespan regressed prod to 230s with healthcheck flap on `shared-cpu-1x` — don't.
 
 The data refresh workflow (`scripts/fetch_data.py` + `scripts/build_db.py`) runs locally, rarely (~once a year when NYSED publishes a new School Report Card), then commits the rebuilt `data/` files. Production never re-pulls; every refresh is a deliberate, reviewable git commit. See README "Refreshing data" for the full sequence.
 
@@ -39,29 +39,35 @@ Same pattern powers cross-surface reuse in concrete cases that already shipped: 
 
 ```
 app/
-├── main.py            FastAPI app, lifespan-loaded data, mounts web + MCP
+├── main.py            FastAPI app, lifespan-loaded data, background-thread
+│                      warm_caches(), mounts web + MCP
 ├── config.py          paths to data/ (committed) + school-data/ (build-only)
 ├── data.py            reads data/data.sqlite + geo files into in-memory dataframes
 ├── services/
 │   ├── models.py      Pydantic schemas — the contract surfaced everywhere
 │   ├── schools.py     one-school: search_schools, get_school, peer ranks,
-│   │                  school_staffing (GC + SW), co_located_schools
+│   │                  school_staffing (GC + SW), co_located_schools,
+│   │                  school_swd_outcomes (SWD-subgroup metrics + cohort context)
 │   ├── zoning.py      address → lat/lon → zoned ES/MS (NYC GeoSearch + point-in-polygon)
 │   └── analytics.py   cross-school: top_schools, bulk_metrics, list_high_schools,
 │                      aggregate_by_neighborhood, borough_summary, school_peers,
 │                      schools_in_neighborhood, get_neighborhood, plus homepage_*
-│                      curated sets and warm_caches() for the lifespan hook
+│                      curated sets and warm_caches() (called from lifespan in a
+│                      background thread; do not re-block on it)
 ├── web/
 │   ├── routes.py      thin Jinja-rendering adapters; registers `level` + `pretty`
-│   │                  Jinja filters (display-only label and apostrophe polish)
+│   │                  Jinja filters and `commit_sha_short`/`commit_sha_full`
+│   │                  globals (deploy stamp in footer, from GIT_COMMIT_SHA env)
 │   ├── charts.py      view-layer data shaping for client-side Observable Plot charts
 │   └── templates/
-│       ├── base, search, school, find, neighborhood, sources    page templates
+│       ├── base, search, school, zoned, neighborhood, sources    page templates
 │       └── partials/  results, leaderboard, neighborhood_leaderboard,
-│                      borough_grid, peer_cohort                — small reusable units
+│                      borough_grid, peer_cohort, _webmcp_global_forms (site-wide
+│                      WebMCP-annotated forms included via base.html block)
 └── mcp_server/
     ├── __init__.py    re-exports the FastMCP server
-    └── server.py      thin FastMCP adapter; mounted at /mcp/ over Streamable HTTP
+    └── server.py      thin FastMCP adapter; mounted at /mcp/ over Streamable HTTP.
+                       15 tools + 1 prompt (iep_or_special_needs)
 ```
 
 Future siblings of `web/` and `mcp_server/` will be `a2a_server/`, `acp_server/`. Each is a thin adapter — same shape.
@@ -128,3 +134,9 @@ The upstream bulk-archive Drive URL is dead; we lazy-fetch per file from `data.m
 - **Neighborhood-page metric set:** the per-school **table** uses the **UNION** of `_PEER_METRICS_BY_LEVEL` entries for every school level represented in the NTA, so a HS in a mostly-ES neighborhood (Forest Hills HS in Forest Hills) doesn't appear empty. The **peer-rank cards** use only the **dominant level's** set, since each card ranks the NTA on one coherent metric. Two separate helpers in `analytics.py`: `_table_metrics_for_neighborhood` vs. `_peer_rank_metrics_for_neighborhood`.
 - **`_candidate_schools` keep-cols gotcha:** it slices `demographics` down to a small column set; if a downstream consumer (a `SchoolSummary` field, a service helper, a template) needs another column, add it to the `cols` list or the downstream value falls through silently as None. Cost us an "Enroll: N/A" bug on every neighborhood-page row when `total_enrollment` wasn't in the keep-list.
 - **`tests/test_routes.py` substring assertions must track AP-title-case headings.** When you rename a section header (e.g. `"Quick stats"` → `"Quick Stats"`), grep `test_routes.py` for the old form — the case-sensitive `assert fragment in r.text` lines fail silently if they were missed.
+- **Lifespan warm-up is non-blocking.** `data.load()` is synchronous on the critical path (~1.5s); `warm_caches()` runs in `asyncio.to_thread(...)` so `/healthz` answers the moment uvicorn binds, reporting `caches_warming` / `caches_warm_s` for deploy monitoring. Trade-off: a first-mid-warm hit pays an un-amortized cost; every hit after is cached. Re-blocking on warm flapped Fly healthchecks on `shared-cpu-1x` (230s startup) — don't.
+- **Every `homepage_*` helper has `@lru_cache`.** They each call `aggregate_by_neighborhood` (also cached) but the leaderboard/grid construction layer wasn't — local homepage was 2.3s/request without function-level caching, ~1ms with. Caches are per-process and invalidated by deploy — fine, the data is immutable per-deploy. If you add a new homepage helper, cache it.
+- **Fly VM = `performance-1x` + 2GB, `min_machines_running = 1`.** Dedicated vCPU avoids `shared-cpu-1x`'s ~1/16-vCPU burst baseline (which throttled startup to 230s and flapped healthchecks). One machine is enough for pre-launch traffic. Deploy commit SHA flows via `--build-arg COMMIT_SHA=${{ github.sha }}` in `.github/workflows/main.yml` → `GIT_COMMIT_SHA` env in the image → `commit_sha_short` / `commit_sha_full` Jinja globals → footer link to the GitHub commit page. Local runs show `dev`.
+- **Neutral journalistic language in user-facing copy and generated narratives.** No best / worst / better / worse anywhere — copy, agent payloads, MCP tool descriptions, leaderboard subtitles, generated `narrative` strings. Use positional: highest / lowest, above / below the median, higher than / lower than. Pinning test `test_swd_cohort_context_narrative_uses_neutral_journalistic_language` in `tests/test_services.py` catches regressions. Reader forms the judgment; the journalist reports position.
+- **WebMCP exposure: three patterns + a third-party-audit caveat.** (1) **Declarative forms** — exactly 4 spec attributes (`toolname` / `tooldescription` / `toolautosubmit` / `toolparamdescription`); inline forms on `/` and `/zoned` carry them, plus `partials/_webmcp_global_forms.html` reproduces both via `base.html`'s `{% block global_webmcp_forms %}` so every other page (school, neighborhood, sources, …) exposes them too. Override the block to empty on pages with inline duplicates — WebMCP requires unique toolnames per document. (2) **Imperative tools** — `navigator.modelContext.registerTool()` inline in templates that need to hand the agent page-specific context (DOM/URL aren't visible to in-browser chat panels). School pages register two: `get_current_school_details` (always-first; identity + `peer_ranks` + `peer_neighborhood` + `peer_district` + `co_located_schools` + staffing) and `get_swd_outcomes_for_current_school` (called only on IEP / special-ed questions per its description). (3) **Third-party "WebMCP Inspector" Chrome extensions invent checks not in the spec** (`toolaction` attribute, `/.well-known/webmcp`, `window.ai` / Gemini Nano detection) — ignore. The Google one (`beaufortfrancois/model-context-tool-inspector`) is spec-accurate.
+- **Cohort comparison is the journalism layer; pair every stat with position.** `SchoolDetail.peer_ranks` carries rank/total/extremes vs same-school-level NYC peers on All-Students metrics; `school_peers(scope="neighborhood"|"district")` gives same-NTA / same-district cohorts; `SwdCohortContext` on `SwdOutcomes` does the same for SWD-subgroup outcomes with pre-computed neutral `narrative` strings. Agent payloads on school pages include all four comparison dimensions so an in-browser agent can answer "vs other Park Slope ES" or "what other schools share this building" without round-tripping. Service-layer rule: when you add a new metric to a page, also surface the comparison.
