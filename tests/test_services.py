@@ -1,5 +1,16 @@
 """Smoke tests for the service layer. Hits real cached data."""
-from app.services.schools import get_school, school_swd_outcomes, search_schools
+import httpx
+import pytest
+import respx
+
+from app.services.schools import (
+    co_located_schools,
+    get_school,
+    school_staffing,
+    school_swd_outcomes,
+    search_schools,
+)
+from app.services.zoning import GEOSEARCH_URL, find_zoned_schools, geocode
 
 
 def test_search_by_short_name_finds_ps_321():
@@ -419,3 +430,66 @@ def test_swd_cohort_context_absent_for_school_without_data():
     out = school_swd_outcomes("75K004")  # D75 school, no NYSED SWD data
     assert out is not None
     assert out.cohort_context == {}
+
+
+# ----- Demo path: pins the address→zoned→SWD→co-located→staffing chain -----
+#
+# Scott uses this exact narrative in every demo: an agent asks what school
+# 428 W 26th St, Manhattan is zoned for, gets PS 33 Chelsea Prep, then asks
+# about services for a child with an emotional regulation disorder, and the
+# answer surfaces the co-located D75 school (PS 138, 75M138) in the same
+# building plus the school's counseling staffing. If any leg of this chain
+# silently changes shape, the demo breaks. The whole flow is one test on
+# purpose — the value is the chain, not the individual asserts.
+@respx.mock
+async def test_demo_chain_428_w_26_st_to_chelsea_prep_to_d75_neighbor():
+    # PS 33 Chelsea Prep's own coordinates — guaranteed to be inside its
+    # own ES attendance-zone polygon.
+    ps33_lat, ps33_lon = 40.7490139997319, -74.00023799963121
+    respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "features": [
+                    {
+                        "geometry": {"coordinates": [ps33_lon, ps33_lat]},
+                        "properties": {
+                            "label": "428 W 26 STREET, Manhattan, NY, USA",
+                            "borough": "Manhattan",
+                        },
+                    }
+                ]
+            },
+        )
+    )
+
+    geo = await geocode("428 W 26th St, Manhattan")
+    assert geo is not None
+    assert geo.borough == "Manhattan"
+
+    zoned = find_zoned_schools(geo.lat, geo.lon)
+    assert "02M033" in [s.dbn for s in zoned.elementary], (
+        f"428 W 26th St should be zoned for PS 33 Chelsea Prep (02M033); "
+        f"got ES={[s.dbn for s in zoned.elementary]}"
+    )
+    assert zoned.es_district == 2
+
+    swd = school_swd_outcomes("02M033")
+    assert swd is not None and swd.is_d75 is False
+    assert swd.swd_enrollment_pct is not None and swd.swd_enrollment_pct > 0
+    # Cohort context is what makes the answer journalism instead of a
+    # number — every SWD stat must arrive paired with where the school
+    # sits among NYC ES peers on the SWD subgroup.
+    assert swd.cohort_context, "SWD outcomes must carry cohort context for the demo"
+
+    co = co_located_schools("02M033")
+    co_dbns = [c.dbn for c in co]
+    assert "75M138" in co_dbns, (
+        f"PS 33 shares a building with the D75 school 75M138 — the demo "
+        f"relies on this surfacing; got {co_dbns}"
+    )
+
+    staffing = school_staffing("02M033")
+    assert staffing is not None
+    assert staffing.total_gc is not None
+    assert staffing.total_sw is not None
