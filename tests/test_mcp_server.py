@@ -35,6 +35,11 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "school_staffing",
         "school_swd_outcomes",
         "co_located_schools",
+        # Dynamic capability discovery — discover + access pair.
+        "list_school_metrics",
+        "list_neighborhood_metrics",
+        "get_school_metric",
+        "get_neighborhood_metric",
     }
 
 
@@ -53,10 +58,14 @@ async def test_top_schools_and_bulk_metrics_descriptions_advertise_metric_vocabu
 
 async def test_each_tool_advertises_an_input_schema(mcp_client):
     """Sanity: a missing/empty inputSchema would mean callers can't tell
-    what args to pass — caught here, not in production."""
+    what args to pass — caught here, not in production. No-arg discovery
+    tools are explicitly allowed to have an empty properties dict."""
+    NO_ARG_TOOLS = {"list_school_metrics", "list_neighborhood_metrics"}
     tools = await mcp_client.list_tools()
     for t in tools:
-        assert t.inputSchema, f"{t.name} has no inputSchema"
+        assert t.inputSchema is not None, f"{t.name} has no inputSchema"
+        if t.name in NO_ARG_TOOLS:
+            continue
         assert t.inputSchema.get("properties"), f"{t.name} schema has no properties"
 
 

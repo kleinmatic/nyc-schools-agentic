@@ -19,6 +19,12 @@ from ..services.analytics import (
     schools_in_neighborhood as _schools_in_neighborhood,
     top_schools as _top_schools,
 )
+from ..services.metrics import (
+    get_neighborhood_metric as _get_neighborhood_metric,
+    get_school_metric as _get_school_metric,
+    list_neighborhood_metrics as _list_neighborhood_metrics,
+    list_school_metrics as _list_school_metrics,
+)
 from ..services.models import (
     BoroughGrid,
     CoLocatedSchool,
@@ -27,10 +33,14 @@ from ..services.models import (
     MetricRow,
     NeighborhoodAggregate,
     NeighborhoodDetail,
+    NeighborhoodMetricDef,
+    NeighborhoodMetricValue,
     NeighborhoodSchoolsResult,
     PeerCohort,
     RankedSchool,
     SchoolDetail,
+    SchoolMetricDef,
+    SchoolMetricValue,
     SchoolSummary,
     StaffingInfo,
     SwdOutcomes,
@@ -107,7 +117,14 @@ mcp = FastMCP(
         "- 'Best/worst schools by some metric' → top_schools.\n"
         "- 'Best/worst neighborhoods by some metric' → top_neighborhoods.\n"
         "- 'Borough overview' → borough_summary.\n"
-        "- 'Cross-school correlations' → bulk_metrics."
+        "- 'Cross-school correlations' → bulk_metrics.\n"
+        "- 'What can I ask about a school / a neighborhood?' → "
+        "list_school_metrics / list_neighborhood_metrics — the discovery "
+        "surface. Returns every metric this server can answer with id, "
+        "label, unit, applicable school levels, and a vintage note. Use "
+        "the returned ids with get_school_metric / get_neighborhood_metric "
+        "for single-value lookups. The curated tools above are shortcuts "
+        "for common patterns; discovery is the open-ended escape hatch."
     ),
 )
 
@@ -484,3 +501,85 @@ def school_peers(
     Returns None if the DBN is unknown or the school has no NTA / district
     assigned."""
     return _school_peers(dbn=dbn, scope=scope, limit=limit)
+
+
+# ----- Dynamic capability discovery (services/metrics.py) -----
+#
+# Two pairs: list_* enumerates available metrics; get_*_metric returns a
+# single value for a specific entity. Distinct school and neighborhood
+# universes — they don't share a single dispatcher.
+
+@mcp.tool
+def list_school_metrics() -> list[SchoolMetricDef]:
+    """Every per-school metric this server can answer. Returns id, label,
+    unit, applicable school levels, source-table provenance, and vintage
+    note. The id is what you pass to `get_school_metric`.
+
+    Use this when the user's question is open-ended or when none of the
+    curated tools (`top_schools`, `bulk_metrics`, `get_school`, the
+    SWD / staffing / co-location tools) is the obvious fit. The curated
+    tools are workflow-shaped shortcuts for common patterns; this is the
+    escape hatch for arbitrary single-metric, single-school lookups.
+
+    Discovery is also how new metrics surface. When a column lands in
+    the upstream NYSED / DOE data and gets a registry entry, it appears
+    here without an MCP code change — so agents that drive off
+    `list_school_metrics` adapt automatically."""
+    return _list_school_metrics()
+
+
+@mcp.tool
+def list_neighborhood_metrics() -> list[NeighborhoodMetricDef]:
+    """Every per-neighborhood (NTA) metric this server can answer. Each
+    entry is an aggregation over the schools in an NTA and names its
+    `underlying_school_metric` — that's the per-school field the
+    aggregation rolls up. Returns id, label, unit, applicable school
+    levels, aggregation method, and vintage note.
+
+    Use this when the user is asking about a neighborhood-level pattern
+    and `top_neighborhoods` doesn't fit (e.g. "give me the value for
+    Park Slope", not "rank all NTAs"). The id you get back goes to
+    `get_neighborhood_metric`."""
+    return _list_neighborhood_metrics()
+
+
+@mcp.tool
+def get_school_metric(dbn: str, metric: str) -> Optional[SchoolMetricValue]:
+    """Look up one metric for one school by DBN. Returns the value plus
+    label, unit, and vintage note. Discovery counterpart to
+    `list_school_metrics` — pass any id from that list.
+
+    Behavior at the edges:
+    - Unknown DBN → returns None.
+    - Unknown metric → raises (the agent should have discovered with
+      `list_school_metrics` first).
+    - Metric doesn't apply to the school's level (e.g. Regents on an
+      elementary school) → returns the record with `value=None` and
+      a `note` explaining the level mismatch. The note is the journalism
+      output, not an error.
+    - Metric applies but the school has no data → `value=None`, `note=None`.
+      Distinct from suppression — see `school_swd_outcomes` for the
+      SWD-subgroup suppression case."""
+    return _get_school_metric(dbn=dbn, metric=metric)
+
+
+@mcp.tool
+def get_neighborhood_metric(
+    nta: str,
+    metric: str,
+    level: Optional[SchoolLevel] = None,
+) -> Optional[NeighborhoodMetricValue]:
+    """Aggregated value of one metric for one NTA (fuzzy-matched). Returns
+    the value plus the number of schools contributing, the canonical NTA
+    name, and other NTAs that scored well on the fuzzy match — same
+    disambiguation surface as `schools_in_neighborhood` and
+    `get_neighborhood`.
+
+    Use this for direct lookups ("what's chronic absenteeism in Park
+    Slope's elementary schools?") rather than ranking — `top_neighborhoods`
+    is the right tool for "which NTAs have the highest X."
+
+    `level` filters the underlying school set: pass "elementary" to
+    aggregate only across the NTA's elementary schools, etc. If the NTA
+    has no schools at that level, `value=None` and `n_schools=0`."""
+    return _get_neighborhood_metric(nta=nta, metric=metric, level=level)
