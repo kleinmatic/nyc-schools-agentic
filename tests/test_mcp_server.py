@@ -335,3 +335,75 @@ async def test_geocode_address_tool_delegates_to_service(mcp_client):
     assert r.data is not None
     assert r.data.lat == 40.671816
     assert r.data.borough == "Brooklyn"
+
+
+# ----- Dynamic capability discovery (services/metrics.py) -----
+
+async def test_list_school_metrics_tool_returns_registry(mcp_client):
+    """Round-trip check: the discovery tool reaches the registry and
+    every entry deserializes to SchoolMetricDef on the client side."""
+    r = await mcp_client.call_tool("list_school_metrics", {})
+    assert r.data, "expected at least one school metric"
+    ids = {m.id for m in r.data}
+    # ENI is the headline equity metric — must always be discoverable.
+    assert "eni" in ids
+    # Every entry carries provenance.
+    assert all(m.vintage_note for m in r.data)
+
+
+async def test_list_neighborhood_metrics_names_underlying_school_metric(mcp_client):
+    r = await mcp_client.call_tool("list_neighborhood_metrics", {})
+    school_ids = {m.id for m in (await mcp_client.call_tool("list_school_metrics", {})).data}
+    for entry in r.data:
+        assert entry.underlying_school_metric in school_ids
+
+
+async def test_get_school_metric_tool_returns_value_for_known_school(mcp_client):
+    r = await mcp_client.call_tool(
+        "get_school_metric", {"dbn": "15K321", "metric": "eni"}
+    )
+    assert r.data is not None
+    assert r.data.dbn == "15K321"
+    assert r.data.metric == "eni"
+    assert r.data.value is not None and 0.0 <= r.data.value <= 1.0
+
+
+async def test_get_school_metric_tool_returns_none_for_unknown_dbn(mcp_client):
+    r = await mcp_client.call_tool(
+        "get_school_metric", {"dbn": "99Z999", "metric": "eni"}
+    )
+    assert r.data is None
+
+
+async def test_get_school_metric_tool_notes_level_mismatch(mcp_client):
+    """Regents on an elementary school: value=None, note explains why.
+    The note is the journalism output — never strip it on the way to
+    the agent."""
+    r = await mcp_client.call_tool(
+        "get_school_metric",
+        {"dbn": "15K321", "metric": "regents_pct_above_64"},
+    )
+    assert r.data is not None
+    assert r.data.value is None
+    assert r.data.note and "elementary" in r.data.note.lower()
+
+
+async def test_get_neighborhood_metric_tool_fuzzy_matches(mcp_client):
+    r = await mcp_client.call_tool(
+        "get_neighborhood_metric",
+        {"nta": "Park Slope", "metric": "eni", "level": "elementary"},
+    )
+    assert r.data is not None
+    assert r.data.nta_name == "Park Slope-Gowanus"
+    assert r.data.n_schools > 0
+    assert r.data.value is not None
+
+
+async def test_discovery_tools_advertise_the_discover_then_access_pattern(mcp_client):
+    """The instructions block tells agents to use the discovery pair when
+    the curated tools don't fit — make sure the link is in the tool
+    descriptions too, so an agent landing on get_*_metric without reading
+    instructions still finds its way to list_*_metrics."""
+    tools = {t.name: t for t in await mcp_client.list_tools()}
+    assert "list_school_metrics" in (tools["get_school_metric"].description or "")
+    assert "list_neighborhood_metrics" in (tools["get_neighborhood_metric"].description or "")

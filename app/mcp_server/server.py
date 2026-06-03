@@ -573,7 +573,8 @@ def get_neighborhood_metric(
     the value plus the number of schools contributing, the canonical NTA
     name, and other NTAs that scored well on the fuzzy match — same
     disambiguation surface as `schools_in_neighborhood` and
-    `get_neighborhood`.
+    `get_neighborhood`. Discovery counterpart to `list_neighborhood_metrics`
+    — pass any id from that list.
 
     Use this for direct lookups ("what's chronic absenteeism in Park
     Slope's elementary schools?") rather than ranking — `top_neighborhoods`
