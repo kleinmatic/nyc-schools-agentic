@@ -639,3 +639,62 @@ class SchoolDetail(BaseModel):
     hs_directory: Optional[HsDirectoryInfo] = None
     nysed: Optional[NysedReport] = None
     peer_ranks: dict[str, PeerRank] = {}
+
+
+# -------- Dynamic capability discovery (services/metrics.py) --------
+#
+# These models support the agent-native `discover + access` pattern: rather
+# than a tool per metric, list_school_metrics / list_neighborhood_metrics
+# enumerate what's available and get_school_metric / get_neighborhood_metric
+# return values for specific entities. School and neighborhood are distinct
+# data universes — they don't share a single registry.
+
+class SchoolMetricDef(BaseModel):
+    """One row in the school-scope metric catalog."""
+    id: str                            # registry key, e.g. "eni"
+    label: str                         # human-readable, e.g. "Economic Need Index"
+    description: str                   # discovery prose for the agent — carries ranking semantics
+    unit: str                          # "pct" | "ratio" | "dollars"
+    source_table: str                  # SQLite-table provenance
+    applicable_levels: list[str]       # school levels this metric applies to; ["*"] = any
+    vintage_note: str                  # human-readable provenance + vintage
+
+
+class NeighborhoodMetricDef(BaseModel):
+    """One row in the neighborhood-scope metric catalog. Each neighborhood
+    metric is an aggregation over the schools in an NTA."""
+    id: str
+    label: str
+    description: str
+    unit: str
+    underlying_school_metric: str      # the SchoolMetricDef.id this is aggregated from
+    aggregation: str                   # "mean" — only one for now
+    applicable_levels: list[str]
+    vintage_note: str
+
+
+class SchoolMetricValue(BaseModel):
+    """Result of get_school_metric for one school × metric."""
+    dbn: str
+    school_name: str
+    metric: str                        # registry id
+    label: str
+    value: Optional[float]             # None when data is missing for this school
+    unit: str
+    vintage_note: str
+    note: Optional[str] = None         # optional caveat (e.g. "not applicable to elementary")
+
+
+class NeighborhoodMetricValue(BaseModel):
+    """Result of get_neighborhood_metric for one NTA × metric."""
+    nta_name: str                      # canonical NTA name
+    boro: Optional[str] = None
+    metric: str
+    label: str
+    value: Optional[float]
+    n_schools: int                     # number of schools the aggregation covers
+    school_level: Optional[str] = None # level filter applied to the aggregation, if any
+    unit: str
+    aggregation: str
+    vintage_note: str
+    other_candidates: list[str] = []   # other NTAs that fuzzy-matched the query
