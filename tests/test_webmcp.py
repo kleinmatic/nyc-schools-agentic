@@ -147,3 +147,60 @@ def test_find_legacy_redirect_preserves_address(client):
     assert r.status_code == 301
     assert "address=" in r.headers["location"]
     assert r.headers["location"].startswith("/zoned")
+
+
+# ----- /llms.txt + /.well-known/webmcp -----
+#
+# Two emerging-convention discovery endpoints. /llms.txt orients agents to
+# the site (llmstxt.org). /.well-known/webmcp declares the in-page WebMCP
+# tools for pre-visit discovery (Chrome team future-work, not specced).
+# Neither is required; both are additive signals for agent-first sites.
+
+def test_llms_txt_returns_200_with_orientation_block(client):
+    r = client.get("/llms.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    text = r.text
+    # The MCP endpoint must be discoverable — that's the whole point.
+    assert "https://nycschools.fly.dev/mcp/" in text
+    # Pointer to the WebMCP manifest for the in-page tool surface.
+    assert "/.well-known/webmcp" in text
+    # H1 + summary blockquote per llms.txt convention.
+    assert text.startswith("# NYC Schools")
+    assert "\n> " in text
+
+
+def test_webmcp_manifest_returns_valid_json_with_both_tools(client):
+    r = client.get("/.well-known/webmcp")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    manifest = r.json()
+    assert manifest["name"] == "nyc-schools"
+    tool_names = {t["name"] for t in manifest["tools"]}
+    assert tool_names == {"search-schools-by-name", "find-zoned-schools-by-address"}
+    # Each tool carries its endpoint + method so a pre-visit agent knows
+    # how to invoke without parsing the HTML form.
+    for t in manifest["tools"]:
+        assert t["endpoint"].startswith("/")
+        assert t["method"] in ("GET", "POST")
+        assert t["inputSchema"]["type"] == "object"
+        assert t["inputSchema"]["required"]  # at least one required field
+
+
+def test_webmcp_manifest_strings_match_form_partial(client):
+    """Drift guard: every tool name and description in the manifest must
+    appear verbatim in the rendered form partial. If the two are
+    edited independently, the manifest stops being an honest
+    declaration. Catches this in one place rather than discovering
+    drift via agent confusion."""
+    manifest = client.get("/.well-known/webmcp").json()
+    # /school/15K321 picks up the partial via base.html's
+    # global_webmcp_forms block — convenient page to inspect.
+    page = client.get("/school/15K321").text
+    for tool in manifest["tools"]:
+        assert f'toolname="{tool["name"]}"' in page, (
+            f'manifest declares {tool["name"]!r} but the form partial does not'
+        )
+        assert tool["description"] in page, (
+            f'manifest description for {tool["name"]!r} does not match the form'
+        )

@@ -3,7 +3,7 @@ import itertools
 import os
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import config
@@ -348,3 +348,104 @@ Allow: /
 @router.get("/robots.txt", include_in_schema=False, response_class=PlainTextResponse)
 async def robots_txt() -> str:
     return _ROBOTS_TXT
+
+
+# ----- llms.txt + WebMCP manifest ------------------------------------------
+#
+# `/llms.txt` follows the proposed llmstxt.org convention (Jeremy Howard,
+# Answer.AI): a root-level markdown file that gives an agent fetching the
+# site a fast orientation — what it is, where the canonical URLs are, which
+# endpoint serves the MCP tools. Not a spec; an early-adopter convention
+# with real uptake (Stripe, Mintlify, others). For an explicitly
+# agent-first site like this one, the alignment is obvious.
+#
+# `/.well-known/webmcp` follows an emerging — but not-yet-specced — WebMCP
+# manifest convention. The Chrome team has discussed it as future work for
+# pre-visit tool discovery; the freeCodeCamp WebMCP guide documents the
+# shape; early adopters publish it. Our manifest declares the two
+# declarative WebMCP forms exposed on every page (search + zoned), with
+# their input schemas and HTTP endpoints. It is NOT a mirror of the 19
+# server-MCP tools at /mcp/ — those are reachable via the standard MCP
+# tools/list RPC, not via this manifest.
+
+# Source of truth for the WebMCP manifest. Must mirror the actual
+# declarative-form annotations in `partials/_webmcp_global_forms.html`
+# and the inline forms on /search and /zoned. Drift is caught by
+# `test_webmcp_manifest_matches_form_strings` in tests/test_webmcp.py.
+_WEB_MCP_TOOLS = [
+    {
+        "name": "search-schools-by-name",
+        "description": "Search NYC public schools by name or DBN. Returns a ranked list of matching schools with summary info.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "q": {
+                    "type": "string",
+                    "description": "Full or partial school name, common short name, or 6-character DBN. Examples: 'Bronx Science', 'PS 321', '15K321'.",
+                },
+            },
+            "required": ["q"],
+        },
+        "endpoint": "/search",
+        "method": "GET",
+    },
+    {
+        "name": "find-zoned-schools-by-address",
+        "description": "Find the NYC public elementary and middle schools zoned to a given street address.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "description": "A street address in any of NYC's five boroughs. Include the borough name. Example: '180 7th Avenue, Brooklyn'.",
+                },
+            },
+            "required": ["address"],
+        },
+        "endpoint": "/zoned",
+        "method": "GET",
+    },
+]
+
+
+_LLMS_TXT = """# NYC Schools
+
+> Interactive site and MCP server for NYC public school data. Agents are first-class consumers — the same service layer powers HTML pages for humans and an MCP server for AI agents.
+
+Journalism-style accountability and equity data for every NYC public school, keyed by DBN (e.g. 15K321). The data refresh cycle is annual (NYSED School Report Card + DOE demographics); refreshes are committed via git so every version is reviewable.
+
+## MCP server
+
+- [Streamable HTTP endpoint](https://nycschools.fly.dev/mcp/) — 19 tools, no auth. Includes a dynamic-capability-discovery pair (`list_school_metrics` / `list_neighborhood_metrics` + `get_school_metric` / `get_neighborhood_metric`) alongside 15 curated tools for common patterns.
+- Tool descriptions are oriented to *when an agent should use this*.
+
+## Pages
+
+- [Homepage](https://nycschools.fly.dev/) — leaderboards by metric and by neighborhood
+- [Search](https://nycschools.fly.dev/search) — fuzzy school search by name or DBN
+- [Zoned schools](https://nycschools.fly.dev/zoned) — address → zoned ES + MS
+- [Sources](https://nycschools.fly.dev/sources) — every dataset and its vintage
+
+## Reference
+
+- [Repository](https://github.com/kleinmatic/nyc-schools-agentic) — AGPL-3.0; corresponding source per §13
+- [WebMCP manifest](https://nycschools.fly.dev/.well-known/webmcp) — in-page declarative tool surface
+- [llms.txt convention](https://llmstxt.org) — this file's format
+"""
+
+
+@router.get("/llms.txt", include_in_schema=False, response_class=PlainTextResponse)
+async def llms_txt() -> str:
+    return _LLMS_TXT
+
+
+@router.get("/.well-known/webmcp", include_in_schema=False)
+async def webmcp_manifest() -> JSONResponse:
+    return JSONResponse(
+        {
+            "name": "nyc-schools",
+            "version": "0.1.0",
+            "description": "Interactive site and MCP server for NYC public school data. This manifest declares the in-page declarative WebMCP tools (form-based) exposed on every page. The server's full MCP catalog (19 tools) lives at /mcp/ over Streamable HTTP.",
+            "tools": _WEB_MCP_TOOLS,
+        }
+    )
