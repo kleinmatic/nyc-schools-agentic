@@ -22,10 +22,12 @@ from rapidfuzz import fuzz
 from .models import (
     BoroughGrid,
     BoroughRow,
+    DistrictSchoolsResult,
     HomepageLeaderboards,
     HsListing,
     LeaderboardTable,
     MetricRow,
+    MsProgramInfo,
     NeighborhoodAggregate,
     NeighborhoodDetail,
     NeighborhoodLeaderboard,
@@ -36,6 +38,7 @@ from .models import (
     PeerCohort,
     PeerSchool,
     RankedSchool,
+    SchoolInDistrict,
     SchoolSummary,
 )
 from .schools import _to_summary
@@ -613,6 +616,206 @@ def schools_in_neighborhood(
         boro=top_boro,
         n_schools_total=total,
         other_candidates=others,
+        schools=schools,
+    )
+
+
+_DISTRICT_MS_ADMISSION_OVERVIEW = (
+    "NYC middle school admission is district-based **choice** in this "
+    "district. Families rank schools and offers run by priority group — "
+    "siblings and continuing students first, then district residents, "
+    "with zone-residency a secondary tier where it applies. Each school's "
+    "`admission_methods` lists the methods it admits by (Open, Screened, "
+    "Zone Priority, etc.); a school with multiple programs can carry "
+    "multiple methods and a family can rank programs separately. See "
+    "each school's `ms_programs[*].priorities` for the exact priority "
+    "cascade per program."
+)
+
+_DISTRICT_ES_ADMISSION_OVERVIEW = (
+    "NYC elementary school admission is primarily zoned in this "
+    "district: living in a school's attendance zone confers a strong "
+    "(often guaranteed) seat. G&T, dual-language, and other "
+    "specialty programs run as a parallel city-wide / district choice "
+    "process on top. For zoned-school lookup by address, use "
+    "`find_schools_for_address`."
+)
+
+_DISTRICT_HS_ADMISSION_OVERVIEW = (
+    "NYC high school admission is **city-wide** choice, not district-"
+    "based — students can apply to any HS in any borough. The grouping "
+    "here is geographic, not an admissions cohort. Specialized HS "
+    "(Stuyvesant, Bronx Science, et al.) admit via the SHSAT separately. "
+    "Use `get_school` for HS program detail or `top_schools(metric, "
+    "level=\"high\")` for HS leaderboards."
+)
+
+
+def schools_in_district(district: int, level: str) -> Optional[DistrictSchoolsResult]:
+    """All NYC public schools in a given district at a given level.
+
+    `level` is one of "elementary", "middle", or "high":
+
+    - **middle** is the rich case and the original motivation for this
+      tool: NYC MS admission is district-based choice. Source of truth
+      is the MS Directory (`store.ms_directory`); each school's
+      `admission_methods` lists the distinct methods across its
+      programs (1-4 programs per school), and `ms_programs` carries
+      the per-program priority cascade. Pairs with
+      `find_schools_for_address` — when that returns
+      `ms_admission_type="zone_priority_choice"` or `"district_choice"`,
+      this is the follow-up that surfaces the full district set with
+      methods.
+    - **elementary** and **high** return a basic listing without
+      admission detail (the directory equivalents don't share shape
+      with the MS Directory). HS specifically is city-wide choice in
+      NYC, so the district grouping is geographic only — see the
+      `admission_overview` note in the result.
+
+    Returns None for unknown level, or when the district + level
+    combination has zero schools.
+    """
+    if level not in ("elementary", "middle", "high"):
+        return None
+    store = data.get_store()
+    if level == "middle":
+        return _schools_in_district_middle(district, store)
+    return _schools_in_district_es_or_hs(district, level, store)
+
+
+def _district_school_view(store) -> pd.DataFrame:
+    """One row per active school with the columns schools_in_district
+    needs (dbn, school_name, school_level, district, boro,
+    total_enrollment). _candidate_schools doesn't carry district in its
+    keep-list, and we don't want to pay the side-effect of changing
+    that just for this consumer."""
+    df = store.demographics
+    cols = ["dbn", "school_name", "school_level", "district", "boro", "ay", "total_enrollment"]
+    df = df[[c for c in cols if c in df.columns]].copy()
+    df = df.sort_values("ay").drop_duplicates("dbn", keep="last")
+    df = df[df["ay"] >= _ACTIVE_SCHOOL_MIN_AY]
+    return df
+
+
+def _schools_in_district_middle(district: int, store) -> Optional[DistrictSchoolsResult]:
+    md = store.ms_directory
+    rows = md[md["district"] == district]
+    if rows.empty:
+        # D75 placement is by the Committee on Special Education, not
+        # the choice application — falls through to the basic listing
+        # so the caller still gets the school set.
+        if district == 75:
+            return _schools_in_district_es_or_hs(district, "middle", store)
+        return None
+
+    cands = _district_school_view(store)
+    cand_by_dbn = cands.set_index("dbn")
+    rows_sorted = rows.sort_values(["dbn", "program_index"])
+
+    schools_by_dbn: dict[str, SchoolInDistrict] = {}
+    for _, prog_row in rows_sorted.iterrows():
+        dbn = prog_row["dbn"]
+        if dbn not in schools_by_dbn:
+            # Prefer the demographics view (canonical school_name, level,
+            # enrollment); fall back to the directory's school_name when
+            # the school isn't in demographics (rare — schools that
+            # opened between data vintages).
+            cand = cand_by_dbn.loc[dbn] if dbn in cand_by_dbn.index else None
+            if cand is not None:
+                school_name = str(cand.get("school_name") or prog_row.get("school_name") or dbn)
+                school_level = cand.get("school_level")
+                if isinstance(school_level, float) and pd.isna(school_level):
+                    school_level = None
+                total_enrollment = cand.get("total_enrollment")
+                total_enrollment = (
+                    int(total_enrollment) if pd.notna(total_enrollment) else None
+                )
+                boro = cand.get("boro") or None
+            else:
+                school_name = str(prog_row.get("school_name") or dbn)
+                school_level = None
+                total_enrollment = None
+                boro = None
+            schools_by_dbn[dbn] = SchoolInDistrict(
+                dbn=dbn,
+                school_name=school_name,
+                school_level=school_level,
+                boro=boro,
+                district=district,
+                total_enrollment=total_enrollment,
+                is_d75=(district == 75),
+                admission_methods=[],
+                ms_programs=[],
+            )
+        school = schools_by_dbn[dbn]
+        method = prog_row.get("admission_method")
+        if pd.notna(method) and method not in school.admission_methods:
+            school.admission_methods.append(method)
+        priorities = []
+        for p in range(1, 7):
+            v = prog_row.get(f"priority{p}")
+            if pd.notna(v):
+                priorities.append(str(v))
+        program_code = prog_row.get("program_code")
+        program_name = prog_row.get("program_name")
+        school.ms_programs.append(MsProgramInfo(
+            program_index=int(prog_row["program_index"]),
+            program_name=str(program_name) if pd.notna(program_name) else None,
+            program_code=str(program_code) if pd.notna(program_code) else None,
+            admission_method=str(method) if pd.notna(method) else "",
+            priorities=priorities,
+        ))
+
+    schools = sorted(schools_by_dbn.values(), key=lambda s: s.school_name)
+    return DistrictSchoolsResult(
+        district=district,
+        level="middle",
+        n_schools=len(schools),
+        admission_overview=_DISTRICT_MS_ADMISSION_OVERVIEW,
+        schools=schools,
+    )
+
+
+def _schools_in_district_es_or_hs(district: int, level: str, store) -> Optional[DistrictSchoolsResult]:
+    cands = _district_school_view(store)
+    if level == "elementary":
+        keep_levels = {"elementary", "K-8", "K-6", "K-7", "K-5"}
+        overview = _DISTRICT_ES_ADMISSION_OVERVIEW
+    elif level == "high":
+        keep_levels = {"high", "6-12", "7-12", "8-12", "5-12", "9-12"}
+        overview = _DISTRICT_HS_ADMISSION_OVERVIEW
+    else:
+        # "middle" fallback for D75
+        keep_levels = {"middle", "K-8", "6-12", "4-8", "5-8", "K-12", "5-12", "7-12", "8-12"}
+        overview = (
+            "District 75 is NYC's citywide specialized special-education "
+            "district. Placement is by the Committee on Special Education, "
+            "not by the choice application — D75 schools do not appear in "
+            "the MS Directory and don't carry admission methods on the "
+            "choice-process scale."
+        )
+    in_dist = cands[(cands["district"] == district) & (cands["school_level"].isin(keep_levels))]
+    if in_dist.empty:
+        return None
+    schools = []
+    for _, r in in_dist.sort_values("school_name").iterrows():
+        enroll = r.get("total_enrollment")
+        schools.append(SchoolInDistrict(
+            dbn=str(r["dbn"]),
+            school_name=str(r["school_name"]),
+            school_level=str(r.get("school_level")) if pd.notna(r.get("school_level")) else None,
+            boro=str(r.get("boro")) if pd.notna(r.get("boro")) else None,
+            district=int(r["district"]) if pd.notna(r.get("district")) else district,
+            total_enrollment=int(enroll) if pd.notna(enroll) else None,
+            is_d75=(district == 75),
+            admission_methods=[],
+            ms_programs=[],
+        ))
+    return DistrictSchoolsResult(
+        district=district,
+        level=level,
+        n_schools=len(schools),
+        admission_overview=overview,
         schools=schools,
     )
 

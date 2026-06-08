@@ -9,6 +9,7 @@ Two pieces:
    zones contain that point. Some zone polygons serve multiple DBNs
    (comma-separated in the source data); we split on commas.
 """
+import re
 from typing import Optional
 
 import httpx
@@ -119,18 +120,123 @@ def _zoned_matches(zones, point: Point) -> tuple[list[ZonedSchoolMatch], Optiona
     return matches, district
 
 
+_DISTRICT_LABEL_RE = re.compile(r"^D\d+$", re.IGNORECASE)
+
+
+def _classify_ms_polygons(ms_zones, pt: Point) -> tuple[list[ZonedSchoolMatch], Optional[int], Optional[str]]:
+    """MS zoning works differently than ES: an MS polygon labeled "D2"
+    is the whole-district-choice fallback, while a polygon labeled
+    "297" represents a school-specific zone-priority. The point can
+    fall in both at once (school-priority polygons typically nest
+    inside the district fallback). We surface only the school-priority
+    matches in the result and use the label-pattern split to derive
+    `ms_admission_type`."""
+    if ms_zones.empty:
+        return [], None, None
+    hits = ms_zones[ms_zones.geometry.contains(pt)]
+    if hits.empty:
+        return [], None, None
+
+    school_hits, district_hits = [], []
+    for _, zone_row in hits.iterrows():
+        label = _opt_str(zone_row.get("label"))
+        if label and _DISTRICT_LABEL_RE.match(label):
+            district_hits.append(zone_row)
+        elif label:
+            school_hits.append(zone_row)
+        # else: zone with no label — ignore (a few zone polygons in the
+        # source file have NaN labels)
+
+    district: Optional[int] = None
+    matches: list[ZonedSchoolMatch] = []
+    for zone_row in school_hits:
+        sd = zone_row.get("schooldist")
+        if district is None and pd.notna(sd):
+            try:
+                district = int(float(sd))
+            except (TypeError, ValueError):
+                pass
+        zone_label = _opt_str(zone_row.get("label"))
+        for dbn in _split_dbns(zone_row.get("dbn")):
+            match = _enrich(dbn, zone_label)
+            if match:
+                matches.append(match)
+    if district is None:
+        for zone_row in district_hits:
+            sd = zone_row.get("schooldist")
+            if pd.notna(sd):
+                try:
+                    district = int(float(sd))
+                    break
+                except (TypeError, ValueError):
+                    pass
+
+    if school_hits:
+        admission_type = "zone_priority_choice"
+    elif district_hits:
+        admission_type = "district_choice"
+    else:
+        admission_type = None
+    return matches, district, admission_type
+
+
+def _ms_admission_note(admission_type: Optional[str],
+                      district: Optional[int],
+                      matches: list[ZonedSchoolMatch]) -> Optional[str]:
+    if admission_type is None or district is None:
+        return None
+    if admission_type == "zone_priority_choice" and matches:
+        names = ", ".join(m.school_name for m in matches[:3])
+        return (
+            f"District {district} middle school admission is choice-based "
+            f"— families rank schools and offers run by priority group. "
+            f"This address falls inside the zone-priority polygon for "
+            f"{names}, which makes zone-residency one of the listed "
+            f"priority tiers at that school (not necessarily the top tier — "
+            f"siblings and district-residency typically rank higher; see the "
+            f"school's per-program priorities for the exact order). For the "
+            f"full D{district} middle-school set with per-school admission "
+            f"methods (Open, Screened, Zone Priority, etc.), call "
+            f"`schools_in_district({district}, level=\"middle\")`."
+        )
+    if admission_type == "district_choice":
+        return (
+            f"District {district} middle school admission is choice-based "
+            f"and there is no zone-priority school for this address — the "
+            f"only polygon covering this point is the whole-district "
+            f"fallback. Families rank schools and offers run by district "
+            f"and city priority tiers. For the full D{district} middle-"
+            f"school set with per-school admission methods, call "
+            f"`schools_in_district({district}, level=\"middle\")`."
+        )
+    return None
+
+
 def find_zoned_schools(lat: float, lon: float) -> ZonedSearchResult:
     """Point-in-polygon against ES + MS zone polygons. Returns the list of
-    schools whose zones contain (lat, lon). Districts that have moved to
-    choice-based admissions (D15 for middle school, D1/D7 for elementary)
-    will return empty lists for the affected level — by design."""
+    schools whose zones contain (lat, lon).
+
+    ES: returns each zoned school. Districts that have moved to
+    choice-based admissions and have no zoning at all (D1, D7) return
+    empty `elementary`.
+
+    MS: NYC middle-school admission is district-based **choice**; the
+    `middle` list reports the school-specific zone-priority polygons
+    that contain the point (numeric `label` zones like "297"), but
+    that's a priority tier within a choice process, not a placement.
+    `ms_admission_type` ("zone_priority_choice" vs "district_choice")
+    + `ms_admission_note` tell the caller how to interpret. Whole-
+    district polygons (label like "D2", "D15") count as
+    `district_choice` and produce no entries in `middle`."""
     pt = Point(lon, lat)  # GeoJSON convention is (lon, lat)
     store = data.get_store()
     es_matches, es_district = _zoned_matches(store.es_zones, pt)
-    ms_matches, ms_district = _zoned_matches(store.ms_zones, pt)
+    ms_matches, ms_district, ms_admission_type = _classify_ms_polygons(store.ms_zones, pt)
     return ZonedSearchResult(
         elementary=es_matches,
         middle=ms_matches,
         es_district=es_district,
         ms_district=ms_district,
+        ms_admission_type=ms_admission_type,
+        ms_admission_note=_ms_admission_note(ms_admission_type, ms_district, ms_matches),
     )

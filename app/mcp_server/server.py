@@ -16,6 +16,7 @@ from ..services.analytics import (
     get_neighborhood as _get_neighborhood,
     list_high_schools as _list_high_schools,
     school_peers as _school_peers,
+    schools_in_district as _schools_in_district,
     schools_in_neighborhood as _schools_in_neighborhood,
     top_schools as _top_schools,
 )
@@ -28,6 +29,7 @@ from ..services.metrics import (
 from ..services.models import (
     BoroughGrid,
     CoLocatedSchool,
+    DistrictSchoolsResult,
     GeocodingResult,
     HsListing,
     MetricRow,
@@ -107,12 +109,20 @@ mcp = FastMCP(
         "Districts matter for ES / MS admissions; HS is city-wide choice.\n\n"
         "Workflow hints:\n"
         "- 'Where should I send my kid?' → geocode the address, "
-        "find_schools_for_address to get the zoned ES/MS, then get_school + "
-        "school_peers for full detail and neighborhood context.\n"
+        "find_schools_for_address to get the zoned ES (and the MS zone-"
+        "priority signal — middle school is district choice, see the "
+        "result's `ms_admission_type` and `ms_admission_note`), then "
+        "get_school + school_peers for full detail and neighborhood "
+        "context, and `schools_in_district(ms_district, level=\"middle\")` "
+        "for the full district MS set with per-school admission methods.\n"
         "- 'Tell me about the schools in <neighborhood>' → "
         "schools_in_neighborhood (just the school list) or get_neighborhood "
         "(full report: peer ranks vs other NTAs, plus per-school metric "
         "values and lat/lon for mapping).\n"
+        "- 'Tell me about district N middle schools' → schools_in_district "
+        "with level=\"middle\" — returns each school's admission methods "
+        "(Open / Screened / Zone Priority / etc.) and per-program priority "
+        "cascades, the right cohort for district-choice admissions.\n"
         "- 'How does this school compare to its neighbors?' → school_peers.\n"
         "- 'Best/worst schools by some metric' → top_schools.\n"
         "- 'Best/worst neighborhoods by some metric' → top_neighborhoods.\n"
@@ -173,9 +183,18 @@ async def find_schools_for_address(address: str) -> Optional[FindSchoolsForAddre
     matched schools.
 
     Caveats:
-    - Some districts have moved to choice-based admissions and have NO
-      zoned ES (D1, D7) or MS (D15) — the corresponding list will be
-      empty, by design.
+    - ES: districts that have moved entirely to choice-based admission
+      (D1, D7) have no zoning polygons; `elementary` will be empty.
+    - MS: NYC middle-school admission is **district-based choice**, not
+      strict zoning. The `middle` list reports any school-specific zone-
+      priority polygons that contain the address (numeric `label` like
+      "297") — that's a priority tier in the choice process, not a
+      placement. Always read `ms_admission_type` and `ms_admission_note`
+      to interpret. If the only polygon covering the address is the
+      whole-district fallback (label like "D2", "D15"), `middle` will be
+      empty and `ms_admission_type` will be "district_choice". For the
+      full district set with per-school admission methods, call
+      `schools_in_district(ms_district, level="middle")`.
     - Returns None if the address can't be geocoded.
     - High schools are NOT zoned in NYC; they're city-wide choice. Use
       get_school after a search if the user is asking about a high
@@ -313,6 +332,44 @@ def schools_in_neighborhood(
     on individual schools, or with `school_peers(dbn, "neighborhood")`
     for the same-NTA peer comparison table the school page uses."""
     return _schools_in_neighborhood(query=query, level=level, limit=limit)
+
+
+@mcp.tool
+def schools_in_district(
+    district: int,
+    level: Literal["elementary", "middle", "high"],
+) -> Optional[DistrictSchoolsResult]:
+    """All NYC public schools in one school district at one level. The
+    natural answer to "tell me about District 2 middle schools."
+
+    For `level="middle"` this is the rich case and the primary intended
+    use: NYC middle-school admission is **district-based choice**, not
+    strict zoning. Each school's `admission_methods` lists the methods
+    it admits by (Open, Screened, Zone Priority, Audition, etc.) and
+    `ms_programs` carries the per-program priority cascade strings as
+    published. A school commonly has 1 program, sometimes up to 4
+    (e.g. M.S. 131 carries Zone Priority + Language Criteria + Screened
+    + ASD/ACES). Source of truth is NYC DOE's Middle School Directory
+    (Fall 2025).
+
+    For `level="elementary"` and `level="high"` you get the school list
+    + an `admission_overview` explaining the admission mechanic, but no
+    per-school methods (the ES/HS directories don't share the MS
+    Directory shape; HS admission is also city-wide choice, so the
+    district grouping there is geographic only).
+
+    Pairs with `find_schools_for_address`: when that returns
+    `ms_admission_type="zone_priority_choice"` or `"district_choice"`,
+    call this with the returned `ms_district` to get the full set the
+    family can rank. Returns None for unknown level, or when the
+    district + level combination has zero schools.
+
+    `district` is one of 1..32 (geographic) or 75 (D75 specialized
+    special-ed). For D75 + middle the result falls back to a basic
+    listing without admission methods — D75 placement is by the
+    Committee on Special Education, not the choice application.
+    """
+    return _schools_in_district(district=district, level=level)
 
 
 @mcp.tool

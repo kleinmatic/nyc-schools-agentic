@@ -583,12 +583,90 @@ class ZonedSchoolMatch(BaseModel):
     zone_label: Optional[str] = None  # e.g. "503" — the ES zone identifier
 
 
+class MsProgramInfo(BaseModel):
+    """One program offered by a NYC middle school. A school commonly
+    has 1 program but can have up to 4 with distinct admission methods
+    — e.g. M.S. 131 carries Zone Priority + Language Criteria + Screened
+    + ASD/ACES Program all under 02M131. `priorities` are the published
+    priority-cascade strings in source order; NYC's deferred-acceptance
+    match does not always follow a strict importance order, so consumers
+    should surface them verbatim rather than assert tier semantics.
+
+    `admission_method` is one of 10 NYC values: Open, Zone Priority,
+    Zoned Only, Screened, Screened With Assessment, Language Criteria,
+    Audition, Talent Test, ASD/ACES Program,
+    D75 Special Education Inclusive Services.
+    """
+    program_index: int
+    program_name: Optional[str] = None
+    program_code: Optional[str] = None
+    admission_method: str
+    priorities: list[str] = []
+
+
+class SchoolInDistrict(SchoolSummary):
+    """SchoolSummary + MS admission detail. The MS-only fields
+    (`admission_methods`, `ms_programs`) are populated when the school
+    is in the MS Directory; they're empty for non-MS levels or for any
+    MS not in the directory (e.g. D75 specialized schools)."""
+    admission_methods: list[str] = []   # deduped across this school's programs
+    ms_programs: list[MsProgramInfo] = []
+
+
+class DistrictSchoolsResult(BaseModel):
+    """All NYC public schools in one district at one level. The natural
+    answer to "tell me about D2 middle schools" — a district-rolled-up
+    list with admission methods (MS) and a short overview describing
+    the district's admission mechanic.
+
+    For middle schools this is the authoritative cohort for the
+    district-choice answer, and pairs with `find_schools_for_address`:
+    when that tool's `ms_admission_type` is `zone_priority_choice` or
+    `district_choice`, this is the follow-up that gives the full set
+    plus per-school admission methods."""
+    district: int
+    level: str               # "elementary" | "middle" | "high"
+    n_schools: int
+    admission_overview: Optional[str] = None
+    schools: list[SchoolInDistrict] = []
+
+
 class ZonedSearchResult(BaseModel):
-    """Results of a "what schools is this address zoned for" query."""
+    """Results of a "what schools is this address zoned for" query.
+
+    For elementary the zoning model is reasonably clean — a parent
+    living in a zone gets a strong (often guaranteed) seat at the
+    zoned school, with choice-based escape valves (G&T, dual-language)
+    layered on top. For middle school, "zoned" is a much weaker claim:
+    NYC middle-school admission is district-based **choice**, and a
+    zone polygon (where one exists) confers a priority *tier*, not a
+    placement. Many D{n}-labeled MS polygons are just the whole
+    district representing "rank any of these schools."
+
+    The `middle` list reports any zone-priority schools whose polygon
+    contains the point — which is the most useful single-school signal
+    we can give — and `ms_admission_type` + `ms_admission_note` tell
+    the consumer how to interpret it. For the full district choice set
+    with per-school admission methods, call
+    `schools_in_district(ms_district, level="middle")`.
+    """
     elementary: list[ZonedSchoolMatch] = []
     middle: list[ZonedSchoolMatch] = []
     es_district: Optional[int] = None
     ms_district: Optional[int] = None
+    # `zone_priority_choice` — at least one zone-priority school polygon
+    #   (numeric label, e.g. "297") contains this point. The named school
+    #   is a zone-priority tier within the district choice process; it
+    #   is NOT a guaranteed seat, and zone-residency is often NOT the
+    #   top priority (siblings + continuing students typically rank
+    #   higher).
+    # `district_choice` — only a whole-district polygon (label like "D2")
+    #   contains this point. There's no school-specific zone-priority
+    #   for this address; admission runs entirely by district + city
+    #   choice tiers.
+    # None — no MS zoning polygons at this point (rare), or HS-only query.
+    ms_admission_type: Optional[str] = None
+    ms_admission_note: Optional[str] = None
 
 
 class StaffingInfo(BaseModel):
