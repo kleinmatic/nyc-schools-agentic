@@ -271,3 +271,101 @@ def test_mcp_endpoint_accepts_bare_path_without_redirect(client):
         assert r.status_code == 200, f"{url}: expected 200, got {r.status_code} (body: {r.text[:200]})"
         assert "Mcp-Session-Id" in {k.title() for k in r.headers}
         assert "text/event-stream" in r.headers.get("content-type", "")
+
+
+# ----- MS admission UI: school page + /zoned reframe ---------------------
+
+def test_ms_school_page_renders_admits_section_with_programs(client):
+    """MS 297 has both a Screened program and a Zone Priority program.
+    The "How This School Admits" section should render both, the
+    intro callout should name the multi-program reality, and the
+    priority cascade strings from the directory should appear verbatim."""
+    r = client.get("/school/02M297")
+    assert r.status_code == 200
+    text = r.text
+    assert "How This School Admits" in text
+    assert "district-based choice" in text
+    assert "Screened" in text and "Zone Priority" in text
+    # MS 297 carries 2 programs — intro callout should say so.
+    assert "2 programs" in text
+    # Verbatim cascade strings from the directory.
+    assert "Priority to applicants whose sibling" in text
+    assert "schools_in_district(2" in text
+
+
+def test_es_school_page_does_not_render_ms_admits_section(client):
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    assert "How This School Admits" not in r.text
+
+
+def test_hs_school_page_does_not_render_ms_admits_section(client):
+    r = client.get("/school/02M475")  # Stuyvesant
+    assert r.status_code == 200
+    assert "How This School Admits" not in r.text
+
+
+def test_zoned_page_reframes_ms_as_district_choice(client):
+    """The zoned page for an address in a district with MS choice
+    should render the new framing: the ms_admission_note callout,
+    the "Your Zone-Priority School" heading (when there's a match),
+    and the "Other District N Middle Schools You Can Rank" cohort
+    section with admission-method chips."""
+    import httpx
+    import respx
+    from app.services.zoning import GEOSEARCH_URL
+    with respx.mock(assert_all_called=False) as rmock:
+        rmock.get(GEOSEARCH_URL).mock(return_value=httpx.Response(200, json={
+            "features": [{
+                "geometry": {"coordinates": [-74.000238, 40.749014]},
+                "properties": {"label": "428 W 26 STREET, Manhattan, NY, USA", "borough": "Manhattan"},
+            }]
+        }))
+        r = client.get("/zoned", params={"address": "428 W 26th St Manhattan"})
+    assert r.status_code == 200
+    text = r.text
+    assert "Choice-Based Admission" in text
+    assert "Your Zone-Priority School" in text
+    assert "Other District 2 Middle Schools You Can Rank" in text
+    # Method chips render across the cohort.
+    assert "Screened" in text
+    assert "Zone Priority" in text
+    assert "Open" in text
+
+
+def test_zoned_page_district_choice_branch_renders_cohort_without_zone_callout(client):
+    """For an address in a D15 fallback-only zone (no school-specific
+    zone match), the page should NOT show the zone-priority callout
+    and SHOULD show the district cohort + the district_choice note."""
+    import httpx
+    import respx
+    from app.services.zoning import GEOSEARCH_URL
+    with respx.mock(assert_all_called=False) as rmock:
+        rmock.get(GEOSEARCH_URL).mock(return_value=httpx.Response(200, json={
+            "features": [{
+                "geometry": {"coordinates": [-73.997, 40.6693]},
+                "properties": {"label": "D15 fallback point", "borough": "Brooklyn"},
+            }]
+        }))
+        r = client.get("/zoned", params={"address": "anywhere D15"})
+    assert r.status_code == 200
+    text = r.text
+    assert "Your Zone-Priority School" not in text
+    assert "District 15 Middle Schools You Can Rank" in text
+    assert "no zone-priority school for this address" in text
+
+
+def test_ms_school_page_imperative_tool_includes_admission_methods(client):
+    """The in-browser get_current_school_details tool should carry
+    ms_admission on its return payload for any school in the MS
+    Directory, so a chat-panel agent can answer "how does this school
+    admit?" without an MCP round-trip."""
+    r = client.get("/school/02M297")
+    assert r.status_code == 200
+    text = r.text
+    # The agent_context JSON is dumped inline as `const CONTEXT = {...}`.
+    assert '"ms_admission":' in text
+    assert '"admission_methods":' in text
+    # And the tool description should mention the field so the agent
+    # knows when to surface it.
+    assert "ms_admission is populated" in text
