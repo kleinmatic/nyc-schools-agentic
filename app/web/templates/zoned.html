@@ -15,7 +15,7 @@
 
 <form action="/zoned" method="get" class="mb-10"
       toolname="find-zoned-schools-by-address"
-      tooldescription="Find the NYC public elementary and middle schools zoned to a given street address. Returns the zoned ES and MS for that address."
+      tooldescription="Find the NYC public schools an address is zoned for. Returns the zoned elementary school (where one exists) plus, for middle school, any school-specific zone-priority polygon hits and the district admission mechanic — NYC middle school is district-based choice, not strict zoning."
       toolautosubmit>
   <label class="block text-xs text-slate-500 uppercase tracking-wide mb-2">Address</label>
   <input
@@ -87,13 +87,30 @@
   </section>
 
   {# ---------- Middle ---------- #}
+  {# The new shape: MS admission in NYC is district-based **choice**, not
+     strict zoning. result.ms_admission_type ("zone_priority_choice" vs
+     "district_choice") tells us how to frame; ms_district_cohort holds
+     the full district MS set with admission methods from the Fall 2025
+     directory. The matched zone-priority school (if any) is surfaced as
+     a "your zone-priority school" callout above the full set. #}
+  {% set zoned_dbns = result.middle | map(attribute='dbn') | list %}
   <section class="mb-10">
     <h2 class="text-lg font-semibold mb-3">
-      Middle{% if result.ms_district %} <span class="text-slate-500 font-normal">— District {{ result.ms_district }}</span>{% endif %}
+      Middle{% if result.ms_district %} <span class="text-slate-500 font-normal">— District {{ result.ms_district }} (Choice-Based Admission)</span>{% endif %}
     </h2>
+
+    {% if result.ms_admission_note %}
+      <div class="bg-blue-50/40 border border-blue-200 rounded-lg p-4 text-sm text-slate-700 leading-relaxed mb-4">
+        {{ result.ms_admission_note }}
+      </div>
+    {% endif %}
+
     {% if has_ms %}
-      <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg">
+      <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">Your Zone-Priority School</h3>
+      <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg mb-6">
         {% for sch in result.middle %}
+          {% set cohort_row = none %}
+          {% if ms_district_cohort %}{% for cs in ms_district_cohort.schools %}{% if cs.dbn == sch.dbn %}{% set cohort_row = cs %}{% endif %}{% endfor %}{% endif %}
           <li class="px-4 py-3 hover:bg-slate-50">
             <a href="/school/{{ sch.dbn }}" class="block">
               <div class="flex items-baseline justify-between gap-4">
@@ -106,18 +123,50 @@
                 {% if sch.district %} · District {{ sch.district }}{% endif %}
                 {% if sch.total_enrollment %} · {{ "{:,}".format(sch.total_enrollment) }} students{% endif %}
               </div>
+              {% if cohort_row and cohort_row.admission_methods %}
+                <div class="mt-2 flex flex-wrap gap-1">
+                  {% for m in cohort_row.admission_methods %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ m }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
             </a>
           </li>
         {% endfor %}
       </ul>
-    {% else %}
+    {% endif %}
+
+    {% if ms_district_cohort and ms_district_cohort.schools %}
+      <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">
+        {% if has_ms %}Other District {{ result.ms_district }} Middle Schools You Can Rank{% else %}District {{ result.ms_district }} Middle Schools You Can Rank{% endif %}
+      </h3>
+      <ul class="divide-y divide-slate-200 bg-white border border-slate-200 rounded-lg">
+        {% for sch in ms_district_cohort.schools if sch.dbn not in zoned_dbns %}
+          <li class="px-4 py-3 hover:bg-slate-50">
+            <a href="/school/{{ sch.dbn }}" class="block">
+              <div class="flex items-baseline justify-between gap-4">
+                <span class="font-medium">{{ sch.school_name|pretty }}</span>
+                <span class="text-xs text-slate-500 font-mono">{{ sch.dbn }}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {% if sch.boro %}{{ sch.boro }}{% endif %}
+                {% if sch.total_enrollment %} · {{ "{:,}".format(sch.total_enrollment) }} students{% endif %}
+              </div>
+              {% if sch.admission_methods %}
+                <div class="mt-2 flex flex-wrap gap-1">
+                  {% for m in sch.admission_methods %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ m }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="text-xs text-slate-500 mt-2">Admission methods from the NYC DOE Middle School Directory (Fall 2025). Each chip is one of the programs that school offers — a single school can carry multiple methods. Click any school for the per-program priority cascade.</p>
+    {% elif not has_ms %}
       <p class="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-4">
-        {% set choice_districts = (2, 3, 15) %}
-        {% if result.es_district in choice_districts %}
-          District {{ result.es_district }} uses choice-based admissions for middle school — there’s no zoned middle school for any address. Families rank preferences across all middle schools in the district.
-        {% else %}
-          No zoned middle school found for this address. The district may use choice-based admissions, or the zone polygon for this year may not be published yet.
-        {% endif %}
+        No middle-school zoning data covers this address. The address may sit outside any district zone polygon, or the polygon for this year may not be published yet.
       </p>
     {% endif %}
   </section>
@@ -129,7 +178,7 @@
     <ul class="list-disc list-inside mt-2 space-y-1.5">
       <li><strong>Charter schools</strong> — citywide, lottery-based admission. Not tied to your address.</li>
       <li><strong>Gifted & Talented (G&T) programs</strong> — citywide, test-based admission for K-5.</li>
-      <li><strong>Magnet schools and choice districts</strong> — District 1 (Lower East Side) and District 7 (South Bronx) are entirely unzoned for elementary; Districts 2, 3, 15 use choice-based admissions for middle school.</li>
+      <li><strong>Choice districts for elementary</strong> — District 1 (Lower East Side) and District 7 (South Bronx) are entirely unzoned; families apply through district-wide choice instead of zoning.</li>
       <li><strong>Pre-K and 3-K</strong> — separate citywide enrollment, not tied to elementary zoning.</li>
     </ul>
     <p class="mt-3 mb-1 text-slate-600">For older students on alternative paths (not relevant if you’re searching for an elementary or middle school):</p>

@@ -20,6 +20,7 @@ from ..services.analytics import (
     homepage_leaderboards,
     homepage_neighborhood_leaderboards,
     school_peers,
+    schools_in_district,
 )
 from ..services.schools import get_school, school_swd_outcomes, search_schools
 from ..services.zoning import find_zoned_schools, geocode
@@ -117,6 +118,13 @@ async def search(request: Request, q: str = ""):
 async def zoned_page(request: Request, address: str = ""):
     geo = await geocode(address) if address.strip() else None
     result = find_zoned_schools(geo.lat, geo.lon) if geo else None
+    # When the address falls in a district that runs MS by choice, pull
+    # the district MS cohort so the template can render the full set the
+    # family can rank, each with its admission methods. Pure MS only —
+    # there isn't an equivalent ES/HS cohort tool here.
+    ms_district_cohort = None
+    if result and result.ms_district and result.ms_admission_type:
+        ms_district_cohort = schools_in_district(result.ms_district, "middle")
     return templates.TemplateResponse(
         request,
         "zoned.html",
@@ -124,6 +132,7 @@ async def zoned_page(request: Request, address: str = ""):
             "address": address,
             "geo": geo,
             "result": result,
+            "ms_district_cohort": ms_district_cohort,
             "uid": _make_uid(),
         },
     )
@@ -186,6 +195,12 @@ def _agent_context_for_school(detail, swd, peer_neighborhood, peer_district):
             }
             for c in detail.co_located
         ],
+        # MS admission methods + per-program priority cascades from the
+        # NYC DOE Middle School Directory. Populated for any school in
+        # the directory (pure MS, K-8, 6-12); None otherwise. Lets an
+        # in-browser agent answer "how does this school admit?" without
+        # round-tripping back to the MCP server.
+        "ms_admission": detail.ms_admission.model_dump() if detail.ms_admission else None,
     }
 
 
@@ -391,7 +406,7 @@ _WEB_MCP_TOOLS = [
     },
     {
         "name": "find-zoned-schools-by-address",
-        "description": "Find the NYC public elementary and middle schools zoned to a given street address.",
+        "description": "Find the NYC public schools an address is zoned for. Returns the zoned elementary school (where one exists) plus, for middle school, any school-specific zone-priority polygon hits and the district admission mechanic — NYC middle school is district-based choice, not strict zoning.",
         "inputSchema": {
             "type": "object",
             "properties": {

@@ -542,6 +542,52 @@
 {% endif %}
 {% endif %}
 
+{# ---------- MS admissions (Middle School Directory) ---------- #}
+{# Renders for any school in the MS Directory — pure MS, K-8, 6-12, hybrid. #}
+{% if school.ms_admission %}
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">How This School Admits</h2>
+  {{ provenance(
+    ["ms-directory-" ~ school.ms_admission.ay ~ ".feather"],
+    "NYC DOE Middle School Directory — the source for the 5th-grader-facing admissions guide. Pulled from InfoHub as a Fall " ~ school.ms_admission.ay ~ " release covering AY " ~ school.ms_admission.ay ~ "-" ~ ((school.ms_admission.ay + 1) % 100) ~ " admissions. Each program is a distinct application path with its own admission method and priority cascade. Priority strings are surfaced verbatim — NYC's deferred-acceptance match doesn't follow a strict importance order, so the listed priorities are the published tiers, not always strict cascading dibs."
+  ) }}
+
+  <div class="bg-blue-50/40 border border-blue-200 rounded-lg p-4 text-sm text-slate-700 mb-4 leading-relaxed">
+    NYC middle school admission is <strong>district-based choice</strong> — families rank schools and offers run by priority group. This school
+    {% if school.ms_admission.programs|length == 1 %}
+      offers one program; ranking it puts your child in the priority pool below.
+    {% else %}
+      offers {{ school.ms_admission.programs|length }} programs, each with its own admission method and priority pool — a family can rank programs separately.
+    {% endif %}
+    {% if school.summary.district and school.summary.district != 75 %}
+      For the full set of District {{ school.summary.district }} middle schools you can rank, query <code>schools_in_district({{ school.summary.district }}, "middle")</code> via MCP.
+    {% endif %}
+  </div>
+
+  <div class="space-y-4">
+    {% for p in school.ms_admission.programs %}
+    <div class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
+      <div class="flex items-baseline justify-between gap-4 mb-2">
+        <h3 class="font-medium">
+          {% if p.program_name %}{{ p.program_name|pretty }}{% else %}Program {{ p.program_index }}{% endif %}
+          {% if p.program_code %} <span class="text-xs text-slate-500 font-mono">({{ p.program_code }})</span>{% endif %}
+        </h3>
+        <span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 whitespace-nowrap">{{ p.admission_method }}</span>
+      </div>
+      {% if p.priorities %}
+      <div>
+        <div class="text-xs text-slate-500 uppercase tracking-wide mb-1">Admissions Priorities (Per the Directory)</div>
+        <ol class="list-decimal list-inside text-slate-700 space-y-0.5 marker:text-slate-400">
+          {% for pri in p.priorities %}<li>{{ pri }}</li>{% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {# ---------- DOE snapshot ---------- #}
 {% if snap %}
 <section class="mb-10">
@@ -1197,7 +1243,8 @@
       "  • peer_ranks — citywide rank vs all same-level NYC schools on each headline metric (ENI, ELA, math, PTR, chronic absent). Each entry carries rank, total, and the highest/lowest school by name. Use for 'how does this school rank in NYC?'",
       "  • peer_neighborhood — every school in the same NTA at the same school level, with per-school metrics. Use for 'compared to other schools in [neighborhood]'. Hand-compute rank or pick out specific peers.",
       "  • peer_district — every school in the same geographic district at the same level, with metrics. Use for 'in District X' questions. NULL for HS (city-wide choice — say so).",
-      "  • co_located_schools — schools sharing this building (each entry includes is_d75). Use for 'what other schools are in this building?' and to call out D75 special-ed programs co-located here when relevant."
+      "  • co_located_schools — schools sharing this building (each entry includes is_d75). Use for 'what other schools are in this building?' and to call out D75 special-ed programs co-located here when relevant.",
+      "If ms_admission is populated (it will be on any school in the NYC DOE MS Directory — pure MS, K-8, 6-12), surface admission_methods + the per-program priorities verbatim when the user asks 'how does this school admit?' or 'how do I apply?'. The cascade order in priorities is the published order; do not assert that zone-residency is the top priority — at most NYC MS, siblings and district-residency rank above zone."
     ].join("\n"),
     inputSchema: { type: "object", properties: {} },
     execute() { return CONTEXT; },
