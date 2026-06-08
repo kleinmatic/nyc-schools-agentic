@@ -31,6 +31,7 @@ async def test_list_tools_returns_all_registered_tools(mcp_client):
         "borough_summary",
         "school_peers",
         "schools_in_neighborhood",
+        "schools_in_district",
         "get_neighborhood",
         "school_staffing",
         "school_swd_outcomes",
@@ -407,3 +408,35 @@ async def test_discovery_tools_advertise_the_discover_then_access_pattern(mcp_cl
     tools = {t.name: t for t in await mcp_client.list_tools()}
     assert "list_school_metrics" in (tools["get_school_metric"].description or "")
     assert "list_neighborhood_metrics" in (tools["get_neighborhood_metric"].description or "")
+
+
+async def test_schools_in_district_middle_round_trip_carries_admission_methods(mcp_client):
+    """End-to-end: the MCP adapter forwards the full DistrictSchoolsResult
+    including per-school admission methods + per-program priority strings.
+    A regression that flattens or drops those would break the agentic-
+    newsroom Data Tribune demo path."""
+    r = await mcp_client.call_tool(
+        "schools_in_district", {"district": 2, "level": "middle"}
+    )
+    data = r.data
+    assert data is not None
+    assert data.district == 2
+    assert data.level == "middle"
+    assert data.n_schools == 23
+    by_dbn = {s.dbn: s for s in data.schools}
+    assert "02M297" in by_dbn
+    ms297 = by_dbn["02M297"]
+    assert set(ms297.admission_methods) == {"Screened", "Zone Priority"}
+    assert len(ms297.ms_programs) == 2
+    assert all(p.priorities for p in ms297.ms_programs)
+
+
+async def test_schools_in_district_high_round_trip_returns_overview(mcp_client):
+    r = await mcp_client.call_tool(
+        "schools_in_district", {"district": 2, "level": "high"}
+    )
+    data = r.data
+    assert data is not None
+    assert data.level == "high"
+    assert data.n_schools > 0
+    assert "city-wide" in (data.admission_overview or "").lower()

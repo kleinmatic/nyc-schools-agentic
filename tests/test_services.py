@@ -474,6 +474,19 @@ async def test_demo_chain_428_w_26_st_to_chelsea_prep_to_d75_neighbor():
     )
     assert zoned.es_district == 2
 
+    # MS admission context — the agentic-newsroom Data Tribune demo
+    # relies on the publisher reading these to explain that MS 297 is
+    # a zone-priority signal within district choice, not a placement.
+    assert zoned.ms_district == 2
+    assert zoned.ms_admission_type == "zone_priority_choice", (
+        f"428 W 26th St falls in M.S. 297's school-priority polygon; "
+        f"expected zone_priority_choice, got {zoned.ms_admission_type!r}"
+    )
+    assert "02M297" in [s.dbn for s in zoned.middle]
+    assert zoned.ms_admission_note is not None
+    assert "choice" in zoned.ms_admission_note.lower()
+    assert "schools_in_district(2" in zoned.ms_admission_note
+
     swd = school_swd_outcomes("02M033")
     assert swd is not None and swd.is_d75 is False
     assert swd.swd_enrollment_pct is not None and swd.swd_enrollment_pct > 0
@@ -493,3 +506,109 @@ async def test_demo_chain_428_w_26_st_to_chelsea_prep_to_d75_neighbor():
     assert staffing is not None
     assert staffing.total_gc is not None
     assert staffing.total_sw is not None
+
+
+# ----- MS admission context (zoning + schools_in_district) -----
+#
+# The MS Directory + zone-polygon-label work landed for the agentic-
+# newsroom Data Tribune demo. NYC middle-school admission is district-
+# based choice, not strict zoning, and the polygon labels themselves
+# carry the zoned-vs-choice signal (numeric label = school-priority
+# polygon, `D{n}` label = whole-district fallback). These tests pin the
+# classification + the schools_in_district answer.
+
+# Centroid of D15 polygon labeled '62' (New Voices MS / 20K062).
+_D15_INSIDE_62_LAT, _D15_INSIDE_62_LON = 40.6477, -73.9744
+# Centroid of the D15 fallback polygon — a point inside D15 but NOT
+# inside any school-specific zone polygon.
+_D15_FALLBACK_LAT, _D15_FALLBACK_LON = 40.6693, -73.9970
+
+
+def test_zoning_zone_priority_choice_when_school_specific_polygon_contains_point():
+    """A point inside a numeric-label MS polygon (e.g. '62') is a zone-
+    priority signal — the school is reported in `middle` and
+    `ms_admission_type` is `zone_priority_choice`."""
+    r = find_zoned_schools(_D15_INSIDE_62_LAT, _D15_INSIDE_62_LON)
+    assert r.ms_district == 15
+    assert r.ms_admission_type == "zone_priority_choice"
+    dbns = [s.dbn for s in r.middle]
+    assert "20K062" in dbns, f"expected New Voices (20K062) in middle; got {dbns}"
+    assert r.ms_admission_note is not None
+    assert "schools_in_district(15" in r.ms_admission_note
+
+
+def test_zoning_district_choice_when_only_whole_district_polygon_contains_point():
+    """A point inside only the D15 fallback polygon (label like 'D15')
+    is a district-choice signal — `middle` is empty and the note tells
+    the caller to use `schools_in_district`."""
+    r = find_zoned_schools(_D15_FALLBACK_LAT, _D15_FALLBACK_LON)
+    assert r.ms_district == 15
+    assert r.ms_admission_type == "district_choice"
+    assert r.middle == []
+    assert r.ms_admission_note is not None
+    assert "no zone-priority school" in r.ms_admission_note
+
+
+def test_schools_in_district_middle_returns_full_directory_with_methods():
+    """D2 middle schools per the Fall 2025 MS Directory: 23 schools, MS
+    297 carries both Screened and Zone Priority programs (the demo
+    nuance). Admission overview names district-choice mechanics."""
+    from app.services.analytics import schools_in_district
+    r = schools_in_district(2, "middle")
+    assert r is not None
+    assert r.district == 2
+    assert r.level == "middle"
+    assert r.n_schools == 23, f"D2 MS directory should have 23 schools; got {r.n_schools}"
+    assert r.admission_overview is not None
+    assert "choice" in r.admission_overview.lower()
+
+    by_dbn = {s.dbn: s for s in r.schools}
+    assert "02M297" in by_dbn
+    ms297 = by_dbn["02M297"]
+    assert set(ms297.admission_methods) == {"Screened", "Zone Priority"}, (
+        f"M.S. 297 should carry both methods; got {ms297.admission_methods}"
+    )
+    # Two programs, each with non-empty priorities cascade.
+    assert len(ms297.ms_programs) == 2
+    for p in ms297.ms_programs:
+        assert p.admission_method in {"Screened", "Zone Priority"}
+        assert p.priorities, f"program {p.program_index} has no priorities"
+
+    # The Open / Screened claim in earlier draft narratives — pin the
+    # ground truth from the directory so future regressions can't drift.
+    assert by_dbn["02M255"].admission_methods == ["Open"]  # Salk
+    assert by_dbn["02M114"].admission_methods == ["Open"]  # East Side
+    # NYC Lab carries an ASD/ACES inclusion program in addition to Open.
+    assert set(by_dbn["02M312"].admission_methods) == {"Open", "ASD/ACES Program"}
+
+
+def test_schools_in_district_high_explains_citywide_choice():
+    """HS is city-wide choice in NYC. The district grouping is geographic
+    only, and the overview should make that explicit so a downstream
+    agent doesn't tell the user "rank these N schools" as if HS works
+    like MS."""
+    from app.services.analytics import schools_in_district
+    r = schools_in_district(2, "high")
+    assert r is not None
+    assert r.level == "high"
+    assert r.n_schools > 0
+    assert r.admission_overview is not None
+    assert "city-wide" in r.admission_overview.lower()
+    # HS schools carry no MS-style admission methods.
+    assert all(s.admission_methods == [] for s in r.schools)
+    assert all(s.ms_programs == [] for s in r.schools)
+
+
+def test_schools_in_district_unknown_level_returns_none():
+    from app.services.analytics import schools_in_district
+    assert schools_in_district(2, "kindergarten") is None
+    assert schools_in_district(2, "K-8") is None
+    assert schools_in_district(2, "") is None
+
+
+def test_schools_in_district_unknown_district_at_middle_returns_none():
+    """D99 doesn't exist; the function should return None rather than an
+    empty result (the caller can tell apart 'no such district' from
+    'district has no schools at this level')."""
+    from app.services.analytics import schools_in_district
+    assert schools_in_district(99, "middle") is None
