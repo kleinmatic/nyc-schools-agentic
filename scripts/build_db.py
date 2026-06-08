@@ -140,6 +140,26 @@ def build_staffing(ay: int = 2025):
     return df
 
 
+def build_ms_directory(ay: int = 2025):
+    """MS Directory long-format: one row per (DBN, program) with admission
+    method + priority strings. 793 program-rows across 477 schools in
+    Fall 2025. Reads the feather built by scripts/fetch_data.py."""
+    import pandas as pd
+    df = pd.read_feather(SOURCE / f"ms-directory-{ay}.feather")
+    keep = [
+        "dbn", "school_name", "district", "boro", "address", "neighborhood",
+        "gradespan", "ay",
+        "program_index", "program_name", "program_code", "admission_method",
+        "priority1", "priority2", "priority3", "priority4", "priority5", "priority6",
+    ]
+    df = df[[c for c in keep if c in df.columns]].copy()
+    if "district" in df.columns:
+        df["district"] = pd.to_numeric(df["district"], errors="coerce").astype("Int64")
+    if "program_index" in df.columns:
+        df["program_index"] = df["program_index"].astype(int)
+    return df
+
+
 def build_shsat():
     from nycschools import shsat
     df = shsat.load_admission_offers()
@@ -227,6 +247,8 @@ INDEX_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_shsat_dbn ON shsat(dbn);",
     "CREATE INDEX IF NOT EXISTS idx_budgets_dbn ON budgets(dbn);",
     "CREATE INDEX IF NOT EXISTS idx_staffing_dbn ON staffing(dbn);",
+    "CREATE INDEX IF NOT EXISTS idx_ms_directory_dbn ON ms_directory(dbn);",
+    "CREATE INDEX IF NOT EXISTS idx_ms_directory_district ON ms_directory(district);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_essa_cd ON nysed_essa_status(ENTITY_CD);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_essa_sg_cd ON nysed_essa_subgroup(ENTITY_CD);",
     "CREATE INDEX IF NOT EXISTS idx_nysed_chronic_cd ON nysed_chronic(ENTITY_CD);",
@@ -254,6 +276,7 @@ def main():
         "shsat": build_shsat(),
         "budgets": build_budgets(),
         "staffing": build_staffing(),
+        "ms_directory": build_ms_directory(),
     }
 
     # NYSED tables (already NYC-filtered).

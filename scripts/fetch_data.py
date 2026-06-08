@@ -23,7 +23,7 @@ DATA_DIR = REPO_ROOT / "school-data"
 DATA_DIR.mkdir(exist_ok=True)
 os.environ["NYC_SCHOOLS_DATA_DIR"] = str(DATA_DIR)
 
-from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat, nysed_src, staffing
+from nycschools import schools, snapshot, exams, class_size, geo, budgets, shsat, nysed_src, staffing, ms_directory
 
 
 def fetch_hs_directory(ay: int = 2021):
@@ -74,6 +74,31 @@ def fetch_zone_polygons(level: str, year: int = 2024):
 NTA_2010_URL = "https://raw.githubusercontent.com/nycehs/NYC_geography/master/NTA.geo.json"
 
 
+def fetch_ms_directory(ay: int = 2025):
+    """Pull NYC DOE Middle School Directory for the given fall admissions
+    cycle (Fall 2025 = admissions for AY 2025-26); persist as feather
+    under school-data/. Source: InfoHub xlsx, see `nycschools.ms_directory`.
+
+    Downloads the xlsx via requests (rather than letting pd.read_excel
+    fetch it itself) so the build survives environments where the
+    direct urllib path hits an SSL cert-chain inspector — same pattern
+    fetch_zone_polygons uses."""
+    import pandas as pd
+    cache_path = DATA_DIR / f"ms-directory-{ay}.feather"
+    if cache_path.exists():
+        return pd.read_feather(cache_path)
+    import requests
+    xlsx_cache = DATA_DIR / f"ms-directory-{ay}.xlsx"
+    if not xlsx_cache.exists():
+        url = ms_directory.URLS[ay]
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        xlsx_cache.write_bytes(r.content)
+    df = ms_directory.load_ms_directory(ay=ay, path=xlsx_cache)
+    df.reset_index(drop=True).to_feather(cache_path)
+    return df
+
+
 def fetch_staffing(ay: int = 2025):
     """Pull DOE Guidance Counselor + Social Worker FTE counts for the
     given AY; persist as feather under school-data/. URL/format changes
@@ -118,6 +143,7 @@ LOADERS = [
     ("ms_zones_2024", lambda: fetch_zone_polygons("ms", 2024)),
     ("nta_2010", fetch_nta_polygons),
     ("staffing_2025", lambda: fetch_staffing(2025)),
+    ("ms_directory_2025", lambda: fetch_ms_directory(2025)),
 ]
 
 failures = []
