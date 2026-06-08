@@ -36,6 +36,8 @@ from .models import (
     SchoolSummary,
     ShsatYear,
     SnapshotInfo,
+    MsAdmissionInfo,
+    MsProgramInfo,
     StaffingInfo,
     SubgroupStatus,
     SwdCccrOutcome,
@@ -1313,6 +1315,58 @@ def school_staffing(dbn: str) -> Optional[StaffingInfo]:
     return _staffing_for(dbn)
 
 
+def _ms_admission_for(dbn: str) -> Optional[MsAdmissionInfo]:
+    """Latest-year MS admission methods + per-program priority cascades
+    for a single school. Returns None if the school isn't in the MS
+    Directory — which is the right behavior for non-MS schools and for
+    D75 placements (D75 schools aren't in the choice directory)."""
+    df = data.get_store().ms_directory
+    rows = df[df["dbn"].str.upper() == dbn.upper()]
+    if rows.empty:
+        return None
+    latest_ay = int(rows["ay"].max())
+    rows = rows[rows["ay"] == latest_ay].sort_values("program_index")
+    programs: list[MsProgramInfo] = []
+    methods_in_order: list[str] = []
+    for _, r in rows.iterrows():
+        method = r.get("admission_method")
+        if pd.isna(method):
+            continue
+        method = str(method)
+        if method not in methods_in_order:
+            methods_in_order.append(method)
+        priorities = []
+        for p in range(1, 7):
+            v = r.get(f"priority{p}")
+            if pd.notna(v):
+                priorities.append(str(v))
+        program_name = r.get("program_name")
+        program_code = r.get("program_code")
+        programs.append(MsProgramInfo(
+            program_index=int(r["program_index"]),
+            program_name=str(program_name) if pd.notna(program_name) else None,
+            program_code=str(program_code) if pd.notna(program_code) else None,
+            admission_method=method,
+            priorities=priorities,
+        ))
+    if not programs:
+        return None
+    return MsAdmissionInfo(
+        ay=latest_ay,
+        admission_methods=methods_in_order,
+        programs=programs,
+    )
+
+
+def school_ms_admission(dbn: str) -> Optional[MsAdmissionInfo]:
+    """One school's MS admission methods + per-program priority cascades
+    from the NYC DOE Middle School Directory. Returns None if the
+    school isn't in the directory (non-MS schools, D75 schools, etc.).
+    Pairs with `schools_in_district(district, level="middle")` which
+    returns the same shape across an entire district cohort."""
+    return _ms_admission_for(dbn)
+
+
 def co_located_schools(dbn: str) -> list[CoLocatedSchool]:
     """Schools sharing a building with `dbn`. Empty list if none or if
     the school isn't in the DOE Co-Location Report."""
@@ -1351,6 +1405,7 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
         shsat=_shsat_for(dbn),
         budget=_budget_for(dbn),
         hs_directory=_hs_directory_for(dbn),
+        ms_admission=_ms_admission_for(dbn),
         nysed=_nysed_for(dbn),
         peer_ranks=_peer_ranks_for(dbn),
     )

@@ -715,8 +715,26 @@ class SchoolDetail(BaseModel):
     shsat: list[ShsatYear] = []
     budget: Optional[BudgetSummary] = None
     hs_directory: Optional[HsDirectoryInfo] = None
+    ms_admission: Optional["MsAdmissionInfo"] = None
     nysed: Optional[NysedReport] = None
     peer_ranks: dict[str, PeerRank] = {}
+
+
+class MsAdmissionInfo(BaseModel):
+    """One school's admissions methods + per-program priority cascades
+    from the NYC DOE Middle School Directory (Fall 2025 = AY 2025-26
+    admissions). Populated on `SchoolDetail.ms_admission` when the
+    school is in the directory; None for non-MS schools and for D75
+    placements (the Committee on Special Education places students
+    directly, so D75 schools aren't in the choice directory).
+
+    `admission_methods` is the deduped set of methods this school
+    admits by — a school with one program has one method; M.S. 131
+    carries four. `programs` carries the full per-program detail
+    needed for the school-page "How this school admits" section."""
+    ay: int                                # 2025 = Fall 2025 / AY 2025-26 admissions
+    admission_methods: list[str] = []
+    programs: list[MsProgramInfo] = []
 
 
 # -------- Dynamic capability discovery (services/metrics.py) --------
