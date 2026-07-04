@@ -67,6 +67,209 @@
   <button type="button" class="agent-active-pill" data-toolname="find-zoned-schools-by-address" disabled aria-live="polite">Agent activated!</button>
 </div>
 
+{% if citywide %}
+<div class="mt-12 pt-6 border-t border-slate-200">
+  <h2 class="text-lg font-semibold mb-1">The Citywide Picture</h2>
+  <p class="text-sm text-slate-500 mb-6">
+    Context for reading any one school’s numbers: the size of the system, how many
+    students test proficient citywide, and where economic need falls across schools.
+    Figures span vintages — enrollment and need are {{ citywide.stats.latest_year }},
+    state-test results run through {{ citywide.proficiency[-1].year }}.
+  </p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+    <div class="bg-white border border-slate-200 rounded-lg p-5">
+      <div class="text-sm text-slate-700 font-medium">Public Schools</div>
+      <div class="text-4xl font-serif text-amber-600 leading-none mt-2">{{ "{:,}".format(citywide.stats.n_schools) }}</div>
+      <div class="text-xs text-slate-500 mt-2">reporting enrollment in {{ citywide.stats.latest_year }}</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-5">
+      <div class="text-sm text-slate-700 font-medium">Students Enrolled</div>
+      <div class="text-4xl font-serif text-amber-600 leading-none mt-2">{{ "{:,}".format(citywide.stats.total_enrollment) }}</div>
+      {% if citywide.stats.enrollment_delta is not none %}
+      <div class="text-xs text-slate-500 mt-2">{{ "{:+,}".format(citywide.stats.enrollment_delta) }} vs {{ citywide.stats.prior_year }}</div>
+      {% endif %}
+      <div id="citywide-spark" class="mt-2" role="img"
+           aria-label="Citywide enrollment, {{ citywide.enrollment[0].year }} to {{ citywide.stats.latest_year }}"></div>
+      <details>
+        <summary class="text-[10px] text-slate-400 cursor-pointer">{{ citywide.enrollment[0].year }} → {{ citywide.stats.latest_year }}</summary>
+        <table class="text-xs text-slate-600 mt-1 tabular-nums">
+          {% for row in citywide.enrollment %}
+          <tr><td class="pr-4">{{ row.year }}</td><td>{{ "{:,}".format(row.students) }}</td></tr>
+          {% endfor %}
+        </table>
+      </details>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-lg p-5">
+      <div class="text-sm text-slate-700 font-medium">Median Economic Need</div>
+      <div class="text-4xl font-serif text-amber-600 leading-none mt-2">{{ "%.0f"|format(citywide.stats.median_eni * 100) }}%</div>
+      <div class="text-xs text-slate-500 mt-2">Economic Need Index at the median school, {{ citywide.stats.latest_year }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0">
+      <figcaption class="text-xs text-slate-500 mb-2">
+        <span class="font-medium text-slate-700">Proficiency on State Tests, Grades 3–8</span> —
+        share of tested students scoring proficient (Levels 3–4), citywide.
+      </figcaption>
+      <div id="citywide-proficiency"></div>
+      <details class="mt-2">
+        <summary class="text-[11px] text-slate-500 cursor-pointer">Data table</summary>
+        <table class="text-xs text-slate-600 mt-1 tabular-nums">
+          <thead><tr class="text-left text-slate-400"><th class="pr-4 font-normal">Year</th><th class="pr-4 font-normal">ELA</th><th class="font-normal">Math</th></tr></thead>
+          <tbody>
+          {% for row in citywide.proficiency if row.subject == "ELA" %}
+            {% set math_row = (citywide.proficiency | selectattr("subject", "equalto", "Math") | selectattr("ay", "equalto", row.ay) | list | first) %}
+            <tr>
+              <td class="pr-4">{{ row.year }}</td>
+              <td class="pr-4">{% if row.pct is not none %}{{ "%.1f"|format(row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+              <td>{% if math_row and math_row.pct is not none %}{{ "%.1f"|format(math_row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      <div class="text-[11px] text-slate-400 mt-2">
+        Source: NYC DOE InfoHub, NYS grades 3–8 test results. No state tests were given
+        in spring 2020 or spring 2021 (COVID-19) — the gap is real, not missing data.
+      </div>
+    </figure>
+
+    <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0">
+      <figcaption class="text-xs text-slate-500 mb-2">
+        <span class="font-medium text-slate-700">Economic Need Across Schools</span> —
+        number of schools at each Economic Need Index level, {{ citywide.stats.latest_year }}.
+      </figcaption>
+      <div id="citywide-eni"></div>
+      <details class="mt-2">
+        <summary class="text-[11px] text-slate-500 cursor-pointer">Data table</summary>
+        <table class="text-xs text-slate-600 mt-1 tabular-nums">
+          <thead><tr class="text-left text-slate-400"><th class="pr-4 font-normal">ENI range</th><th class="font-normal">Schools</th></tr></thead>
+          <tbody>
+          {% for b in citywide.eni_bins if b.count %}
+            <tr><td class="pr-4">{{ "%.0f"|format(b.x0 * 100) }}–{{ "%.0f"|format(b.x1 * 100) }}%</td><td>{{ "{:,}".format(b.count) }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      <div class="text-[11px] text-slate-400 mt-2">
+        Source: NYC DOE demographic snapshot, {{ citywide.stats.latest_year }}. Higher ENI =
+        greater economic need; the index blends family income, benefits eligibility and housing status.
+      </div>
+    </figure>
+  </div>
+</div>
+
+<script>
+(function() {
+  if (typeof Plot === "undefined") return;
+  const citywide = {{ citywide | tojson }};
+  const ink = "#334155", muted = "#64748b", grid = "#e2e8f0";
+  const seriesColors = { "ELA": "#2a78d6", "Math": "#1baf7a" };
+  const font = "'IBM Plex Sans', system-ui, sans-serif";
+  const yearLabel = d => `’${String(d % 100).padStart(2, "0")}`;
+
+  // Enrollment sparkline — de-emphasis gray line, current year accented.
+  const sparkEl = document.getElementById("citywide-spark");
+  if (sparkEl) {
+    const enr = citywide.enrollment;
+    const last = enr[enr.length - 1];
+    sparkEl.append(Plot.plot({
+      width: 140, height: 36, axis: null, margin: 4,
+      style: { fontFamily: font, background: "transparent" },
+      marks: [
+        Plot.lineY(enr, { x: "ay", y: "students", stroke: "#cbd5e1", strokeWidth: 2 }),
+        Plot.dot([last], { x: "ay", y: "students", r: 3.5, fill: "#2a78d6", stroke: "white", strokeWidth: 2 }),
+      ],
+    }));
+  }
+
+  // ELA vs Math proficiency trend. Null-pct rows (COVID-cancelled years)
+  // break the line into a visible gap.
+  const profEl = document.getElementById("citywide-proficiency");
+  if (profEl) {
+    const prof = citywide.proficiency;
+    const points = prof.filter(d => d.pct != null);
+    // End labels, dodged apart when endpoints sit too close to read:
+    // stack upward from the lowest, at least 0.05 (≈17px) apart.
+    let prevY = -Infinity;
+    const endLabels = Object.keys(seriesColors)
+      .map(s => {
+        const pts = points.filter(d => d.subject === s);
+        return pts[pts.length - 1];
+      })
+      .sort((a, b) => a.pct - b.pct)
+      .map(d => {
+        const yLab = Math.max(d.pct, prevY + 0.05);
+        prevY = yLab;
+        return { ...d, yLab };
+      });
+    profEl.append(Plot.plot({
+      width: profEl.clientWidth || 400, height: 240,
+      marginRight: 44, marginTop: 12,
+      style: { fontFamily: font, background: "transparent" },
+      x: { tickFormat: yearLabel, label: null, ticks: 6, tickSize: 0 },
+      y: {
+        // The figcaption names the measure — an axis label here collides
+        // with the top tick in the card's narrow margins.
+        domain: [0, 0.7], label: null,
+        tickFormat: d => `${Math.round(d * 100)}%`,
+      },
+      color: {
+        domain: Object.keys(seriesColors),
+        range: Object.values(seriesColors),
+        legend: true,
+      },
+      marks: [
+        Plot.gridY({ stroke: grid, strokeOpacity: 1 }),
+        Plot.rect([{ x1: 2018.5, x2: 2020.5, y1: 0, y2: 0.7 }],
+          { x1: "x1", x2: "x2", y1: "y1", y2: "y2", fill: "#f1f5f9" }),
+        Plot.lineY(prof, { x: "ay", y: "pct", z: "subject", stroke: "subject", strokeWidth: 2, curve: "linear" }),
+        Plot.dot(points, {
+          x: "ay", y: "pct", fill: "subject", r: 4, stroke: "white", strokeWidth: 2,
+          tip: true,
+          title: d => `${d.year} · ${d.subject}\n${(d.pct * 100).toFixed(1)}% proficient of ${d.n_tested.toLocaleString()} tested`,
+        }),
+        Plot.text(endLabels, {
+          x: "ay", y: "yLab", text: "subject", dx: 8, textAnchor: "start",
+          fill: ink, fontWeight: 500,
+        }),
+      ],
+    }));
+  }
+
+  // ENI distribution histogram with a median rule.
+  const eniEl = document.getElementById("citywide-eni");
+  if (eniEl) {
+    const bins = citywide.eni_bins;
+    const median = citywide.stats.median_eni;
+    eniEl.append(Plot.plot({
+      width: eniEl.clientWidth || 400, height: 240, marginTop: 20,
+      style: { fontFamily: font, background: "transparent" },
+      x: { label: "Economic Need Index", tickFormat: d => `${Math.round(d * 100)}%`, tickSize: 0 },
+      y: { label: "Schools" },
+      marks: [
+        Plot.gridY({ stroke: grid, strokeOpacity: 1 }),
+        Plot.rectY(bins, {
+          x1: "x0", x2: "x1", y: "count", fill: "#2a78d6",
+          insetLeft: 1, insetRight: 1, ry2: 4,
+          tip: true,
+          title: d => `ENI ${Math.round(d.x0 * 100)}–${Math.round(d.x1 * 100)}%\n${d.count.toLocaleString()} schools`,
+        }),
+        Plot.ruleX([median], { stroke: ink, strokeWidth: 1 }),
+        Plot.text([median], {
+          x: d => d, frameAnchor: "top", text: d => `Median ${Math.round(d * 100)}%`,
+          dx: -6, dy: 2, textAnchor: "end", fill: ink, fontWeight: 500,
+        }),
+        Plot.ruleY([0], { stroke: muted }),
+      ],
+    }));
+  }
+})();
+</script>
+{% endif %}
+
 {% if leaderboards %}
 <div class="mt-12 pt-6 border-t border-slate-200">
   <h2 class="text-lg font-semibold mb-1">Accountability Dashboard</h2>

@@ -51,6 +51,35 @@ def test_home_renders_accountability_dashboard(client):
     assert 'href="/school/02M475"' in r.text
 
 
+def test_home_renders_citywide_picture(client):
+    """The city-wide context section: stat tiles + the two chart figures,
+    each with its no-JS data table and per-chart source line."""
+    r = client.get("/")
+    assert r.status_code == 200
+    for fragment in (
+        "The Citywide Picture",
+        "Public Schools",
+        "Students Enrolled",
+        "Median Economic Need",
+        "Proficiency on State Tests, Grades 3–8",
+        "Economic Need Across Schools",
+        'id="citywide-proficiency"',
+        'id="citywide-eni"',
+        'id="citywide-spark"',
+    ):
+        assert fragment in r.text, f"missing citywide fragment: {fragment!r}"
+    # Chart data rides inline as JSON for the Plot scripts.
+    assert '"eni_bins"' in r.text
+    # Source lines under both figures, per house style.
+    assert "NYS grades 3–8 test results" in r.text
+    assert "NYC DOE demographic snapshot" in r.text
+
+
+def test_search_with_query_drops_citywide_picture(client):
+    r = client.get("/search", params={"q": "stuyvesant"})
+    assert "The Citywide Picture" not in r.text
+
+
 def test_home_renders_place_based_leaderboards(client):
     """Borough grid + 2 NTA leaderboards under the 'By place' section."""
     r = client.get("/")
