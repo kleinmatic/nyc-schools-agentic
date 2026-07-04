@@ -16,6 +16,18 @@ primary_region = "ewr"   # Newark, NJ — closest to NYC
   auto_start_machines = true
   min_machines_running = 1
 
+  # Proxy-level backpressure (issue #4): Fly queues/rejects at the edge
+  # once a machine carries hard_limit concurrent requests, so a flood
+  # degrades to 503s at the proxy instead of piling onto the single
+  # machine. The app-layer per-IP token bucket (app/ratelimit.py) is the
+  # per-abuser floor; this is the aggregate ceiling. Sized for one
+  # dedicated vCPU doing pandas work: most requests are cache hits (ms),
+  # so 25 in flight is already generous.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 25
+
   [[http_service.checks]]
     grace_period = "30s"
     interval = "15s"
