@@ -65,6 +65,21 @@ def test_top_schools_unknown_level_raises():
         top_schools("eni", level="kindergarten")
 
 
+def test_top_schools_limit_is_clamped():
+    """Issue #4: limit bounds response size — an abusive limit gets the
+    ceiling, not the whole candidate set."""
+    rows = top_schools("eni", level=None, limit=10**9)
+    assert len(rows) <= 500
+
+
+def test_expensive_analytics_are_cached():
+    """Issue #4: repeat calls with identical args must not re-run the
+    per-school pandas fan-out. lru_cache returns the same object."""
+    assert top_schools("eni", level="high", limit=5) is top_schools("eni", level="high", limit=5)
+    assert bulk_metrics(level="high", metrics=["eni"]) is bulk_metrics(level="high", metrics=["eni"])
+    assert borough_summary(["eni"], level="high") is borough_summary(["eni"], level="high")
+
+
 def test_top_schools_each_metric_returns_data():
     """Smoke: every metric in the vocabulary should produce at least
     *some* ranked results when paired with a level it applies to."""

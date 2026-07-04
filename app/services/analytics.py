@@ -275,6 +275,12 @@ def _candidate_schools(level: Optional[str], borough: Optional[str], store) -> p
 
 # -------- Public service functions --------
 
+# Response-size ceiling for top_schools. The compute cost is the same
+# regardless of limit (every candidate school's metric is evaluated),
+# so this bounds payload, not CPU — the lru_caches below bound CPU.
+_MAX_TOP_SCHOOLS_LIMIT = 500
+
+
 def top_schools(
     metric: str,
     level: Optional[str] = "high",
@@ -286,7 +292,20 @@ def top_schools(
     first). Pass `ascending=True` for "lowest values first" — useful when
     the metric is one where lower is better (chronic absence) or when
     the question is e.g. "lowest-ENI schools." See METRIC_DESCRIPTIONS
-    for the metric vocabulary."""
+    for the metric vocabulary. `limit` is clamped to 1..500 — for the
+    full per-school matrix use bulk_metrics."""
+    limit = max(1, min(int(limit), _MAX_TOP_SCHOOLS_LIMIT))
+    return _top_schools_cached(metric, level, limit, borough, ascending)
+
+
+@lru_cache(maxsize=256)
+def _top_schools_cached(
+    metric: str,
+    level: Optional[str],
+    limit: int,
+    borough: Optional[str],
+    ascending: bool,
+) -> list[RankedSchool]:
     if metric not in METRIC_DESCRIPTIONS:
         raise ValueError(f"unknown metric: {metric!r}. Valid: {METRIC_NAMES}")
     store = data.get_store()
@@ -316,11 +335,19 @@ def bulk_metrics(
     and cross-school analytics. Missing values are None — never coerce
     to 0, since that breaks downstream stats. Default `metrics` is all
     of them (~13 fields × N schools — ~10K tokens for HS-level full)."""
-    if not metrics:
-        metrics = list(METRIC_NAMES)
-    unknown = [m for m in metrics if m not in METRIC_DESCRIPTIONS]
+    names = tuple(metrics) if metrics else METRIC_NAMES
+    unknown = [m for m in names if m not in METRIC_DESCRIPTIONS]
     if unknown:
         raise ValueError(f"unknown metric(s): {unknown}. Valid: {METRIC_NAMES}")
+    return _bulk_metrics_cached(level, names, borough)
+
+
+@lru_cache(maxsize=64)
+def _bulk_metrics_cached(
+    level: Optional[str],
+    metrics: tuple[str, ...],
+    borough: Optional[str],
+) -> list[MetricRow]:
     store = data.get_store()
     candidates = _candidate_schools(level, borough, store)
     out: list[MetricRow] = []
@@ -415,9 +442,15 @@ def aggregate_by_neighborhood(
 def borough_summary(metrics: list[str], level: Optional[str] = None) -> BoroughGrid:
     """5-borough × N-metric overview grid. Each cell = mean of metric
     across schools in that borough (filtered to the given level if any)."""
-    unknown = [m for m in metrics if m not in METRIC_DESCRIPTIONS]
+    names = tuple(metrics)
+    unknown = [m for m in names if m not in METRIC_DESCRIPTIONS]
     if unknown:
         raise ValueError(f"unknown metric(s): {unknown}. Valid: {METRIC_NAMES}")
+    return _borough_summary_cached(names, level)
+
+
+@lru_cache(maxsize=32)
+def _borough_summary_cached(metrics: tuple[str, ...], level: Optional[str]) -> BoroughGrid:
     store = data.get_store()
     cands = _candidate_schools(level=level, borough=None, store=store)
 
