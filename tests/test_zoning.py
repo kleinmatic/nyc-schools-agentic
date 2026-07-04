@@ -112,3 +112,44 @@ async def test_geocode_empty_input_short_circuits():
     assert await geocode("") is None
     assert await geocode("   ") is None
     assert await geocode(None) is None  # type: ignore[arg-type]
+
+
+# ----- geocode() cache (issue #4) -----
+
+_OK_BODY = {
+    "features": [
+        {
+            "geometry": {"coordinates": [-73.978633, 40.671816]},
+            "properties": {"label": "180 7 AVENUE, Brooklyn, NY, USA"},
+        }
+    ]
+}
+
+
+@respx.mock
+async def test_geocode_caches_successful_results():
+    route = respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(200, json=_OK_BODY))
+    a = await geocode("180 7 Ave Brooklyn")
+    # Whitespace/case-normalized variants share the entry.
+    b = await geocode("  180 7 ave   BROOKLYN ")
+    assert a is not None and b is not None and b.lat == a.lat
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_geocode_caches_definitive_no_match():
+    route = respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(200, json={"features": []}))
+    assert await geocode("garbage address xyzzy") is None
+    assert await geocode("garbage address xyzzy") is None
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_geocode_does_not_cache_transient_errors():
+    """A 500 must not poison the cache — the next call retries upstream."""
+    route = respx.get(GEOSEARCH_URL)
+    route.side_effect = [httpx.Response(500), httpx.Response(200, json=_OK_BODY)]
+    assert await geocode("180 7 Ave Brooklyn") is None
+    result = await geocode("180 7 Ave Brooklyn")
+    assert result is not None and result.lat == 40.671816
+    assert route.call_count == 2

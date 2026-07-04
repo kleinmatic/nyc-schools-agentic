@@ -10,6 +10,8 @@ Two pieces:
    (comma-separated in the source data); we split on commas.
 """
 import re
+import time
+from collections import OrderedDict
 from typing import Optional
 
 import httpx
@@ -24,6 +26,21 @@ from .models import GeocodingResult, ZonedSchoolMatch, ZonedSearchResult
 GEOSEARCH_URL = "https://geosearch.planninglabs.nyc/v2/search"
 HTTP_TIMEOUT = 10.0
 
+# TTL/LRU cache over geocode results (issue #4): without it every /zoned
+# hit and every MCP geocode_address / find_schools_for_address call is an
+# uncached outbound request to NYC GeoSearch — an anonymous caller could
+# drive unbounded volume through our server IP. Addresses don't move;
+# 24h is conservative. Definitive no-match results are cached too (same
+# abuse profile); transient API errors are NOT (they should retry).
+GEOCODE_CACHE_TTL_S = 24 * 3600
+GEOCODE_CACHE_MAX = 4096
+_geocode_cache: OrderedDict[str, tuple[float, Optional[GeocodingResult]]] = OrderedDict()
+
+
+def clear_geocode_cache() -> None:
+    """Test hook — respx-mocked tests must not leak entries to each other."""
+    _geocode_cache.clear()
+
 
 async def geocode(address: str) -> Optional[GeocodingResult]:
     """Resolve a street address to lat/lon via NYC GeoSearch. Returns None
@@ -31,13 +48,31 @@ async def geocode(address: str) -> Optional[GeocodingResult]:
     address = (address or "").strip()
     if not address:
         return None
+    key = " ".join(address.casefold().split())
+    now = time.monotonic()
+    hit = _geocode_cache.get(key)
+    if hit is not None and now - hit[0] < GEOCODE_CACHE_TTL_S:
+        _geocode_cache.move_to_end(key)
+        return hit[1]
     try:
+        # Client per call on purpose: a module-level AsyncClient binds its
+        # connection pool to one event loop, which breaks under the many
+        # short-lived loops tests create. The cache absorbs the volume.
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             r = await client.get(GEOSEARCH_URL, params={"text": address, "size": 1})
         r.raise_for_status()
         body = r.json()
     except (httpx.HTTPError, ValueError):
         return None
+    result = _parse_geosearch(body, address)
+    _geocode_cache[key] = (now, result)
+    _geocode_cache.move_to_end(key)
+    while len(_geocode_cache) > GEOCODE_CACHE_MAX:
+        _geocode_cache.popitem(last=False)
+    return result
+
+
+def _parse_geosearch(body: dict, address: str) -> Optional[GeocodingResult]:
     features = body.get("features") or []
     if not features:
         return None

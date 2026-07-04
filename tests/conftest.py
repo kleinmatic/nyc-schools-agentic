@@ -17,3 +17,12 @@ from app import data
 def loaded_data():
     """Load the dataframes once for the entire test session."""
     data.load()
+
+
+@pytest.fixture(autouse=True)
+def fresh_geocode_cache():
+    """Geocode results are TTL-cached in-process; respx-mocked tests that
+    reuse an address must not see each other's entries."""
+    from app.services.zoning import clear_geocode_cache
+    clear_geocode_cache()
+    yield
