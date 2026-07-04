@@ -1,5 +1,7 @@
 """Tests for the view-layer chart shaping in app/web/charts.py."""
-from app.web.charts import homepage_citywide
+import json
+
+from app.web.charts import homepage_citywide, homepage_nta_map
 
 
 def test_homepage_citywide_stats_sanity():
@@ -39,12 +41,52 @@ def test_homepage_citywide_proficiency_has_covid_gap():
         assert rows[2022]["n_tested"] > 100_000
 
 
-def test_homepage_citywide_eni_bins_cover_all_schools():
-    cw = homepage_citywide()
-    bins = cw["eni_bins"]
-    assert len(bins) == 20
-    assert bins[0]["x0"] == 0.0
-    assert bins[-1]["x1"] == 1.0
-    # Every school with a reported ENI lands in exactly one bin.
-    assert sum(b["count"] for b in bins) <= cw["stats"]["n_schools"]
-    assert sum(b["count"] for b in bins) > 1500
+def test_homepage_nta_map_covers_every_nta():
+    fc = homepage_nta_map()
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) == 195  # every 2010 NTA renders, data or not
+    for f in fc["features"]:
+        p = f["properties"]
+        assert p["nta"] and p["boro"]
+        for key in ("eni", "ela", "math"):
+            assert key in p and f"{key}_n" in p
+
+
+def test_homepage_nta_map_values_respect_min_cohort():
+    fc = homepage_nta_map()
+    props = [f["properties"] for f in fc["features"]]
+    with_eni = [p for p in props if p["eni"] is not None]
+    no_data = [p for p in props if p["eni"] is None]
+    # Most NTAs carry values; park/cemetery/small-cohort NTAs don't.
+    assert len(with_eni) > 100
+    assert len(no_data) > 0
+    for p in with_eni:
+        assert 0 < p["eni"] <= 1
+        assert p["eni_n"] >= 5  # the service's min-cohort rule
+    for p in props:
+        if p["ela"] is not None:
+            assert 0 < p["ela"] < 1 and p["ela_n"] >= 5
+
+
+def test_homepage_nta_map_exterior_rings_wind_clockwise():
+    """d3-geo reads a counterclockwise exterior ring (in lon-lat) as
+    enclosing the whole globe — the map renders as a solid block. Pin
+    the clockwise rewind. Shoelace sum > 0 = clockwise with y up."""
+    def shoelace(ring):
+        return sum(
+            (x2 - x1) * (y2 + y1)
+            for (x1, y1), (x2, y2) in zip(ring, ring[1:])
+        )
+
+    for f in homepage_nta_map()["features"]:
+        geom = f["geometry"]
+        polys = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+        for poly in polys:
+            assert shoelace(poly[0]) > 0, f"CCW exterior ring in {f['properties']['nta']}"
+
+
+def test_homepage_nta_map_payload_is_inline_weight():
+    """Geometry is simplified + coordinate-rounded so the FeatureCollection
+    can ride inline in the homepage HTML without blowing up page weight."""
+    s = json.dumps(homepage_nta_map(), separators=(",", ":"))
+    assert len(s) < 250_000

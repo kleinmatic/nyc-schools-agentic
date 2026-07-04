@@ -31,6 +31,13 @@ def _run_warm_caches() -> None:
     t = time.monotonic()
     try:
         warm_caches()
+        # Homepage chart payloads live in the web layer (main.py already
+        # imports web, so this direction is layering-clean). The NTA map
+        # runs three uncached level=None aggregations — several seconds
+        # each cold, so warm them here rather than on the first user hit.
+        from .web.charts import homepage_citywide, homepage_nta_map
+        homepage_citywide()
+        homepage_nta_map()
         _warm_state["elapsed_s"] = round(time.monotonic() - t, 2)
         log.info("Caches warm in %.1fs (background)", _warm_state["elapsed_s"])
     except Exception:

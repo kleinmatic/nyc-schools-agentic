@@ -62,14 +62,17 @@ def test_home_renders_citywide_picture(client):
         "Students Enrolled",
         "Median Economic Need",
         "Proficiency on State Tests, Grades 3–8",
-        "Economic Need Across Schools",
+        "Need and Proficiency by Neighborhood",
         'id="citywide-proficiency"',
-        'id="citywide-eni"',
+        'id="citywide-map-eni"',
+        'id="citywide-map-ela"',
+        'id="citywide-map-math"',
         'id="citywide-spark"',
     ):
         assert fragment in r.text, f"missing citywide fragment: {fragment!r}"
-    # Chart data rides inline as JSON for the Plot scripts.
-    assert '"eni_bins"' in r.text
+    # Chart data rides inline as JSON for the Plot scripts — including
+    # the NTA FeatureCollection for the choropleth series.
+    assert '"FeatureCollection"' in r.text
     # Source lines under both figures, per house style.
     assert "NYS grades 3–8 test results" in r.text
     assert "NYC DOE demographic snapshot" in r.text

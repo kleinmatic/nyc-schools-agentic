@@ -28,6 +28,7 @@ from .charts import (
     citywide_level_breakdown,
     exam_grade_year_levels,
     homepage_citywide,
+    homepage_nta_map,
 )
 
 router = APIRouter()
@@ -93,6 +94,7 @@ def _dashboard_context() -> dict:
         "nta_leaderboards": homepage_neighborhood_leaderboards(),
         "borough_grid": homepage_borough_grid(),
         "citywide": homepage_citywide(),
+        "nta_map": homepage_nta_map(),
     }
 
 

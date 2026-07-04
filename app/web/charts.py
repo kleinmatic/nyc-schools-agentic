@@ -3,7 +3,11 @@ Pydantic models into chart-ready dicts. Lives here (not in services/) because
 the shape is specific to a visual encoding, not to the data contract."""
 from functools import lru_cache
 
+from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry.polygon import orient
+
 from .. import data
+from ..services.analytics import aggregate_by_neighborhood
 from ..services.models import ExamRow
 
 
@@ -80,14 +84,6 @@ def homepage_citywide() -> dict:
             })
 
     eni = latest["eni"].dropna()
-    n_bins = 20
-    eni_bins = []
-    for i in range(n_bins):
-        lo, hi = i / n_bins, (i + 1) / n_bins
-        # Last bin closed on the right so eni == 1.0 isn't dropped.
-        mask = (eni >= lo) & ((eni < hi) if i < n_bins - 1 else (eni <= hi))
-        eni_bins.append({"x0": lo, "x1": hi, "count": int(mask.sum())})
-
     prior = enr.iloc[-2] if len(enr) >= 2 else None
     return {
         "stats": {
@@ -101,8 +97,75 @@ def homepage_citywide() -> dict:
         },
         "enrollment": enrollment,
         "proficiency": proficiency,
-        "eni_bins": eni_bins,
     }
+
+
+# (metric key in feature properties, service metric name). All three run
+# level=None: the per-school metric itself scopes the cohort — ENI exists
+# for every school, ELA/Math only for schools with grades 3-8 test rows —
+# and _aggregate_metric_by_group drops nulls before counting the cohort.
+_NTA_MAP_METRICS = (
+    ("eni", "eni"),
+    ("ela", "ela_pct_proficient"),
+    ("math", "math_pct_proficient"),
+)
+# ~50m tolerance: enough to keep NTA shapes recognizable at ~270px wide
+# while holding the inlined FeatureCollection near 100KB.
+_NTA_SIMPLIFY_TOLERANCE = 0.0005
+_NTA_COORD_DECIMALS = 4
+
+
+@lru_cache(maxsize=1)
+def homepage_nta_map() -> dict:
+    """GeoJSON FeatureCollection for the homepage NTA choropleth series:
+    every 2010 NTA polygon (simplified + coordinate-rounded for inline
+    payload weight) with per-NTA school-average ENI / ELA / Math values
+    in properties. NTAs below the service's min-cohort rule (or with no
+    schools at all) carry nulls — the map renders them as no-data."""
+    store = data.get_store()
+    vals: dict[str, dict] = {}
+    for key, metric in _NTA_MAP_METRICS:
+        for agg in aggregate_by_neighborhood(metric=metric, level=None, limit=500):
+            d = vals.setdefault(agg.name, {})
+            d[key] = agg.value
+            d[f"{key}_n"] = agg.n_schools
+
+    g = store.nta_polygons[["NTAName", "BoroName", "geometry"]].copy()
+    g["geometry"] = g.geometry.simplify(_NTA_SIMPLIFY_TOLERANCE).apply(_orient_for_d3)
+    features = []
+    for r in g.itertuples():
+        props = {"nta": r.NTAName, "boro": r.BoroName}
+        for key, _ in _NTA_MAP_METRICS:
+            props[key] = None
+            props[f"{key}_n"] = None
+        props.update(vals.get(r.NTAName, {}))
+        gj = r.geometry.__geo_interface__
+        features.append({
+            "type": "Feature",
+            "properties": props,
+            "geometry": {"type": gj["type"], "coordinates": _round_coords(gj["coordinates"])},
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _orient_for_d3(geom):
+    """d3-geo interprets polygons spherically: an exterior ring wound
+    counterclockwise in lon-lat (the RFC 7946 convention this file uses)
+    is read as enclosing the entire globe minus the shape, which renders
+    as a full-frame fill. Rewind exteriors clockwise for the client."""
+    if isinstance(geom, Polygon):
+        return orient(geom, -1.0)
+    if isinstance(geom, MultiPolygon):
+        return MultiPolygon([orient(p, -1.0) for p in geom.geoms])
+    return geom
+
+
+def _round_coords(obj):
+    if isinstance(obj, (list, tuple)):
+        return [_round_coords(x) for x in obj]
+    if isinstance(obj, float):
+        return round(obj, _NTA_COORD_DECIMALS)
+    return obj
 
 
 def _ay_label(ay: int) -> str:

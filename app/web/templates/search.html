@@ -107,8 +107,7 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0">
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-4">
       <figcaption class="text-xs text-slate-500 mb-2">
         <span class="font-medium text-slate-700">Proficiency on State Tests, Grades 3–8</span> —
         share of tested students scoring proficient (Levels 3–4), citywide.
@@ -134,31 +133,60 @@
         Source: NYC DOE InfoHub, NYS grades 3–8 test results. No state tests were given
         in spring 2020 or spring 2021 (COVID-19) — the gap is real, not missing data.
       </div>
-    </figure>
+  </figure>
 
-    <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0">
-      <figcaption class="text-xs text-slate-500 mb-2">
-        <span class="font-medium text-slate-700">Economic Need Across Schools</span> —
-        number of schools at each Economic Need Index level, {{ citywide.stats.latest_year }}.
-      </figcaption>
-      <div id="citywide-eni"></div>
-      <details class="mt-2">
-        <summary class="text-[11px] text-slate-500 cursor-pointer">Data table</summary>
-        <table class="text-xs text-slate-600 mt-1 tabular-nums">
-          <thead><tr class="text-left text-slate-400"><th class="pr-4 font-normal">ENI range</th><th class="font-normal">Schools</th></tr></thead>
-          <tbody>
-          {% for b in citywide.eni_bins if b.count %}
-            <tr><td class="pr-4">{{ "%.0f"|format(b.x0 * 100) }}–{{ "%.0f"|format(b.x1 * 100) }}%</td><td>{{ "{:,}".format(b.count) }}</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </details>
-      <div class="text-[11px] text-slate-400 mt-2">
-        Source: NYC DOE demographic snapshot, {{ citywide.stats.latest_year }}. Higher ENI =
-        greater economic need; the index blends family income, benefits eligibility and housing status.
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0">
+    <figcaption class="text-xs text-slate-500 mb-3">
+      <span class="font-medium text-slate-700">Need and Proficiency by Neighborhood</span> —
+      school averages by NTA: Economic Need Index ({{ citywide.stats.latest_year }}) and the
+      share of students testing proficient on state ELA and math exams
+      ({{ citywide.proficiency[-1].year }}). Darker = higher. Neighborhoods with fewer than
+      5 schools reporting a measure are shown in light gray.
+    </figcaption>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <div class="text-xs font-medium text-slate-700 mb-1">Economic Need</div>
+        <div id="citywide-map-eni"></div>
       </div>
-    </figure>
-  </div>
+      <div>
+        <div class="text-xs font-medium text-slate-700 mb-1">ELA Proficiency</div>
+        <div id="citywide-map-ela"></div>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-700 mb-1">Math Proficiency</div>
+        <div id="citywide-map-math"></div>
+      </div>
+    </div>
+    <details class="mt-3">
+      <summary class="text-[11px] text-slate-500 cursor-pointer">Data table</summary>
+      <table class="text-xs text-slate-600 mt-1 tabular-nums">
+        <thead>
+          <tr class="text-left text-slate-400">
+            <th class="pr-4 font-normal">Neighborhood</th><th class="pr-4 font-normal">Borough</th>
+            <th class="pr-4 font-normal">ENI</th><th class="pr-4 font-normal">ELA</th><th class="font-normal">Math</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for f in nta_map.features | sort(attribute="properties.nta") | sort(attribute="properties.boro") %}
+          {% set p = f.properties %}
+          <tr>
+            <td class="pr-4"><a class="underline decoration-slate-300" href="/neighborhood/{{ p.nta | replace(' ', '-') | urlencode }}">{{ p.nta }}</a></td>
+            <td class="pr-4">{{ p.boro }}</td>
+            {% for key in ("eni", "ela", "math") %}
+            <td class="pr-4">{% if p[key] is not none %}{{ "%.0f"|format(p[key] * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    <div class="text-[11px] text-slate-400 mt-2">
+      Source: NYC DOE demographic snapshot ({{ citywide.stats.latest_year }}) and NYC DOE
+      InfoHub NYS grades 3–8 test results ({{ citywide.proficiency[-1].year }}), averaged
+      across schools in each NTA (2010 Neighborhood Tabulation Areas). Higher ENI = greater
+      economic need.
+    </div>
+  </figure>
 </div>
 
 <script>
@@ -206,7 +234,7 @@
         return { ...d, yLab };
       });
     profEl.append(Plot.plot({
-      width: profEl.clientWidth || 400, height: 240,
+      width: Math.min(profEl.clientWidth || 560, 560), height: 240,
       marginRight: 44, marginTop: 12,
       style: { fontFamily: font, background: "transparent" },
       x: { tickFormat: yearLabel, label: null, ticks: 6, tickSize: 0 },
@@ -239,32 +267,51 @@
     }));
   }
 
-  // ENI distribution histogram with a median rule.
-  const eniEl = document.getElementById("citywide-eni");
-  if (eniEl) {
-    const bins = citywide.eni_bins;
-    const median = citywide.stats.median_eni;
-    eniEl.append(Plot.plot({
-      width: eniEl.clientWidth || 400, height: 240, marginTop: 20,
-      style: { fontFamily: font, background: "transparent" },
-      x: { label: "Economic Need Index", tickFormat: d => `${Math.round(d * 100)}%`, tickSize: 0 },
-      y: { label: "Schools" },
-      marks: [
-        Plot.gridY({ stroke: grid, strokeOpacity: 1 }),
-        Plot.rectY(bins, {
-          x1: "x0", x2: "x1", y: "count", fill: "#2a78d6",
-          insetLeft: 1, insetRight: 1, ry2: 4,
-          tip: true,
-          title: d => `ENI ${Math.round(d.x0 * 100)}–${Math.round(d.x1 * 100)}%\n${d.count.toLocaleString()} schools`,
-        }),
-        Plot.ruleX([median], { stroke: ink, strokeWidth: 1 }),
-        Plot.text([median], {
-          x: d => d, frameAnchor: "top", text: d => `Median ${Math.round(d * 100)}%`,
-          dx: -6, dy: 2, textAnchor: "end", fill: ink, fontWeight: 500,
-        }),
-        Plot.ruleY([0], { stroke: muted }),
-      ],
-    }));
+  // NTA choropleth series: one measure per map, sequential single-hue
+  // ramps (darker = higher). ELA and Math share a domain and hue so the
+  // two proficiency maps read against the same scale; ENI takes its own
+  // hue so need is never mistaken for proficiency.
+  const ntaGeo = {{ nta_map | tojson }};
+  if (document.getElementById("citywide-map-eni") && ntaGeo.features.length) {
+    const extent = keys => {
+      const v = ntaGeo.features.flatMap(f => keys.map(k => f.properties[k])).filter(x => x != null);
+      return [Math.min(...v), Math.max(...v)];
+    };
+    const eniDomain = extent(["eni"]);
+    const profDomain = extent(["ela", "math"]);
+    const metricLabels = { eni: "Avg ENI", ela: "Avg ELA proficient", math: "Avg math proficient" };
+    const drawMap = (elId, key, scheme, domain) => {
+      const el = document.getElementById(elId);
+      const width = el.clientWidth || 260;
+      el.append(Plot.plot({
+        width, height: Math.round(width * 0.95), margin: 0,
+        style: { fontFamily: font, background: "transparent" },
+        projection: { type: "mercator", domain: ntaGeo },
+        color: {
+          // No-data fill sits off the ramp's hue so "fewer than 5
+          // schools" never reads as a low value.
+          scheme, domain, unknown: "#e5e7eb",
+          legend: true, label: metricLabels[key],
+          tickFormat: d => `${Math.round(d * 100)}%`,
+        },
+        marks: [
+          Plot.geo(ntaGeo.features, {
+            fill: d => d.properties[key],
+            stroke: "#ffffff", strokeWidth: 0.5,
+            tip: true,
+            title: d => {
+              const p = d.properties;
+              return p[key] == null
+                ? `${p.nta} (${p.boro})\nFewer than 5 schools with data`
+                : `${p.nta} (${p.boro})\n${metricLabels[key]}: ${(p[key] * 100).toFixed(0)}% across ${p[key + "_n"]} schools`;
+            },
+          }),
+        ],
+      }));
+    };
+    drawMap("citywide-map-eni", "eni", "blues", eniDomain);
+    drawMap("citywide-map-ela", "ela", "greens", profDomain);
+    drawMap("citywide-map-math", "math", "greens", profDomain);
   }
 })();
 </script>
