@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import escape
 
 from .. import config
 
@@ -226,7 +227,7 @@ async def school_page(request: Request, dbn: str):
     detail = get_school(dbn)
     if detail is None:
         return HTMLResponse(
-            content=f"<h1>School not found</h1><p>No school with DBN <code>{dbn}</code>.</p>",
+            content=f"<h1>School not found</h1><p>No school with DBN <code>{escape(dbn)}</code>.</p>",
             status_code=404,
         )
     swd = school_swd_outcomes(dbn)
@@ -269,7 +270,7 @@ async def neighborhood_page(request: Request, query: str):
     detail = get_neighborhood(query)
     if detail is None:
         return HTMLResponse(
-            content=f"<h1>Neighborhood not found</h1><p>No NTA matched <code>{query}</code>.</p>",
+            content=f"<h1>Neighborhood not found</h1><p>No NTA matched <code>{escape(query)}</code>.</p>",
             status_code=404,
         )
     return templates.TemplateResponse(

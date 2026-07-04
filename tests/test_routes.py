@@ -210,6 +210,25 @@ def test_school_page_404(client):
     assert r.status_code == 404
 
 
+def test_school_page_404_escapes_dbn(client):
+    """Issue #3: the hand-built 404 body must escape the user-controlled
+    path param — it bypasses Jinja autoescape. Payload is slash-free so
+    it actually matches the {dbn} segment and reaches the handler."""
+    r = client.get("/school/%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+    assert r.status_code == 404
+    assert "<img" not in r.text
+    assert "&lt;img" in r.text
+
+
+def test_neighborhood_page_404_escapes_query(client):
+    """Issue #3, second site: the {query:path} converter accepts arbitrary
+    payloads, including slashes."""
+    r = client.get("/neighborhood/x%2F%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+    assert r.status_code == 404
+    assert "<img" not in r.text
+    assert "&lt;img" in r.text
+
+
 def test_school_page_renders_swd_outcomes_section(client):
     """Regular HS with SWD enrollment gets the new SWD-outcomes section."""
     r = client.get("/school/15K462")
