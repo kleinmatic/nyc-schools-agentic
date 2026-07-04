@@ -283,7 +283,9 @@ def test_healthz(client):
     # caches_warming may be true (background task still running) or false
     # (warm completed before this check fires) — both are healthy states.
     assert isinstance(body["caches_warming"], bool)
-    assert body["caches_warm_s"] is None or body["caches_warm_s"] > 0
+    # 0.0 is legal: a second lifespan in the same process (another test
+    # module's TestClient) finds every lru_cache primed and warms in <5ms.
+    assert body["caches_warm_s"] is None or body["caches_warm_s"] >= 0
 
 
 def test_robots_txt_blocks_training_crawlers_and_allows_search(client):

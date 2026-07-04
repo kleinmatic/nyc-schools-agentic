@@ -69,6 +69,35 @@ async def data_lifespan(app: FastAPI):
         log.info("Shutting down")
 
 
+class _SecurityHeadersMiddleware:
+    """Baseline hardening headers on every response (issue #4). No CSP on
+    purpose: the site's inline scripts (Plot charts, GA bootstrap, WebMCP
+    imperative tools) would require 'unsafe-inline', which forfeits CSP's
+    protection against inline reflection — the vector issue #3 fixed at
+    the root. Revisit with nonces if the calculus changes."""
+
+    _HEADERS = (
+        (b"x-content-type-options", b"nosniff"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"x-frame-options", b"SAMEORIGIN"),
+    )
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                message = dict(message)
+                message["headers"] = list(message.get("headers", [])) + list(self._HEADERS)
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 class _McpTrailingSlashMiddleware:
     """Rewrite incoming `/mcp` to `/mcp/` at the ASGI layer before Starlette
     routes the request.
@@ -104,6 +133,7 @@ app = FastAPI(
     lifespan=combine_lifespans(data_lifespan, mcp_app.lifespan),
 )
 app.add_middleware(_McpTrailingSlashMiddleware)
+app.add_middleware(_SecurityHeadersMiddleware)
 # Outermost: per-IP token bucket over site + /mcp/ alike (/healthz exempt
 # so Fly healthchecks never trip it). Limits via RATE_LIMIT_RATE /
 # RATE_LIMIT_BURST env; published in /llms.txt and README.

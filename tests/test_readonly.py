@@ -31,6 +31,17 @@ def test_every_http_route_is_read_only():
     assert not offenders, f"non-GET routes mounted: {offenders}"
 
 
+def test_security_headers_on_every_response():
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        for path in ("/", "/healthz", "/robots.txt"):
+            r = client.get(path)
+            assert r.headers["x-content-type-options"] == "nosniff", path
+            assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin", path
+            assert r.headers["x-frame-options"] == "SAMEORIGIN", path
+
+
 def test_the_only_mount_is_the_mcp_transport():
     mounts = [r.path for r in app.routes if isinstance(r, Mount)]
     assert mounts == ["/mcp"], (
