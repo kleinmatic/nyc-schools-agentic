@@ -438,6 +438,7 @@ Journalism-style accountability and equity data for every NYC public school, key
 
 - [Streamable HTTP endpoint](https://nycschools.fly.dev/mcp/) — 19 tools, no auth. Includes a dynamic-capability-discovery pair (`list_school_metrics` / `list_neighborhood_metrics` + `get_school_metric` / `get_neighborhood_metric`) alongside 15 curated tools for common patterns.
 - Tool descriptions are oriented to *when an agent should use this*.
+- Rate limit: 2 requests/sec sustained per IP with a 120-request burst, across the site and MCP endpoint alike. Over-limit responses are 429 with a Retry-After header.
 
 ## Pages
 

@@ -11,6 +11,7 @@ from fastmcp.utilities.lifespan import combine_lifespans
 from . import config  # noqa: F401  -- ensures NYC_SCHOOLS_DATA_DIR is set
 from . import data
 from .mcp_server import mcp
+from .ratelimit import RateLimitMiddleware
 from .services.analytics import warm_caches
 from .web import routes as web_routes
 
@@ -103,6 +104,10 @@ app = FastAPI(
     lifespan=combine_lifespans(data_lifespan, mcp_app.lifespan),
 )
 app.add_middleware(_McpTrailingSlashMiddleware)
+# Outermost: per-IP token bucket over site + /mcp/ alike (/healthz exempt
+# so Fly healthchecks never trip it). Limits via RATE_LIMIT_RATE /
+# RATE_LIMIT_BURST env; published in /llms.txt and README.
+app.add_middleware(RateLimitMiddleware)
 app.include_router(web_routes.router)
 app.mount("/mcp", mcp_app)
 

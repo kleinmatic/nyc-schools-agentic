@@ -53,6 +53,7 @@ The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) en
 - **Production:** `https://nycschools.fly.dev/mcp/`
 - **Local:** `http://localhost:8000/mcp/` (after `uv run uvicorn app.main:app --reload`)
 - **Auth:** none. Public data, public endpoint.
+- **Rate limit:** 2 requests/sec sustained per IP, 120-request burst, across the site and `/mcp/` alike. Over-limit responses are `429` with a `Retry-After` header and an `X-RateLimit-Policy` header stating the policy. Tunable via `RATE_LIMIT_RATE` / `RATE_LIMIT_BURST` env vars.
 - **Source (AGPL §13):** [github.com/kleinmatic/nyc-schools-agentic](https://github.com/kleinmatic/nyc-schools-agentic) — the MCP tool definitions live in [`app/mcp_server/server.py`](./app/mcp_server/server.py).
 
 ### Tools at a glance
