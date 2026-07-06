@@ -57,6 +57,25 @@ def test_fly_client_ip_wins_over_x_forwarded_for():
     assert client.get("/", headers=h2).status_code == 429
 
 
+def test_cf_connecting_ip_trusted_only_with_valid_edge_token(monkeypatch):
+    """Behind Cloudflare the real client is in CF-Connecting-IP — but the
+    header is only trustworthy when the request also carries the edge
+    token the CF Transform Rule stamps (else direct-to-origin callers
+    could spoof it to rotate buckets)."""
+    monkeypatch.setenv("EDGE_TOKEN", "edge-secret")
+    client = _make_client(rate=0.001, burst=1)
+    trusted = {"X-Edge-Token": "edge-secret", "CF-Connecting-IP": "1.1.1.1"}
+    # Trusted: two CF end-clients get separate buckets.
+    assert client.get("/", headers=trusted).status_code == 200
+    assert client.get("/", headers=trusted).status_code == 429
+    assert client.get("/", headers={**trusted, "CF-Connecting-IP": "2.2.2.2"}).status_code == 200
+    # Untrusted: no edge token → CF header ignored, falls back to XFF;
+    # rotating CF-Connecting-IP does NOT rotate buckets.
+    spoof = {"CF-Connecting-IP": "3.3.3.3", "X-Forwarded-For": "5.5.5.5"}
+    assert client.get("/", headers=spoof).status_code == 200
+    assert client.get("/", headers={**spoof, "CF-Connecting-IP": "4.4.4.4"}).status_code == 429
+
+
 def test_bucket_refills_over_time(monkeypatch):
     import app.ratelimit as rl
     t = {"now": 1000.0}

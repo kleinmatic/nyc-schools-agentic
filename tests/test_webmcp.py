@@ -162,7 +162,9 @@ def test_llms_txt_returns_200_with_orientation_block(client):
     assert r.headers["content-type"].startswith("text/plain")
     text = r.text
     # The MCP endpoint must be discoverable — that's the whole point.
-    assert "https://nycschools.fly.dev/mcp/" in text
+    assert "https://nycschools.datatribune.io/mcp/" in text
+    # The launch posture: MCP requires a token, and llms.txt must say so.
+    assert "X-Schools-Token" in text
     # Pointer to the WebMCP manifest for the in-page tool surface.
     assert "/.well-known/webmcp" in text
     # H1 + summary blockquote per llms.txt convention.

@@ -436,21 +436,22 @@ Journalism-style accountability and equity data for every NYC public school, key
 
 ## MCP server
 
-- [Streamable HTTP endpoint](https://nycschools.fly.dev/mcp/) — 19 tools, no auth. Includes a dynamic-capability-discovery pair (`list_school_metrics` / `list_neighborhood_metrics` + `get_school_metric` / `get_neighborhood_metric`) alongside 15 curated tools for common patterns.
+- [Streamable HTTP endpoint](https://nycschools.datatribune.io/mcp/) — 19 tools. Includes a dynamic-capability-discovery pair (`list_school_metrics` / `list_neighborhood_metrics` + `get_school_metric` / `get_neighborhood_metric`) alongside 15 curated tools for common patterns.
+- Access requires a token: send header `X-Schools-Token: <token>` on every MCP request (401 without it). Tokens are issued by the site owner — see the repository README for contact.
 - Tool descriptions are oriented to *when an agent should use this*.
 - Rate limit: 2 requests/sec sustained per IP with a 120-request burst, across the site and MCP endpoint alike. Over-limit responses are 429 with a Retry-After header.
 
 ## Pages
 
-- [Homepage](https://nycschools.fly.dev/) — leaderboards by metric and by neighborhood
-- [Search](https://nycschools.fly.dev/search) — fuzzy school search by name or DBN
-- [Zoned schools](https://nycschools.fly.dev/zoned) — address → zoned ES + MS
-- [Sources](https://nycschools.fly.dev/sources) — every dataset and its vintage
+- [Homepage](https://nycschools.datatribune.io/) — leaderboards by metric and by neighborhood
+- [Search](https://nycschools.datatribune.io/search) — fuzzy school search by name or DBN
+- [Zoned schools](https://nycschools.datatribune.io/zoned) — address → zoned ES + MS
+- [Sources](https://nycschools.datatribune.io/sources) — every dataset and its vintage
 
 ## Reference
 
 - [Repository](https://github.com/kleinmatic/nyc-schools-agentic) — AGPL-3.0; corresponding source per §13
-- [WebMCP manifest](https://nycschools.fly.dev/.well-known/webmcp) — in-page declarative tool surface
+- [WebMCP manifest](https://nycschools.datatribune.io/.well-known/webmcp) — in-page declarative tool surface
 - [llms.txt convention](https://llmstxt.org) — this file's format
 """
 

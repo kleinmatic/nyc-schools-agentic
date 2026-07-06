@@ -1,6 +1,6 @@
 # NYC Schools Agentic
 
-**Live at https://nycschools.fly.dev**
+**Live at https://nycschools.datatribune.io**
 
 Interactive site/server for NYC public school data, keyed by **DBN** (e.g. `15K321`). Serves HTML pages to humans and (planned) MCP/A2A/ACP surfaces to agents — the service layer is designed so a single function powers all of them.
 
@@ -50,9 +50,9 @@ Routes you'll have:
 
 The same FastAPI process serves an [**MCP**](https://modelcontextprotocol.io) endpoint at `/mcp/` (note the trailing slash) over [Streamable HTTP](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#streamable-http). It's a sibling adapter to the HTML routes — same `app/services/` functions, same Pydantic models, separate transport. Built with [FastMCP](https://gofastmcp.com).
 
-- **Production:** `https://nycschools.fly.dev/mcp/`
+- **Production:** `https://nycschools.datatribune.io/mcp/`
 - **Local:** `http://localhost:8000/mcp/` (after `uv run uvicorn app.main:app --reload`)
-- **Auth:** none. Public data, public endpoint.
+- **Auth:** an access token is required in production — send header `X-Schools-Token: <token>` on every `/mcp/` request (requests without it get `401`). Tokens are issued by the site owner. Locally the gate is dormant: with `MCP_ACCESS_TOKEN` unset, `http://localhost:8000/mcp/` needs no header.
 - **Rate limit:** 2 requests/sec sustained per IP, 120-request burst, across the site and `/mcp/` alike. Over-limit responses are `429` with a `Retry-After` header and an `X-RateLimit-Policy` header stating the policy. Tunable via `RATE_LIMIT_RATE` / `RATE_LIMIT_BURST` env vars.
 - **Source (AGPL §13):** [github.com/kleinmatic/nyc-schools-agentic](https://github.com/kleinmatic/nyc-schools-agentic) — the MCP tool definitions live in [`app/mcp_server/server.py`](./app/mcp_server/server.py).
 
@@ -127,7 +127,8 @@ Easiest interactive check is the official **[MCP Inspector](https://github.com/m
 
 ```bash
 npx @modelcontextprotocol/inspector
-# In the UI: Transport = "Streamable HTTP", URL = https://nycschools.fly.dev/mcp/
+# In the UI: Transport = "Streamable HTTP", URL = https://nycschools.datatribune.io/mcp/
+# Under "Custom Headers", add: X-Schools-Token = <your access token>
 ```
 
 For a scripted check without Node, the Python snippet below works.
@@ -139,9 +140,15 @@ The simplest path. `pip install fastmcp` (or `uv add fastmcp`), then:
 ```python
 import asyncio
 from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
+
+transport = StreamableHttpTransport(
+    "https://nycschools.datatribune.io/mcp/",
+    headers={"X-Schools-Token": "<your access token>"},
+)
 
 async def main():
-    async with Client("https://nycschools.fly.dev/mcp/") as c:
+    async with Client(transport) as c:
         tools = await c.list_tools()
         print("tools:", [t.name for t in tools])
 
@@ -166,7 +173,9 @@ asyncio.run(main())
 One command from any terminal — adds the server to your **user-scope** Claude Code config (so it's available in every `claude` session you start, anywhere on your machine):
 
 ```bash
-claude mcp add --transport http --scope user nyc-schools https://nycschools.fly.dev/mcp/
+claude mcp add --transport http --scope user \
+  --header "X-Schools-Token: <your access token>" \
+  nyc-schools https://nycschools.datatribune.io/mcp/
 ```
 
 The trailing slash is canonical, but the server accepts `/mcp` and `/mcp/` interchangeably (an ASGI middleware rewrites the path before routing), so a paste-fumbled URL still works.
@@ -195,7 +204,9 @@ Add to `librechat.yaml`:
 mcpServers:
   nyc-schools:
     type: streamable-http
-    url: https://nycschools.fly.dev/mcp/
+    url: https://nycschools.datatribune.io/mcp/
+    headers:
+      X-Schools-Token: "<your access token>"
     timeout: 30000
 ```
 
@@ -210,13 +221,16 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "nyc-schools": {
       "type": "http",
-      "url": "https://nycschools.fly.dev/mcp/"
+      "url": "https://nycschools.datatribune.io/mcp/",
+      "headers": {
+        "X-Schools-Token": "<your access token>"
+      }
     }
   }
 }
 ```
 
-Restart Claude Desktop. (Note: at the time of writing, Claude Desktop's `http` transport is Streamable HTTP. If you have an older build that only supports stdio, run a small bridge — easiest is the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) npm package: `npx mcp-remote https://nycschools.fly.dev/mcp/`.)
+Restart Claude Desktop. (Note: at the time of writing, Claude Desktop's `http` transport is Streamable HTTP. If you have an older build that only supports stdio, run a small bridge — easiest is the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) npm package: `npx mcp-remote https://nycschools.datatribune.io/mcp/ --header "X-Schools-Token: <your access token>"`.)
 
 ### Run the tests
 
@@ -537,7 +551,7 @@ In practice that means:
 
 ## Deployment
 
-**Live at https://nycschools.fly.dev**
+**Live at https://nycschools.datatribune.io**
 
 CI/CD via GitHub Actions, Fly.io for hosting. One workflow file (`.github/workflows/main.yml`) with two jobs:
 
@@ -546,7 +560,7 @@ CI/CD via GitHub Actions, Fly.io for hosting. One workflow file (`.github/workfl
 
 The Dockerfile bakes `data/data.sqlite` and the geo files into the image at build time, so the deployed container is fully self-contained: no runtime data fetch, no upstream API access, no `mdbtools` system dep. Currently runs as `shared-cpu-1x@2gb` in `ewr` (Newark) with auto-stop when idle (sub-2s cold start).
 
-Operational details (Fly account, dashboard URL, common admin commands, token rotation, recovery scenarios) live in `SECRETS.md` (gitignored). For a typical iteration: branch or push to main, watch the [Actions tab](https://github.com/kleinmatic/nyc-schools-agentic/actions), then verify at https://nycschools.fly.dev.
+Operational details (Fly account, dashboard URL, common admin commands, token rotation, recovery scenarios) live in `SECRETS.md` (gitignored). For a typical iteration: branch or push to main, watch the [Actions tab](https://github.com/kleinmatic/nyc-schools-agentic/actions), then verify at https://nycschools.datatribune.io.
 
 ## Gotchas
 

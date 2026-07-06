@@ -5,12 +5,15 @@ response streaming and can interfere with the MCP Streamable HTTP (SSE)
 mount. On an allowed request it passes straight through; over the limit
 it answers 429 with Retry-After and never touches the wrapped app.
 
-Keying: Fly-Client-IP (set by Fly's proxy) → first X-Forwarded-For hop →
-transport peer address. A caller who reaches the origin directly can
-spoof the headers to rotate buckets; the Fly proxy is the trust boundary
-in production, and proxy-level concurrency limits (fly.toml) backstop
-header games. State is per-process and resets on deploy — fine for a
-single-machine app; move to a shared store before scaling out.
+Keying: CF-Connecting-IP (trusted ONLY on requests bearing a valid
+X-Edge-Token — otherwise a direct-to-origin caller could spoof it to
+rotate buckets) → Fly-Client-IP (set by Fly's proxy; behind Cloudflare
+this is a CF edge address, hence the CF header taking precedence) →
+first X-Forwarded-For hop → transport peer address. The Fly proxy is
+the trust boundary in production, and proxy-level concurrency limits
+(fly.toml) backstop header games. State is per-process and resets on
+deploy — fine for a single-machine app; move to a shared store before
+scaling out.
 
 Limits are generous by design (the agentic-newsroom MCP consumer points
 at this server): sustained RATE_LIMIT_RATE tokens/sec with a
@@ -42,7 +45,13 @@ class RateLimitMiddleware:
     def _client_ip(self, scope) -> str:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                    for k, v in scope.get("headers", [])}
-        ip = headers.get("fly-client-ip")
+        ip = None
+        if headers.get("cf-connecting-ip"):
+            from .gates import has_valid_edge_token
+            if has_valid_edge_token(scope):
+                ip = headers["cf-connecting-ip"]
+        if not ip:
+            ip = headers.get("fly-client-ip")
         if not ip and (xff := headers.get("x-forwarded-for")):
             ip = xff.split(",")[0].strip()
         if not ip:

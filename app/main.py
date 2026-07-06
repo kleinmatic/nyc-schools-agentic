@@ -10,6 +10,7 @@ from fastmcp.utilities.lifespan import combine_lifespans
 
 from . import config  # noqa: F401  -- ensures NYC_SCHOOLS_DATA_DIR is set
 from . import data
+from .gates import EdgeLockdownMiddleware, McpAccessGateMiddleware
 from .mcp_server import mcp
 from .ratelimit import RateLimitMiddleware
 from .services.analytics import warm_caches
@@ -132,12 +133,20 @@ app = FastAPI(
     title="NYC Schools Agentic",
     lifespan=combine_lifespans(data_lifespan, mcp_app.lifespan),
 )
+# add_middleware is LIFO — last added runs outermost. Execution order:
+#   SecurityHeaders → RateLimit → EdgeLockdown → McpAccessGate →
+#   McpTrailingSlash → router
+# Headers outermost so every response (429s, 401s, 301s included) gets
+# them. Rate limit before the gates so floods 429 cheaply. MCP gate
+# OUTSIDE the edge gate is deliberate: a bad-token /mcp/* request must
+# 401, never 301 to an HTML page (see app/gates.py). Both gates are
+# dormant until MCP_ACCESS_TOKEN / EDGE_TOKEN are set. Rate-limit knobs:
+# RATE_LIMIT_RATE / RATE_LIMIT_BURST; policy published in /llms.txt.
 app.add_middleware(_McpTrailingSlashMiddleware)
-app.add_middleware(_SecurityHeadersMiddleware)
-# Outermost: per-IP token bucket over site + /mcp/ alike (/healthz exempt
-# so Fly healthchecks never trip it). Limits via RATE_LIMIT_RATE /
-# RATE_LIMIT_BURST env; published in /llms.txt and README.
+app.add_middleware(EdgeLockdownMiddleware)
+app.add_middleware(McpAccessGateMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(_SecurityHeadersMiddleware)
 app.include_router(web_routes.router)
 app.mount("/mcp", mcp_app)
 
