@@ -30,6 +30,7 @@ from .charts import (
     exam_grade_year_levels,
     homepage_citywide,
     homepage_nta_map,
+    school_demographics_trend,
 )
 
 router = APIRouter()
@@ -250,6 +251,7 @@ async def school_page(request: Request, dbn: str):
             "agent_swd_context": _agent_swd_context_for_school(swd),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
+            "demographics_trend": school_demographics_trend(detail.demographics_by_year),
             "ela_citywide_levels": citywide_level_breakdown("ela"),
             "math_citywide_levels": citywide_level_breakdown("math"),
         },

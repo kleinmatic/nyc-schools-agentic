@@ -1202,6 +1202,110 @@
     "NYC DOE Demographic Snapshot. Annual roll-up per (school × year) covering total enrollment, race/ethnicity, gender, ELL, SWD, poverty count, and ENI (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0-1 scale). Years 2005-2024.",
     label="NYC DOE Demographic Snapshot, 2005–2024"
   ) }}
+  {% if demographics_trend %}
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-2">
+    <figcaption class="text-xs text-slate-500 mb-3">
+      <span class="font-medium text-slate-700">Who Attends, Over Time</span> —
+      enrollment, race/ethnicity shares, English Language Learner and
+      Students-with-Disabilities shares, and Economic Need Index, by year.
+    </figcaption>
+    <div id="demo-trend" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4"></div>
+  </figure>
+  <script>
+  (function() {
+    if (typeof Plot === "undefined") return;
+    const rows = {{ demographics_trend | tojson }};
+    if (rows.length < 3) return;
+    const holder = document.getElementById("demo-trend");
+    const ayFmt = d => `'${String(d % 100).padStart(2, "0")}`;
+    const yearOf = ay => rows.find(r => r.ay === ay)?.year ?? ay;
+
+    // Fixed hue assignment (never cycled): validated 4-hue categorical set.
+    const RACE = [
+      {key: "asian",    label: "Asian",    color: "#2a78d6"},
+      {key: "black",    label: "Black",    color: "#d97706"},
+      {key: "hispanic", label: "Hispanic", color: "#1baf7a"},
+      {key: "white",    label: "White",    color: "#7c3aed"},
+    ];
+    const NEED = [
+      {key: "ell", label: "ELL", color: "#2a78d6"},
+      {key: "swd", label: "SWD", color: "#d97706"},
+    ];
+
+    function longify(series) {
+      const out = [];
+      for (const s of series)
+        for (const r of rows)
+          if (r[s.key] != null)
+            out.push({ay: r.ay, year: r.year, series: s.label, color: s.color, v: r[s.key]});
+      return out;
+    }
+    // Dodge same-x end labels ≥ 0.055 apart so they never overprint.
+    function endLabels(pts) {
+      const last = new Map();
+      for (const p of pts) {
+        const cur = last.get(p.series);
+        if (!cur || p.ay > cur.ay) last.set(p.series, p);
+      }
+      const labs = [...last.values()].sort((a, b) => a.v - b.v);
+      let prev = -Infinity;
+      for (const l of labs) { l.yLab = Math.max(l.v, prev + 0.055); prev = l.yLab; }
+      return labs;
+    }
+
+    function panel(title, marks, yOpts) {
+      const wrap = document.createElement("div");
+      const h = document.createElement("div");
+      h.className = "text-xs font-medium text-slate-700 mb-1";
+      h.textContent = title;
+      wrap.append(h);
+      wrap.append(Plot.plot({
+        height: 170, marginLeft: 44, marginRight: 84, marginTop: 8, marginBottom: 24,
+        style: {fontSize: "11px"},
+        x: {tickFormat: ayFmt, label: null, ticks: 5},
+        y: {label: null, grid: true, ...yOpts},
+        marks
+      }));
+      return wrap;
+    }
+
+    // 1 — Enrollment (absolute count, zero-based)
+    const enr = rows.filter(r => r.enrollment != null);
+    holder.append(panel("Enrollment", [
+      Plot.areaY(enr, {x: "ay", y: "enrollment", fill: "#2a78d6", fillOpacity: 0.12}),
+      Plot.lineY(enr, {x: "ay", y: "enrollment", stroke: "#2a78d6", strokeWidth: 2,
+        title: d => `${yearOf(d.ay)}\n${d.enrollment.toLocaleString()} students`}),
+    ], {zero: true, ticks: 4, tickFormat: d => d.toLocaleString()}));
+
+    // 2 — Race / ethnicity shares
+    const race = longify(RACE);
+    holder.append(panel("Race / Ethnicity", [
+      Plot.lineY(race, {x: "ay", y: "v", z: "series", stroke: d => d.color, strokeWidth: 2,
+        title: d => `${d.series} · ${yearOf(d.ay)}\n${(d.v * 100).toFixed(1)}%`}),
+      Plot.text(endLabels(race), {x: "ay", y: "yLab", text: d => `${d.series} ${(d.v * 100).toFixed(0)}%`,
+        fill: "#334155", dx: 6, textAnchor: "start", fontSize: 10, stroke: "white", strokeWidth: 4, paintOrder: "stroke"}),
+    ], {zero: true, tickFormat: ".0%"}));
+
+    // 3 — ELL & SWD shares
+    const need = longify(NEED);
+    holder.append(panel("English Language Learners & Students With Disabilities", [
+      Plot.lineY(need, {x: "ay", y: "v", z: "series", stroke: d => d.color, strokeWidth: 2,
+        title: d => `${d.series} · ${yearOf(d.ay)}\n${(d.v * 100).toFixed(1)}%`}),
+      Plot.text(endLabels(need), {x: "ay", y: "yLab", text: d => `${d.series} ${(d.v * 100).toFixed(0)}%`,
+        fill: "#334155", dx: 6, textAnchor: "start", fontSize: 10, stroke: "white", strokeWidth: 4, paintOrder: "stroke"}),
+    ], {zero: true, tickFormat: ".0%"}));
+
+    // 4 — ENI (0–1 index, fixed domain)
+    const eni = rows.filter(r => r.eni != null);
+    if (eni.length >= 3) {
+      holder.append(panel("Economic Need Index (0–1)", [
+        Plot.lineY(eni, {x: "ay", y: "eni", stroke: "#d97706", strokeWidth: 2,
+          title: d => `${yearOf(d.ay)}\nENI ${d.eni.toFixed(2)}`}),
+      ], {domain: [0, 1], tickFormat: ".1f"}));
+    }
+  })();
+  </script>
+  {% endif %}
   {% call table_details("Full Demographics Table, All Years") %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">

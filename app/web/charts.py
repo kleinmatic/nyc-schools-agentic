@@ -8,7 +8,7 @@ from shapely.geometry.polygon import orient
 
 from .. import data
 from ..services.analytics import aggregate_by_neighborhood
-from ..services.models import ExamRow
+from ..services.models import DemographicsYear, ExamRow
 
 
 @lru_cache(maxsize=2)
@@ -171,6 +171,32 @@ def _round_coords(obj):
 def _ay_label(ay: int) -> str:
     """2024 → '2024-25' (ay is the fall year, matching demographics.year)."""
     return f"{ay}-{(ay + 1) % 100:02d}"
+
+
+def school_demographics_trend(rows: list[DemographicsYear]) -> list[dict]:
+    """Per-year demographics series for the school-page small-multiples
+    figure (enrollment, race/ethnicity shares, ELL/SWD shares, ENI).
+    One output dict per academic year, values left as fractions/None so
+    the client decides formatting. Requires ≥ 3 years to be worth a
+    trend chart — returns [] below that and the template falls back to
+    the table alone."""
+    if not rows or len(rows) < 3:
+        return []
+    return [
+        {
+            "ay": r.ay,
+            "year": _ay_label(r.ay),
+            "enrollment": r.total_enrollment,
+            "asian": r.asian_pct,
+            "black": r.black_pct,
+            "hispanic": r.hispanic_pct,
+            "white": r.white_pct,
+            "ell": r.ell_pct,
+            "swd": r.swd_pct,
+            "eni": r.eni,
+        }
+        for r in sorted(rows, key=lambda r: r.ay)
+    ]
 
 
 def exam_grade_year_levels(rows: list[ExamRow]) -> list[dict]:
