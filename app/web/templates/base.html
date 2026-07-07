@@ -27,7 +27,10 @@
   </script>
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+  {# Explicit dist path (the bare package URL 302s there anyway) + the
+     verified sha384 of that file. The previous hash belonged to a
+     different file, so browsers silently blocked htmx site-wide. #}
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
   {# Observable Plot for dataviz. Loaded on every page for now; if page weight
      becomes a concern, gate to pages that actually render a chart. d3 is
      pulled in alongside since Plot's UMD doesn't re-export d3 helpers. #}
