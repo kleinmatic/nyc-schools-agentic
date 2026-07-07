@@ -8,7 +8,7 @@ from shapely.geometry.polygon import orient
 
 from .. import data
 from ..services.analytics import aggregate_by_neighborhood
-from ..services.models import DemographicsYear, ExamRow
+from ..services.models import ChronicAbsenteeismRow, DemographicsYear, ExamRow
 
 
 @lru_cache(maxsize=2)
@@ -197,6 +197,44 @@ def school_demographics_trend(rows: list[DemographicsYear]) -> list[dict]:
         }
         for r in sorted(rows, key=lambda r: r.ay)
     ]
+
+
+def chronic_subgroup_dots(rows: list[ChronicAbsenteeismRow]) -> dict:
+    """Latest-year chronic-absenteeism-by-subgroup series for the
+    school-page dot plot. NYSED only publishes two years, so the
+    journalistic read here is within-school disparity, not trend: one
+    dot per subgroup, with the All-Students rate carried separately as
+    a reference line. Suppressed subgroups (rate None) are dropped —
+    the demoted full table keeps them. Schools spanning EM + HS levels
+    keep both, tagged for faceting. Returns {} when fewer than two
+    non-suppressed subgroups exist (a plot would add nothing)."""
+    if not rows:
+        return {}
+    latest = max(r.year for r in rows)
+    dots: list[dict] = []
+    all_students: dict[str, float] = {}
+    for r in rows:
+        if r.year != latest or r.absent_rate is None:
+            continue
+        level = r.level or ""
+        if r.subgroup == "All Students":
+            all_students[level] = r.absent_rate
+        else:
+            dots.append({
+                "level": level,
+                "subgroup": r.subgroup,
+                "rate": r.absent_rate,
+                "enrollment": r.enrollment,
+            })
+    if len(dots) < 2:
+        return {}
+    return {
+        "year": latest,
+        "dots": dots,
+        "all_students": [
+            {"level": lvl, "rate": rate} for lvl, rate in sorted(all_students.items())
+        ],
+    }
 
 
 def exam_grade_year_levels(rows: list[ExamRow]) -> list[dict]:

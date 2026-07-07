@@ -26,6 +26,7 @@ from ..services.analytics import (
 from ..services.schools import get_school, school_swd_outcomes, search_schools
 from ..services.zoning import find_zoned_schools, geocode
 from .charts import (
+    chronic_subgroup_dots,
     citywide_level_breakdown,
     exam_grade_year_levels,
     homepage_citywide,
@@ -252,6 +253,7 @@ async def school_page(request: Request, dbn: str):
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
             "demographics_trend": school_demographics_trend(detail.demographics_by_year),
+            "chronic_dots": chronic_subgroup_dots(detail.nysed.chronic_absenteeism) if detail.nysed else {},
             "ela_citywide_levels": citywide_level_breakdown("ela"),
             "math_citywide_levels": citywide_level_breakdown("math"),
         },

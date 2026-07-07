@@ -714,6 +714,57 @@
     "NYSED ESSA chronic absenteeism — students absent ≥10% of enrolled days. Each row is one (year × school level × demographic subgroup). Schools spanning grades may report both EM (elementary/middle) and HS rows.",
     label="NYSED School Report Card, 2025 release"
   ) }}
+  {% if chronic_dots %}
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-2">
+    <figcaption class="text-xs text-slate-500 mb-2">
+      <span class="font-medium text-slate-700">Who Misses School, by Group</span> —
+      share of each student group chronically absent (missing ≥10% of enrolled days),
+      {{ chronic_dots.year - 1 }}-{{ "%02d"|format(chronic_dots.year % 100) }}. The amber line marks the school-wide All Students rate.
+      Groups NYSED suppresses for privacy appear only in the table below.
+    </figcaption>
+    <div id="chronic-dots"></div>
+  </figure>
+  <script>
+  (function() {
+    if (typeof Plot === "undefined") return;
+    const payload = {{ chronic_dots | tojson }};
+    const dots = payload.dots;
+    if (!dots || dots.length < 2) return;
+    const allStudents = payload.all_students;
+    const levels = [...new Set(dots.map(d => d.level))].sort();
+    const faceted = levels.length > 1;
+    const LEVEL_NAMES = {EM: "Grades K–8", HS: "High School"};
+    const order = [...dots].sort((a, b) => b.rate - a.rate).map(d => d.subgroup)
+      .filter((s, i, arr) => arr.indexOf(s) === i);
+    const fmt = v => `${(v * 100).toFixed(1)}%`;
+    const plot = Plot.plot({
+      height: 40 + 26 * order.length * (faceted ? levels.length : 1) + 20,
+      marginLeft: 200, marginRight: 24, marginTop: 8, marginBottom: 28,
+      style: {fontSize: "12px"},
+      x: {label: null, tickFormat: ".0%", grid: true, zero: true},
+      // Axis shortens NYSED's longest subgroup names; tooltips keep them verbatim.
+      y: {domain: order, label: null, tickFormat: s => ({
+        "Asian or Native Hawaiian/Other Pacific Islander": "Asian / Pacific Islander",
+        "American Indian or Alaska Native": "Amer. Indian / Alaska Native",
+      })[s] || s},
+      ...(faceted ? {fy: {domain: levels, tickFormat: l => LEVEL_NAMES[l] || l, label: null}} : {}),
+      marks: [
+        Plot.ruleX(allStudents.filter(a => !faceted || levels.includes(a.level)), {
+          x: "rate", ...(faceted ? {fy: "level"} : {}),
+          stroke: "#d97706", strokeWidth: 1.5, strokeDasharray: "4,3",
+          title: a => `All Students: ${fmt(a.rate)}`
+        }),
+        Plot.dot(dots, {
+          x: "rate", y: "subgroup", ...(faceted ? {fy: "level"} : {}),
+          r: 4.5, fill: "#2a78d6", stroke: "white", strokeWidth: 1.5,
+          title: d => `${d.subgroup}\n${fmt(d.rate)} chronically absent${d.enrollment != null ? ` of ${d.enrollment.toLocaleString()} students` : ""}`
+        }),
+      ]
+    });
+    document.getElementById("chronic-dots").append(plot);
+  })();
+  </script>
+  {% endif %}
   {% call table_details("All Subgroups, All Years") %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
