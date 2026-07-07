@@ -13,11 +13,48 @@
 {% macro chip(label, value) %}
 {% if value %}<div class="inline-flex flex-col gap-0.5 mr-4 mb-3"><span class="text-xs text-slate-500 uppercase tracking-wide">{{ label }}</span><span class="text-sm">{{ value }}</span></div>{% endif %}
 {% endmacro %}
-{% macro provenance(files, desc) %}
-<div class="text-xs text-slate-500 -mt-2 mb-3 flex flex-wrap items-start gap-x-2 gap-y-1">
-  {% for f in files %}<code class="font-mono text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded shrink-0">{{ f }}</code>{% endfor %}
-  <span class="leading-snug">{{ desc }}</span>
+{# One quiet line per section: a human-readable source name, with the full
+   methodology + underlying filenames behind a popover. Keeps a source under
+   every chart (house style) without a paragraph of provenance under every
+   heading. #}
+{% macro provenance(files, desc, label=None) %}
+{% set pid = uid("src") %}
+<div class="text-xs text-slate-500 -mt-2 mb-3">
+  Source: {% if label %}{{ label }}{% else %}see methodology{% endif %} ·
+  <button type="button" popovertarget="{{ pid }}" style="anchor-name: --{{ pid }};"
+          class="pop-trigger underline decoration-dotted decoration-slate-300 underline-offset-[3px] decoration-[1.5px]">methodology</button>
+  <div id="{{ pid }}" popover class="pop-card pop-anchored" style="--anchor: --{{ pid }};">
+    <div class="mb-2 flex flex-wrap gap-1">
+      {% for f in files %}<code class="font-mono text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded shrink-0">{{ f }}</code>{% endfor %}
+    </div>
+    <div class="leading-snug">{{ desc }}</div>
+  </div>
 </div>
+{% endmacro %}
+{# Reference-tier section: collapsed by default, heading in the summary line
+   with a data-vintage pill so stale sections can't read as current. Content
+   renders in the DOM either way (searchable, agent-visible); only the
+   visual presentation collapses. #}
+{% macro ref_section(id, title, vintage=None, note=None) %}
+<details id="{{ id }}" class="group mb-4 bg-white border border-slate-200 rounded-lg">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3.5 select-none hover:bg-slate-50 rounded-lg">
+    <span class="inline-block transition-transform group-open:rotate-90 text-slate-400 text-[10px] shrink-0">▸</span>
+    <h2 class="text-base font-semibold inline">{{ title }}</h2>
+    {% if vintage %}<span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 whitespace-nowrap">{{ vintage }}</span>{% endif %}
+    {% if note %}<span class="text-sm text-slate-500">{{ note }}</span>{% endif %}
+  </summary>
+  <div class="px-5 pb-5 pt-1">{{ caller() }}</div>
+</details>
+{% endmacro %}
+{# Full-data table demoted below a chart: same <details> affordance, smaller. #}
+{% macro table_details(label) %}
+<details class="group mt-2">
+  <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-medium select-none">
+    <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+    {{ label }}
+  </summary>
+  <div class="mt-2">{{ caller() }}</div>
+</details>
 {% endmacro %}
 {# Inline term: dotted underline + tap/click popover. Uses the HTML5 popover
    attribute so it works on mobile (touch can't trigger hover). CSS anchor
@@ -230,12 +267,26 @@
   </div>
 </div>
 
+{# ---------- On this page ---------- #}
+<nav aria-label="On this page" class="mb-8 text-sm text-slate-500 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+  <span class="text-xs uppercase tracking-wide">On this page:</span>
+  <a class="text-blue-600 hover:text-blue-800" href="#quick-stats">Quick Stats</a>
+  {% if school.peer_ranks %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#peers">Peers</a>{% endif %}
+  <span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#performance">Performance</a>
+  {% if hs %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#admissions">Admissions</a>
+  {% elif school.ms_admission %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#ms-admissions">Admissions</a>{% endif %}
+  {% if loc %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#location">Location</a>{% endif %}
+  {% if peer_neighborhood or peer_district %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#nearby">Nearby</a>{% endif %}
+  {% if school.demographics_by_year %}<span class="text-slate-300">·</span> <a class="text-blue-600 hover:text-blue-800" href="#demographics">Demographics</a>{% endif %}
+</nav>
+
 {# ---------- Quick stats ---------- #}
-<section class="mb-10">
+<section id="quick-stats" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Quick Stats</h2>
   {{ provenance(
-    ["school-demographics.csv", "snapshot.feather", "ptr.csv", "hs-directory-2021.feather"],
-    "Roll-up of latest-year metrics from multiple sources — NYC DOE demographic snapshot (2024-25), DOE official snapshot (~2016 vintage), pupil:teacher ratio (2022-23), and HS directory (AY 2021) for graduation/college-career figures on high schools."
+    ["school-demographics.csv", "ptr.csv", "hs-directory-2021.feather"],
+    "Roll-up of latest-year metrics from multiple sources — NYC DOE demographic snapshot (2024-25), pupil:teacher ratio (2022-23), and HS directory (AY 2021) for graduation/college-career figures on high schools.",
+    label="NYC DOE Demographic Snapshot, 2024-25 (mixed vintages labeled)"
   ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if latest_demo %}
@@ -246,33 +297,26 @@
       <div>{{ card_label(term("ELL", "English Language Learner — students whose home language isn't English and who score below proficient on a NYS English-proficiency screener.")) }}{{ card_value(pct(latest_demo.ell_pct)) }}</div>
       <div>{{ card_label(term("SWD", "Students With Disabilities — students with an Individualized Education Program (IEP) receiving special-education services.")) }}{{ card_value(pct(latest_demo.swd_pct)) }}</div>
     {% endif %}
-    {% if snap and snap.attendance_rate is not none %}
-      <div>{{ card_label("Attendance") }}{{ card_value(pct(snap.attendance_rate)) }}</div>
-    {% elif hs and hs.attendance_rate is not none %}
-      <div>{{ card_label("Attendance") }}{{ card_value(pct(hs.attendance_rate)) }}</div>
-    {% endif %}
-    {% if snap and snap.student_chronic_absent %}
-      <div>{{ card_label("Chronic absent") }}{{ card_value(snap.student_chronic_absent) }}</div>
-    {% endif %}
     {% if school.ptr and school.ptr.ratio is not none %}
       <div>{{ card_label("Pupil:teacher (" ~ school.ptr.ay ~ ")") }}{{ card_value("%.1f"|format(school.ptr.ratio)) }}</div>
     {% endif %}
     {% if hs and hs.graduation_rate is not none %}
-      <div>{{ card_label("4-yr grad rate") }}{{ card_value(pct(hs.graduation_rate)) }}</div>
+      <div>{{ card_label("4-yr grad rate (" ~ hs.ay ~ ")") }}{{ card_value(pct(hs.graduation_rate)) }}</div>
     {% endif %}
     {% if hs and hs.college_career_rate is not none %}
-      <div>{{ card_label("College/career") }}{{ card_value(pct(hs.college_career_rate)) }}</div>
+      <div>{{ card_label("College/career (" ~ hs.ay ~ ")") }}{{ card_value(pct(hs.college_career_rate)) }}</div>
     {% endif %}
   </dl>
 </section>
 
 {# ---------- Peer comparison ---------- #}
 {% if school.peer_ranks %}
-<section class="mb-10">
+<section id="peers" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Compared to Peers</h2>
   {{ provenance(
     ["school-demographics.csv"],
-    "Where this school's value falls among same-school-level peers (e.g. all NYC elementary schools, all middle schools, or all high schools). The triangle shows position from HIGH (left) to LOW (right) of the cohort distribution; rank #1 = highest value. Cohort will become user-selectable (district / borough / geofence) once those views land."
+    "Where this school's value falls among same-school-level peers (e.g. all NYC elementary schools, all middle schools, or all high schools). The triangle shows position from HIGH (left) to LOW (right) of the cohort distribution; rank #1 = highest value. Cohort will become user-selectable (district / borough / geofence) once those views land.",
+    label="NYC DOE + NYSED, latest year per metric"
   ) }}
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for key, rank_info in school.peer_ranks.items() %}
@@ -285,11 +329,12 @@
 {# ---------- Counseling + support staff ---------- #}
 {% if school.staffing %}
 {% set st = school.staffing %}
-<section class="mb-10">
+<section id="counseling" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Counseling & Support Staff ({{ st.ay }}-{{ "%02d"|format((st.ay + 1) % 100) }} mid-year)</h2>
   {{ provenance(
     ["staffing"],
-    "NYC DOE InfoHub annual Guidance Counselor & Social Worker report. Mid-year reporting: this is the " ~ st.ay ~ "-" ~ "%02d"|format((st.ay + 1) % 100) ~ " snapshot published in Feb " ~ (st.ay + 1) ~ ", not a full-year average. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1."
+    "NYC DOE InfoHub annual Guidance Counselor & Social Worker report. Mid-year reporting: this is the " ~ st.ay ~ "-" ~ "%02d"|format((st.ay + 1) % 100) ~ " snapshot published in Feb " ~ (st.ay + 1) ~ ", not a full-year average. Counts are FTE (a 0.4 FTE shared counselor counts as 0.4). Ratios are DOE-computed using same-year enrollment; the American School Counselor Association recommends 250:1.",
+    label="NYC DOE Guidance Counselor & Social Worker Report"
   ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if st.total_gc is not none %}<div>{{ card_label(term("GC", "Guidance counselor — supports students academically, socially, and emotionally. NYC DOE staffs these as full-time, part-time, bilingual, and various specialized roles (high needs, bridging the gap, etc.)") ~ " FTE") }}{{ card_value("%.1f"|format(st.total_gc)) }}</div>{% endif %}
@@ -297,7 +342,7 @@
     {% if st.ratio_gc_only is not none %}<div>{{ card_label("Pupils per GC") }}{{ card_value("%.0f"|format(st.ratio_gc_only)) }}</div>{% endif %}
     {% if st.ratio_sw_only is not none %}<div>{{ card_label("Pupils per SW") }}{{ card_value("%.0f"|format(st.ratio_sw_only)) }}</div>{% endif %}
     {% if st.ratio_gc_sw is not none %}<div>{{ card_label("Pupils per GC + SW") }}{{ card_value("%.0f"|format(st.ratio_gc_sw)) }}</div>{% endif %}
-    {% if st.school_psychologist_mandated %}<div>{{ card_label("School psychologist") }}{{ card_value(st.school_psychologist_mandated) }}</div>{% endif %}
+    {% if st.school_psychologist_mandated and st.school_psychologist_mandated|lower not in ("na", "n/a") %}<div>{{ card_label("School psychologist") }}{{ card_value(st.school_psychologist_mandated) }}</div>{% endif %}
     {% if st.cbo_partner_mental_health %}<div class="sm:col-span-2 lg:col-span-2">{{ card_label("CBO partner") }}{{ card_value(st.cbo_partner_mental_health) }}</div>{% endif %}
   </dl>
 </section>
@@ -305,11 +350,12 @@
 
 {# ---------- Outcomes for Students With Disabilities ---------- #}
 {% if swd %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Outcomes for Students With Disabilities</h2>
+{% call ref_section("swd", "Outcomes for Students With Disabilities",
+                    note=("SWD enrollment " ~ "%.1f"|format(swd.swd_enrollment_pct * 100) ~ "%") if swd.swd_enrollment_pct is not none else None) %}
   {{ provenance(
     ["school-demographics.csv", "nysed_chronic", "nysed_hs_grad", "nysed_hs_cccr", "nysed_essa_subgroup"],
-    "Mixed vintages — SWD enrollment share from the DOE demographic snapshot (AY 2024-25); subgroup outcomes from NYSED School Report Card Database (latest available per metric, typically AY 2024-25). The same accountability metrics the rest of this page reports for All Students, filtered here to just the Students-with-Disabilities subgroup."
+    "Mixed vintages — SWD enrollment share from the DOE demographic snapshot (AY 2024-25); subgroup outcomes from NYSED School Report Card Database (latest available per metric, typically AY 2024-25). The same accountability metrics the rest of this page reports for All Students, filtered here to just the Students-with-Disabilities subgroup.",
+    label="NYSED School Report Card, SWD subgroup"
   ) }}
 
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5 mb-4">
@@ -394,16 +440,366 @@
     {% for n in swd.notes %}<p class="leading-relaxed">{{ n }}</p>{% endfor %}
   </div>
   {% endif %}
+{% endcall %}
+{% endif %}
+
+{# ========== Performance ========== #}
+<div id="performance" class="mt-16 mb-8 border-t border-slate-200 pt-5">
+  <h2 class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold">Performance</h2>
+</div>
+
+{# ---------- Exams: ELA ---------- #}
+{% if school.ela %}
+<section id="ela" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">3–8 ELA Exam — All Students</h2>
+  {{ provenance(
+    ["nyc-ela.csv"],
+    "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv.",
+    label="NYS Grades 3–8 ELA Exams, NYC DOE InfoHub"
+  ) }}
+  {{ grade_year_figure(
+    "ela",
+    ela_grade_year,
+    ela_citywide_levels,
+    "All years × all grades",
+    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+  }}
+  {% call table_details("Full ELA Results Table") %}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Grade</th>
+          <th class="px-4 py-2 text-right">Tested</th>
+          <th class="px-4 py-2 text-right">Mean score</th>
+          <th class="px-4 py-2 text-right">% Lvl 1</th>
+          <th class="px-4 py-2 text-right">% Lvl 2</th>
+          <th class="px-4 py-2 text-right">% Lvl 3</th>
+          <th class="px-4 py-2 text-right">% Lvl 4</th>
+          <th class="px-4 py-2 text-right">% Proficient</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.ela %}
+        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2">{{ r.grade }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endcall %}
+</section>
+{% endif %}
+
+{# ---------- Exams: Math ---------- #}
+{% if school.math %}
+<section id="math" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">3–8 Math Exam — All Students</h2>
+  {{ provenance(
+    ["nyc-math.csv"],
+    "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv.",
+    label="NYS Grades 3–8 Math Exams, NYC DOE InfoHub"
+  ) }}
+  {{ grade_year_figure(
+    "math",
+    math_grade_year,
+    math_citywide_levels,
+    "All years × all grades",
+    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+  }}
+  {% call table_details("Full Math Results Table") %}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Grade</th>
+          <th class="px-4 py-2 text-right">Tested</th>
+          <th class="px-4 py-2 text-right">Mean score</th>
+          <th class="px-4 py-2 text-right">% Lvl 1</th>
+          <th class="px-4 py-2 text-right">% Lvl 2</th>
+          <th class="px-4 py-2 text-right">% Lvl 3</th>
+          <th class="px-4 py-2 text-right">% Lvl 4</th>
+          <th class="px-4 py-2 text-right">% Proficient</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.math %}
+        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2">{{ r.grade }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endcall %}
+</section>
+{% endif %}
+
+{# ---------- Regents ---------- #}
+{% if school.regents %}
+{% call ref_section("regents", "Regents Exams — All Students", vintage="2014–2022") %}
+  {{ provenance(
+    ["nyc-regents.csv"],
+    "NYS Regents exam results, from NYC DOE InfoHub. Years 2014-2022. Score thresholds: 65 = passing; 80 = mastery (Advanced Designation eligibility). College-ready cutoffs vary by exam.",
+    label="NYS Regents Exams, NYC DOE InfoHub"
+  ) }}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Exam</th>
+          <th class="px-4 py-2 text-right">Tested</th>
+          <th class="px-4 py-2 text-right">Mean</th>
+          <th class="px-4 py-2 text-right">% &lt; 65</th>
+          <th class="px-4 py-2 text-right">% ≥ 65</th>
+          <th class="px-4 py-2 text-right">% ≥ 80</th>
+          <th class="px-4 py-2 text-right">% college-ready</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.regents %}
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2">{{ r.regents_exam }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.mean_score is not none %}{{ "%.1f"|format(r.mean_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_below_65) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_64) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_79) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.pct_college_ready) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endcall %}
+{% endif %}
+
+{# ---------- SHSAT ---------- #}
+{% if school.shsat %}
+{% call ref_section("shsat", "SHSAT Applicants & Offers", note="offers to specialized high schools, by sending school") %}
+  {{ provenance(
+    ["shsat-applicants.csv"],
+    "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2.",
+    label="NYC Open Data SHSAT Offers by Sending School"
+  ) }}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-right">Applicants</th>
+          <th class="px-4 py-2 text-right">Testers</th>
+          <th class="px-4 py-2 text-right">Offers</th>
+          <th class="px-4 py-2 text-right">% offered</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in school.shsat %}
+        <tr>
+          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.applicants_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.testers_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.offers_n) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.offers_pct) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endcall %}
+{% endif %}
+
+{# ---------- NYSED HS Graduation Rate ---------- #}
+{% if ny and ny.hs_graduation %}
+<section id="graduation" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">HS Graduation Rate ({{ term("NYSED", "New York State Education Department.") }})</h2>
+  {{ provenance(
+    ["nysed-src-2025-acc-hs-graduation-rate.feather"],
+    "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts.",
+    label="NYSED School Report Card, 2025 release"
+  ) }}
+  {% call table_details("All Subgroups & Cohort Types") %}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-left">Cohort</th>
+          <th class="px-4 py-2 text-right">Cohort size</th>
+          <th class="px-4 py-2 text-right">Graduates</th>
+          <th class="px-4 py-2 text-right">% grad</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.hs_graduation %}
+        <tr class="{% if r.subgroup == 'All Students' and r.cohort == '4-Year' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2">{{ r.cohort }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.cohort_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.grad_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.grad_rate) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endcall %}
+</section>
+{% endif %}
+
+{# ---------- NYSED HS CCCR ---------- #}
+{% if ny and ny.hs_cccr %}
+{% call ref_section("cccr", "College, Career, and Civic Readiness (CCCR)") %}
+  {{ provenance(
+    ["nysed-src-2025-acc-hs-cccr.feather"],
+    "NYSED ESSA accountability indicator. The index weights graduates by credential earned (Advanced Regents > Regents > local > IEP), with extra credit for AP/IB scores, CTE certifications, and the NYS Seal of Biliteracy. Level 1-4 maps to the school's ESSA accountability tier (4 = highest).",
+    label="NYSED School Report Card, 2025 release"
+  ) }}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-right">Cohort size</th>
+          <th class="px-4 py-2 text-right">Index</th>
+          <th class="px-4 py-2 text-right">Level</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.hs_cccr %}
+        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.cohort_size) }}</td>
+          <td class="px-4 py-2 text-right">{% if r.index_score is not none %}{{ "%.1f"|format(r.index_score) }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-2 text-right">{% if r.level is not none %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endcall %}
+{% endif %}
+
+{# ---------- NYSED chronic absenteeism ---------- #}
+{% if ny and ny.chronic_absenteeism %}
+<section id="chronic" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Chronic Absenteeism</h2>
+  {{ provenance(
+    ["nysed-src-2025-acc-em-chronic-absenteeism.feather", "nysed-src-2025-acc-hs-chronic-absenteeism.feather"],
+    "NYSED ESSA chronic absenteeism — students absent ≥10% of enrolled days. Each row is one (year × school level × demographic subgroup). Schools spanning grades may report both EM (elementary/middle) and HS rows.",
+    label="NYSED School Report Card, 2025 release"
+  ) }}
+  {% call table_details("All Subgroups, All Years") %}
+  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-4 py-2 text-left">Year</th>
+          <th class="px-4 py-2 text-left">Level</th>
+          <th class="px-4 py-2 text-left">Subgroup</th>
+          <th class="px-4 py-2 text-right">Enrollment</th>
+          <th class="px-4 py-2 text-right">Absent</th>
+          <th class="px-4 py-2 text-right">% chronic</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for r in ny.chronic_absenteeism %}
+        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
+          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
+          <td class="px-4 py-2 text-xs">{% if r.level %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+          <td class="px-4 py-2">{{ r.subgroup }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.enrollment) }}</td>
+          <td class="px-4 py-2 text-right">{{ num(r.absent_count) }}</td>
+          <td class="px-4 py-2 text-right">{{ pct(r.absent_rate) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endcall %}
+</section>
+{% endif %}
+
+{# ---------- NYSED ESSA accountability (universal) ---------- #}
+{% if ny and ny.essa_status %}
+<section id="essa" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">NYS {{ term("ESSA", "Every Student Succeeds Act — the federal education accountability law (2015) that replaced No Child Left Behind. NY computes designations under it annually.") }} Accountability</h2>
+  {{ provenance(
+    ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
+    "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI.",
+    label="NYSED School Report Card, 2025 release"
+  ) }}
+  {% call explainer() %}
+    <p><strong>ESSA</strong> = the federal Every Student Succeeds Act (2015), which replaced No Child Left Behind. It tells each state to identify schools needing extra support based on multiple performance indicators — test scores, growth, English-learner progress, attendance, graduation rate. NYSED computes the designation annually for every NY public school.</p>
+    <p>Four tiers, from lowest intervention to highest:</p>
+    <ul class="list-disc list-inside ml-2">
+      <li><strong>Local Support and Improvement (LSI)</strong> — the default, good-standing tier. The school is meeting its accountability targets across all indicators and demographic subgroups. No federal flag. The name sounds ominous but it just means the school handles its own continuous improvement <em>locally</em>, with no state or federal intervention required. ~80%+ of NY schools sit here.</li>
+      <li><strong>Targeted Support and Improvement (TSI)</strong> — at least one demographic subgroup (students with disabilities, English-language learners, a racial group, etc.) is performing in the bottom tier. The school must write a subgroup-focused improvement plan.</li>
+      <li><strong>Additional Targeted Support and Improvement (ATSI)</strong> — a TSI school where the flagged subgroup's performance is so low it would qualify as Comprehensive if it were the whole school. Stronger intervention required.</li>
+      <li><strong>Comprehensive Support and Improvement (CSI)</strong> — the lowest tier. Triggered by being in the bottom 5% of Title I schools statewide, having a 4-year graduation rate ≤ 67% for two consecutive years, or being ATSI for three years without improvement. State-level support plus a mandatory improvement plan.</li>
+    </ul>
+    <p><strong>Year column:</strong> the <code>2024-25</code> row is the designation that applies <em>during</em> the 2024-25 school year, computed from 2023-24 results. The <code>2025-26</code> row is next year's designation, from 2024-25 results. NYSED publishes the designation about a year ahead so families and schools have notice.</p>
+    <p>When a school <em>is</em> flagged, the row is rendered in amber with a "flagged" pill, and a separate "Subgroups flagged" callout below lists which subgroups triggered TSI/ATSI.</p>
+  {% endcall %}
+  <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    {% for s_row in ny.essa_status %}
+      {% set is_flagged = "Local Support" not in s_row.overall_status %}
+      <div class="flex items-baseline gap-4 py-1">
+        <dt class="text-slate-500 font-mono text-xs w-20">{{ s_row.year }}-{{ "%02d"|format((s_row.year+1) % 100) }}</dt>
+        <dd class="font-medium {% if is_flagged %}text-amber-700{% endif %}">
+          {{ s_row.overall_status }}
+          {% if is_flagged %}<span class="ml-2 inline-block text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">flagged</span>{% endif %}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+  {% set flagged_subgroups = ny.essa_status_by_subgroup | selectattr("overall_status", "ne", "Local Support and Improvement") | list %}
+  {% if flagged_subgroups %}
+    <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+      <h3 class="font-medium text-amber-900 mb-2">Subgroups flagged</h3>
+      <ul class="list-disc list-inside text-amber-800 space-y-1">
+        {% for sg in flagged_subgroups %}
+          <li>{{ sg.year }}-{{ "%02d"|format((sg.year+1) % 100) }}{% if sg.school_type %} ({{ sg.school_type }}){% endif %}: <strong>{{ sg.subgroup }}</strong> — {{ sg.overall_status }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
 </section>
 {% endif %}
 
 {# ---------- HS directory overview ---------- #}
 {% if hs %}
-<section class="mb-10">
+<section id="admissions" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">High School Directory ({{ hs.ay }})</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "NYC DOE High School Directory, the source for the 8th-grader-facing admissions guide. Pulled from NYC Open Data (resource 8b6c-7uty). 442 schools × 449 columns covering programs, AP courses, sports, transit, etc. AY 2021 is the latest cached year."
+    "NYC DOE High School Directory, the source for the 8th-grader-facing admissions guide. Pulled from NYC Open Data (resource 8b6c-7uty). 442 schools × 449 columns covering programs, AP courses, sports, transit, etc. AY 2021 is the latest cached year.",
+    label="NYC DOE High School Directory, AY 2021"
   ) }}
   {% if hs.overview %}
     <div class="bg-white border border-slate-200 rounded-lg p-5 mb-4 text-sm leading-relaxed">{{ hs.overview }}</div>
@@ -432,11 +828,11 @@
 </section>
 
 {# ---------- HS performance ---------- #}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Performance</h2>
+{% call ref_section("hs-performance", "Directory Performance Stats", vintage="AY " ~ hs.ay) %}
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "Same HS directory dataset (AY 2021). Graduation rate is the 4-year cohort rate. College-career-ready combines AP/IB/SAT thresholds, Regents passing, and CTE certifications. 'Students feel safe' is from the NYC School Survey."
+    "Same HS directory dataset (AY 2021). Graduation rate is the 4-year cohort rate. College-career-ready combines AP/IB/SAT thresholds, Regents passing, and CTE certifications. 'Students feel safe' is from the NYC School Survey.",
+    label="NYC DOE High School Directory, AY 2021"
   ) }}
   <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 bg-white border border-slate-200 rounded-lg p-5">
     {% if hs.graduation_rate is not none %}<div>{{ card_label("4-yr graduation") }}{{ card_value(pct(hs.graduation_rate)) }}</div>{% endif %}
@@ -445,7 +841,7 @@
     {% if hs.pct_students_safe is not none %}<div>{{ card_label("Students feel safe") }}{{ card_value(pct(hs.pct_students_safe)) }}</div>{% endif %}
     {% if hs.pct_students_enough_variety is not none %}<div>{{ card_label("Enough course variety") }}{{ card_value(pct(hs.pct_students_enough_variety)) }}</div>{% endif %}
   </dl>
-</section>
+{% endcall %}
 
 {# ---------- HS programs ---------- #}
 {% if hs.programs %}
@@ -453,28 +849,39 @@
   <h2 class="text-lg font-semibold mb-3">Admissions Programs</h2>
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "Each program is a distinct application path with its own seats, applicants, and admissions criteria. Reshaped from the directory's wide-format columns (program{N}, eligibility{N}, seats9ge{N}, requirement_{j}_{N}, etc.) into a list."
+    "Each program is a distinct application path with its own seats, applicants, and admissions criteria. Reshaped from the directory's wide-format columns (program{N}, eligibility{N}, seats9ge{N}, requirement_{j}_{N}, etc.) into a list.",
+    label="NYC DOE High School Directory, AY " ~ hs.ay
   ) }}
   <div class="space-y-3">
     {% for p in hs.programs %}
     <div class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
       <div class="flex items-baseline justify-between gap-4 mb-1">
         <h3 class="font-medium">{{ p.name }}{% if p.code %} <span class="text-xs text-slate-500 font-mono">({{ p.code }})</span>{% endif %}</h3>
-        {% if p.method %}<span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ p.method }}</span>{% endif %}
+        {% if p.method %}<span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 whitespace-nowrap">{{ p.method }}</span>{% endif %}
       </div>
       {% if p.interest %}<div class="text-xs text-slate-500 mb-2">{{ p.interest }}</div>{% endif %}
-      {% if p.description %}<p class="text-slate-700 mb-3">{{ p.description }}</p>{% endif %}
       <div class="flex flex-wrap text-xs gap-x-6 gap-y-1 text-slate-600">
         {% if p.seats_9th is not none %}<span><strong>{{ p.seats_9th }}</strong> seats (9th)</span>{% endif %}
         {% if p.applicants_9th is not none %}<span><strong>{{ "{:,}".format(p.applicants_9th) }}</strong> applicants</span>{% endif %}
         {% if p.applicants_per_seat_9th is not none %}<span><strong>{{ "%.1f"|format(p.applicants_per_seat_9th) }}</strong> per seat</span>{% endif %}
       </div>
-      {% if p.eligibility %}<p class="text-xs text-slate-500 mt-2"><span class="uppercase tracking-wide">Eligibility:</span> {{ p.eligibility }}</p>{% endif %}
-      {% if p.admissions_priority %}<p class="text-xs text-slate-500 mt-1"><span class="uppercase tracking-wide">Priority:</span> {{ p.admissions_priority }}</p>{% endif %}
-      {% if p.requirements %}
-        <ul class="text-xs text-slate-500 mt-2 list-disc list-inside">
-          {% for r in p.requirements %}<li>{{ r }}</li>{% endfor %}
-        </ul>
+      {% if p.description or p.eligibility or p.admissions_priority or p.requirements %}
+      <details class="group mt-2">
+        <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 select-none">
+          <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+          Description, Eligibility & Requirements
+        </summary>
+        <div class="mt-2">
+          {% if p.description %}<p class="text-slate-700 mb-3">{{ p.description }}</p>{% endif %}
+          {% if p.eligibility %}<p class="text-xs text-slate-500 mt-2"><span class="uppercase tracking-wide">Eligibility:</span> {{ p.eligibility }}</p>{% endif %}
+          {% if p.admissions_priority %}<p class="text-xs text-slate-500 mt-1"><span class="uppercase tracking-wide">Priority:</span> {{ p.admissions_priority }}</p>{% endif %}
+          {% if p.requirements %}
+            <ul class="text-xs text-slate-500 mt-2 list-disc list-inside">
+              {% for r in p.requirements %}<li>{{ r }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+      </details>
       {% endif %}
     </div>
     {% endfor %}
@@ -484,11 +891,11 @@
 
 {# ---------- HS academic offerings ---------- #}
 {% if hs.advanced_placement_courses or hs.language_classes or hs.academic_opportunities or hs.diploma_endorsements or hs.ell_programs %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Academic Offerings</h2>
+{% call ref_section("offerings", "Academic Offerings", vintage="AY " ~ hs.ay) %}
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "AP courses, language classes, ELL programs, diploma endorsements, and academic opportunities published in the directory. Comma-separated strings as supplied by the DOE — we don't normalize."
+    "AP courses, language classes, ELL programs, diploma endorsements, and academic opportunities published in the directory. Comma-separated strings as supplied by the DOE — we don't normalize.",
+    label="NYC DOE High School Directory, AY 2021"
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if hs.advanced_placement_courses %}<div><dt class="text-slate-500 mb-1">AP courses</dt><dd>{{ hs.advanced_placement_courses }}</dd></div>{% endif %}
@@ -505,16 +912,16 @@
       <dd><ul class="list-disc list-inside space-y-1">{% for o in hs.academic_opportunities %}<li>{{ o }}</li>{% endfor %}</ul></dd></div>
     {% endif %}
   </dl>
-</section>
+{% endcall %}
 {% endif %}
 
 {# ---------- HS sports ---------- #}
 {% if hs.psal_sports_boys or hs.psal_sports_girls or hs.psal_sports_coed or hs.school_sports %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Athletics</h2>
+{% call ref_section("athletics", "Athletics", vintage="AY " ~ hs.ay) %}
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "PSAL (Public Schools Athletic League) teams and any non-PSAL school sports. Boys / girls / coed divisions per HS directory."
+    "PSAL (Public Schools Athletic League) teams and any non-PSAL school sports. Boys / girls / coed divisions per HS directory.",
+    label="NYC DOE High School Directory, AY 2021"
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if hs.psal_sports_boys %}<div><dt class="text-slate-500 mb-1">{{ term("PSAL", "Public Schools Athletic League — NYC DOE's interscholastic athletics program. Schools register teams here for competitive play across the city.") }} boys</dt><dd>{{ hs.psal_sports_boys }}</dd></div>{% endif %}
@@ -522,34 +929,35 @@
     {% if hs.psal_sports_coed %}<div><dt class="text-slate-500 mb-1">{{ term("PSAL", "Public Schools Athletic League — NYC DOE's interscholastic athletics program.") }} coed</dt><dd>{{ hs.psal_sports_coed }}</dd></div>{% endif %}
     {% if hs.school_sports %}<div class="sm:col-span-3"><dt class="text-slate-500 mb-1">Other sports</dt><dd>{{ hs.school_sports }}</dd></div>{% endif %}
   </dl>
-</section>
+{% endcall %}
 {% endif %}
 
 {# ---------- HS admissions extras ---------- #}
 {% if hs and (hs.diversity_in_admissions is not none or hs.diversity_details or hs.school_10th_seats) %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Admissions Notes</h2>
+{% call ref_section("admissions-notes", "Admissions Notes", vintage="AY " ~ hs.ay) %}
   {{ provenance(
     ["hs-directory-2021.feather"],
-    "Diversity-in-admissions priority and 10th-grade seat availability flags."
+    "Diversity-in-admissions priority and 10th-grade seat availability flags.",
+    label="NYC DOE High School Directory, AY 2021"
   ) }}
   <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm flex flex-wrap">
     {% if hs.diversity_in_admissions is not none %}{{ chip("Diversity in admissions", "Yes" if hs.diversity_in_admissions else "No") }}{% endif %}
     {% if hs.school_10th_seats %}{{ chip("10th-grade seats", hs.school_10th_seats) }}{% endif %}
     {% if hs.diversity_details %}<div class="w-full mt-2 text-slate-700">{{ hs.diversity_details }}</div>{% endif %}
   </dl>
-</section>
+{% endcall %}
 {% endif %}
 {% endif %}
 
 {# ---------- MS admissions (Middle School Directory) ---------- #}
 {# Renders for any school in the MS Directory — pure MS, K-8, 6-12, hybrid. #}
 {% if school.ms_admission %}
-<section class="mb-10">
+<section id="ms-admissions" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">How This School Admits</h2>
   {{ provenance(
     ["ms-directory-" ~ school.ms_admission.ay ~ ".feather"],
-    "NYC DOE Middle School Directory — the source for the 5th-grader-facing admissions guide. Pulled from InfoHub as a Fall " ~ school.ms_admission.ay ~ " release covering AY " ~ school.ms_admission.ay ~ "-" ~ ((school.ms_admission.ay + 1) % 100) ~ " admissions. Each program is a distinct application path with its own admission method and priority cascade. Priority strings are surfaced verbatim — NYC's deferred-acceptance match doesn't follow a strict importance order, so the listed priorities are the published tiers, not always strict cascading dibs."
+    "NYC DOE Middle School Directory — the source for the 5th-grader-facing admissions guide. Pulled from InfoHub as a Fall " ~ school.ms_admission.ay ~ " release covering AY " ~ school.ms_admission.ay ~ "-" ~ ((school.ms_admission.ay + 1) % 100) ~ " admissions. Each program is a distinct application path with its own admission method and priority cascade. Priority strings are surfaced verbatim — NYC's deferred-acceptance match doesn't follow a strict importance order, so the listed priorities are the published tiers, not always strict cascading dibs.",
+    label="NYC DOE Middle School Directory, Fall " ~ school.ms_admission.ay
   ) }}
 
   <div class="bg-blue-50/40 border border-blue-200 rounded-lg p-4 text-sm text-slate-700 mb-4 leading-relaxed">
@@ -590,11 +998,11 @@
 
 {# ---------- DOE snapshot ---------- #}
 {% if snap %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">School Info</h2>
+{% call ref_section("school-info", "School Info", vintage="2016 DOE snapshot") %}
   {{ provenance(
     ["snapshot.feather"],
-    "Scraped from the NYC DOE per-school portal pages. Most rows are dated to 2016 in the upstream cache, so this section is older than NYSED data — useful for principal name, admissions method, and quality-review URL but stale for performance metrics."
+    "Scraped from the NYC DOE per-school portal pages. Most rows are dated to 2016 in the upstream cache, so this section is older than NYSED data — useful for principal name, admissions method, and quality-review URL but stale for performance metrics.",
+    label="NYC DOE school portal snapshot, ~2016"
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if snap.address %}<div><dt class="text-slate-500">Address</dt><dd>{{ snap.address }}{% if snap.city_state_zip %}, {{ snap.city_state_zip }}{% endif %}</dd></div>{% endif %}
@@ -607,16 +1015,17 @@
     {% if snap.quality_review_url %}<div><dt class="text-slate-500">Quality review</dt><dd><a class="underline" href="{{ snap.quality_review_url }}">{{ snap.quality_review_year }}{% if snap.dates_of_review %} ({{ snap.dates_of_review }}){% endif %}</a></dd></div>{% endif %}
     {% if snap.website %}<div><dt class="text-slate-500">Website</dt><dd><a class="underline" href="https://{{ snap.website }}">{{ snap.website }}</a></dd></div>{% endif %}
   </dl>
-</section>
+{% endcall %}
 {% endif %}
 
 {# ---------- Location ---------- #}
 {% if loc %}
-<section class="mb-10">
+<section id="location" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Location & Neighborhood</h2>
   {{ provenance(
     ["school_locations.geojson"],
-    "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records)."
+    "NYC Open Data school point locations (resource ID wg9x-4ke6, fiscal year 2019-2020). Includes lat/lon, NTA neighborhood, council district, community district, and BBL (block-block-lot for tying to property records).",
+    label="NYC Open Data school locations, FY 2019-20"
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if loc.nta_name %}<div><dt class="text-slate-500">{{ term("Neighborhood (NTA)", "Neighborhood Tabulation Area — NYC's official 195-area neighborhood definitions, used for Census reporting and city planning. Loosely follows colloquial neighborhood names but with formal boundaries.") }}</dt><dd><a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/neighborhood/{{ loc.nta_name|replace(' ', '-')|urlencode }}">{{ loc.nta_name|pretty }}</a></dd></div>{% endif %}
@@ -642,7 +1051,7 @@
 
 {# ---------- Schools nearby (NTA + district peers) ---------- #}
 {% if peer_neighborhood or peer_district %}
-<section class="mb-10">
+<section id="nearby" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Schools Nearby</h2>
   <p class="text-xs text-slate-500 mb-4">
     Same-level schools in this school's neighborhood and district, with comparable headline metrics.
@@ -660,11 +1069,11 @@
 
 {# ---------- Galaxy budget ---------- #}
 {% if school.budget %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Galaxy Budget ({{ school.budget.ay }}-{{ "%02d"|format((school.budget.ay+1) % 100) }})</h2>
+{% call ref_section("budget", "Galaxy Budget", vintage=school.budget.ay ~ "-" ~ "%02d"|format((school.budget.ay+1) % 100)) %}
   {{ provenance(
     ["galaxy-budget.csv"],
-    "Scraped from the NYC DOE Galaxy budget portal — line-item budget per (school × academic year). Currently 2022-23 only. Note: the dollar column ships as currency strings ('$ 187,530') in upstream; we parse to floats client-side. The category breakdown shows where each school's allocation goes."
+    "Scraped from the NYC DOE Galaxy budget portal — line-item budget per (school × academic year). Currently 2022-23 only. Note: the dollar column ships as currency strings ('$ 187,530') in upstream; we parse to floats client-side. The category breakdown shows where each school's allocation goes.",
+    label="NYC DOE Galaxy budget portal, 2022-23"
   ) }}
   {% call explainer("Budget category glossary") %}
     <p>NYC DOE budget categories use a few opaque acronyms:</p>
@@ -707,16 +1116,16 @@
       </tbody>
     </table>
   </div>
-</section>
+{% endcall %}
 {% endif %}
 
 {# ---------- NYSED expenditures + teacher quality ---------- #}
 {% if ny and (ny.expenditures or ny.teacher_quality or ny.out_of_cert) %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Spending & Staffing ({{ term("NYSED", "New York State Education Department — the state agency that oversees public education in NY. Distinct from NYC DOE, which is the city agency.") }})</h2>
+{% call ref_section("spending", "Spending & Staffing (NYSED)") %}
   {{ provenance(
     ["nysed-src-2025-expenditures-per-pupil.feather", "nysed-src-2025-inexperienced-teachers-and-principals.feather", "nysed-src-2025-teachers-teaching-out-of-certification.feather"],
-    "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area."
+    "NYSED School Report Card. Per-pupil dollars are reported separately for federal funds and state+local funds. 'Inexperienced' = first or second year of teaching/leading the building. 'Out of cert' = teaching outside their certification area.",
+    label="NYSED School Report Card, 2025 release"
   ) }}
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     {% if ny.expenditures %}
@@ -775,7 +1184,7 @@
     </div>
     {% endif %}
   </div>
-</section>
+{% endcall %}
 {% endif %}
 
 
@@ -786,12 +1195,14 @@
 
 {# ---------- Demographics history ---------- #}
 {% if school.demographics_by_year %}
-<section class="mb-10">
+<section id="demographics" class="mb-10">
   <h2 class="text-lg font-semibold mb-3">Demographics by Year</h2>
   {{ provenance(
     ["school-demographics.csv"],
-    "NYC DOE Demographic Snapshot. Annual roll-up per (school × year) covering total enrollment, race/ethnicity, gender, ELL, SWD, poverty count, and ENI (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0-1 scale). Years 2005-2024."
+    "NYC DOE Demographic Snapshot. Annual roll-up per (school × year) covering total enrollment, race/ethnicity, gender, ELL, SWD, poverty count, and ENI (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0-1 scale). Years 2005-2024.",
+    label="NYC DOE Demographic Snapshot, 2005–2024"
   ) }}
+  {% call table_details("Full Demographics Table, All Years") %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -826,14 +1237,15 @@
       </tbody>
     </table>
   </div>
+  {% endcall %}
 </section>
 {# ---------- Class size ---------- #}
 {% if school.class_size %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Class Size{% if school.class_size_year %} ({{ school.class_size_year }}-{{ "%02d"|format((school.class_size_year+1) % 100) }}){% endif %}</h2>
+{% call ref_section("class-size", "Class Size", vintage=(school.class_size_year ~ "-" ~ "%02d"|format((school.class_size_year+1) % 100)) if school.class_size_year else None) %}
   {{ provenance(
     ["school-class-size.csv"],
-    "NYC DOE average class size by (grade × subject × program type) from the InfoHub 2022-23 release. Program types break out Gen Ed, ICT (integrated co-teaching), and self-contained classrooms. Currently only the latest year is loaded."
+    "NYC DOE average class size by (grade × subject × program type) from the InfoHub 2022-23 release. Program types break out Gen Ed, ICT (integrated co-teaching), and self-contained classrooms. Currently only the latest year is loaded.",
+    label="NYC DOE class size report, 2022-23"
   ) }}
   {% call explainer("Program type glossary") %}
     <p>The Program column uses NYC DOE's special-education classroom typology:</p>
@@ -874,345 +1286,10 @@
       </tbody>
     </table>
   </div>
-</section>
+{% endcall %}
 {% endif %}
 
 
-{# ========== Performance ========== #}
-<div class="mt-16 mb-8 border-t border-slate-200 pt-5">
-  <h2 class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold">Performance</h2>
-</div>
-
-{# ---------- Exams: ELA ---------- #}
-{% if school.ela %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">3–8 ELA Exam — All Students</h2>
-  {{ provenance(
-    ["nyc-ela.csv"],
-    "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv."
-  ) }}
-  {{ grade_year_figure(
-    "ela",
-    ela_grade_year,
-    ela_citywide_levels,
-    "All years × all grades",
-    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
-  }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Grade</th>
-          <th class="px-4 py-2 text-right">Tested</th>
-          <th class="px-4 py-2 text-right">Mean score</th>
-          <th class="px-4 py-2 text-right">% Lvl 1</th>
-          <th class="px-4 py-2 text-right">% Lvl 2</th>
-          <th class="px-4 py-2 text-right">% Lvl 3</th>
-          <th class="px-4 py-2 text-right">% Lvl 4</th>
-          <th class="px-4 py-2 text-right">% Proficient</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.ela %}
-        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2">{{ r.grade }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- Exams: Math ---------- #}
-{% if school.math %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">3–8 Math Exam — All Students</h2>
-  {{ provenance(
-    ["nyc-math.csv"],
-    "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv."
-  ) }}
-  {{ grade_year_figure(
-    "math",
-    math_grade_year,
-    math_citywide_levels,
-    "All years × all grades",
-    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
-  }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Grade</th>
-          <th class="px-4 py-2 text-right">Tested</th>
-          <th class="px-4 py-2 text-right">Mean score</th>
-          <th class="px-4 py-2 text-right">% Lvl 1</th>
-          <th class="px-4 py-2 text-right">% Lvl 2</th>
-          <th class="px-4 py-2 text-right">% Lvl 3</th>
-          <th class="px-4 py-2 text-right">% Lvl 4</th>
-          <th class="px-4 py-2 text-right">% Proficient</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.math %}
-        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2">{{ r.grade }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- Regents ---------- #}
-{% if school.regents %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Regents Exams — All Students</h2>
-  {{ provenance(
-    ["nyc-regents.csv"],
-    "NYS Regents exam results, from NYC DOE InfoHub. Years 2014-2022. Score thresholds: 65 = passing; 80 = mastery (Advanced Designation eligibility). College-ready cutoffs vary by exam."
-  ) }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Exam</th>
-          <th class="px-4 py-2 text-right">Tested</th>
-          <th class="px-4 py-2 text-right">Mean</th>
-          <th class="px-4 py-2 text-right">% &lt; 65</th>
-          <th class="px-4 py-2 text-right">% ≥ 65</th>
-          <th class="px-4 py-2 text-right">% ≥ 80</th>
-          <th class="px-4 py-2 text-right">% college-ready</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.regents %}
-        <tr>
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2">{{ r.regents_exam }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.mean_score is not none %}{{ "%.1f"|format(r.mean_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_below_65) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_64) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_above_79) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_college_ready) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- SHSAT ---------- #}
-{% if school.shsat %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">{{ term("SHSAT", "Specialized High Schools Admissions Test — the single test used to admit students to NYC's 8 specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, Brooklyn Latin, Staten Island Tech, HSAS, HSMSE, Queens HSSE). LaGuardia is audition-based and not part of SHSAT.") }} Applicants & Offers</h2>
-  {{ provenance(
-    ["shsat-applicants.csv"],
-    "NYC Open Data SHSAT (Specialized High Schools Admissions Test) outcomes by sending school. Tells you how many of this school's 8th-graders applied to, tested for, and got offers from one of the eight specialized high schools (Stuyvesant, Bronx Science, Brooklyn Tech, etc.). Small-cell suppression: '0-5' raw values are encoded as 2."
-  ) }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-right">Applicants</th>
-          <th class="px-4 py-2 text-right">Testers</th>
-          <th class="px-4 py-2 text-right">Offers</th>
-          <th class="px-4 py-2 text-right">% offered</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.shsat %}
-        <tr>
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.applicants_n) }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.testers_n) }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.offers_n) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.offers_pct) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- NYSED HS Graduation Rate ---------- #}
-{% if ny and ny.hs_graduation %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">HS Graduation Rate ({{ term("NYSED", "New York State Education Department.") }})</h2>
-  {{ provenance(
-    ["nysed-src-2025-acc-hs-graduation-rate.feather"],
-    "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts."
-  ) }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Subgroup</th>
-          <th class="px-4 py-2 text-left">Cohort</th>
-          <th class="px-4 py-2 text-right">Cohort size</th>
-          <th class="px-4 py-2 text-right">Graduates</th>
-          <th class="px-4 py-2 text-right">% grad</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in ny.hs_graduation %}
-        <tr class="{% if r.subgroup == 'All Students' and r.cohort == '4-Year' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
-          <td class="px-4 py-2">{{ r.subgroup }}</td>
-          <td class="px-4 py-2">{{ r.cohort }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.cohort_count) }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.grad_count) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.grad_rate) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- NYSED HS CCCR ---------- #}
-{% if ny and ny.hs_cccr %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">{{ term("CCCR", "College/Career/Civic Readiness — a NYSED accountability indicator weighting graduates by credential earned (Advanced Regents > Regents > local > IEP, with bonuses for AP/IB/CTE/biliteracy seal).") }} ({{ term("NYSED", "New York State Education Department.") }})</h2>
-  {{ provenance(
-    ["nysed-src-2025-acc-hs-cccr.feather"],
-    "NYSED ESSA accountability indicator. The index weights graduates by credential earned (Advanced Regents > Regents > local > IEP), with extra credit for AP/IB scores, CTE certifications, and the NYS Seal of Biliteracy. Level 1-4 maps to the school's ESSA accountability tier (4 = highest)."
-  ) }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Subgroup</th>
-          <th class="px-4 py-2 text-right">Cohort size</th>
-          <th class="px-4 py-2 text-right">Index</th>
-          <th class="px-4 py-2 text-right">Level</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in ny.hs_cccr %}
-        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
-          <td class="px-4 py-2">{{ r.subgroup }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.cohort_size) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.index_score is not none %}{{ "%.1f"|format(r.index_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{% if r.level is not none %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- NYSED chronic absenteeism ---------- #}
-{% if ny and ny.chronic_absenteeism %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">Chronic Absenteeism</h2>
-  {{ provenance(
-    ["nysed-src-2025-acc-em-chronic-absenteeism.feather", "nysed-src-2025-acc-hs-chronic-absenteeism.feather"],
-    "NYSED ESSA chronic absenteeism — students absent ≥10% of enrolled days. Each row is one (year × school level × demographic subgroup). Schools spanning grades may report both EM (elementary/middle) and HS rows."
-  ) }}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Level</th>
-          <th class="px-4 py-2 text-left">Subgroup</th>
-          <th class="px-4 py-2 text-right">Enrollment</th>
-          <th class="px-4 py-2 text-right">Absent</th>
-          <th class="px-4 py-2 text-right">% chronic</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in ny.chronic_absenteeism %}
-        <tr class="{% if r.subgroup == 'All Students' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.year }}</td>
-          <td class="px-4 py-2 text-xs">{% if r.level %}{{ r.level }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
-          <td class="px-4 py-2">{{ r.subgroup }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.enrollment) }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.absent_count) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.absent_rate) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
-
-{# ---------- NYSED ESSA accountability (universal) ---------- #}
-{% if ny and ny.essa_status %}
-<section class="mb-10">
-  <h2 class="text-lg font-semibold mb-3">NYS {{ term("ESSA", "Every Student Succeeds Act — the federal education accountability law (2015) that replaced No Child Left Behind. NY computes designations under it annually.") }} Accountability</h2>
-  {{ provenance(
-    ["nysed-src-2025-accountability-status.feather", "nysed-src-2025-accountability-status-by-subgroup.feather"],
-    "NYSED School Report Card Database (April 2026 release). Status reflects the next school year's designation: a 2025 row is the 2025-26 designation based on 2024-25 results. Categories: Local Support and Improvement (no flag), TSI, ATSI, CSI."
-  ) }}
-  {% call explainer() %}
-    <p><strong>ESSA</strong> = the federal Every Student Succeeds Act (2015), which replaced No Child Left Behind. It tells each state to identify schools needing extra support based on multiple performance indicators — test scores, growth, English-learner progress, attendance, graduation rate. NYSED computes the designation annually for every NY public school.</p>
-    <p>Four tiers, from lowest intervention to highest:</p>
-    <ul class="list-disc list-inside ml-2">
-      <li><strong>Local Support and Improvement (LSI)</strong> — the default, good-standing tier. The school is meeting its accountability targets across all indicators and demographic subgroups. No federal flag. The name sounds ominous but it just means the school handles its own continuous improvement <em>locally</em>, with no state or federal intervention required. ~80%+ of NY schools sit here.</li>
-      <li><strong>Targeted Support and Improvement (TSI)</strong> — at least one demographic subgroup (students with disabilities, English-language learners, a racial group, etc.) is performing in the bottom tier. The school must write a subgroup-focused improvement plan.</li>
-      <li><strong>Additional Targeted Support and Improvement (ATSI)</strong> — a TSI school where the flagged subgroup's performance is so low it would qualify as Comprehensive if it were the whole school. Stronger intervention required.</li>
-      <li><strong>Comprehensive Support and Improvement (CSI)</strong> — the lowest tier. Triggered by being in the bottom 5% of Title I schools statewide, having a 4-year graduation rate ≤ 67% for two consecutive years, or being ATSI for three years without improvement. State-level support plus a mandatory improvement plan.</li>
-    </ul>
-    <p><strong>Year column:</strong> the <code>2024-25</code> row is the designation that applies <em>during</em> the 2024-25 school year, computed from 2023-24 results. The <code>2025-26</code> row is next year's designation, from 2024-25 results. NYSED publishes the designation about a year ahead so families and schools have notice.</p>
-    <p>When a school <em>is</em> flagged, the row is rendered in amber with a "flagged" pill, and a separate "Subgroups flagged" callout below lists which subgroups triggered TSI/ATSI.</p>
-  {% endcall %}
-  <dl class="bg-white border border-slate-200 rounded-lg p-5 text-sm">
-    {% for s_row in ny.essa_status %}
-      {% set is_flagged = "Local Support" not in s_row.overall_status %}
-      <div class="flex items-baseline gap-4 py-1">
-        <dt class="text-slate-500 font-mono text-xs w-20">{{ s_row.year }}-{{ "%02d"|format((s_row.year+1) % 100) }}</dt>
-        <dd class="font-medium {% if is_flagged %}text-amber-700{% endif %}">
-          {{ s_row.overall_status }}
-          {% if is_flagged %}<span class="ml-2 inline-block text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">flagged</span>{% endif %}
-        </dd>
-      </div>
-    {% endfor %}
-  </dl>
-  {% set flagged_subgroups = ny.essa_status_by_subgroup | selectattr("overall_status", "ne", "Local Support and Improvement") | list %}
-  {% if flagged_subgroups %}
-    <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-      <h3 class="font-medium text-amber-900 mb-2">Subgroups flagged</h3>
-      <ul class="list-disc list-inside text-amber-800 space-y-1">
-        {% for sg in flagged_subgroups %}
-          <li>{{ sg.year }}-{{ "%02d"|format((sg.year+1) % 100) }}{% if sg.school_type %} ({{ sg.school_type }}){% endif %}: <strong>{{ sg.subgroup }}</strong> — {{ sg.overall_status }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-  {% endif %}
-</section>
-{% endif %}
 
 {% endif %}
 
