@@ -38,7 +38,7 @@
 {% macro ref_section(id, title, vintage=None, note=None) %}
 <details id="{{ id }}" class="group mb-4 bg-white border border-slate-200 rounded-lg">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3.5 select-none hover:bg-slate-50 rounded-lg">
-    <span class="inline-block transition-transform group-open:rotate-90 text-slate-400 text-[10px] shrink-0">▸</span>
+    <span aria-hidden="true" class="inline-block transition-transform duration-150 group-open:rotate-90 text-slate-500 text-xs shrink-0">▶</span>
     <h2 class="text-base font-semibold inline">{{ title }}</h2>
     {% if vintage %}<span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 whitespace-nowrap">{{ vintage }}</span>{% endif %}
     {% if note %}<span class="text-sm text-slate-500">{{ note }}</span>{% endif %}
@@ -50,7 +50,7 @@
 {% macro table_details(label) %}
 <details class="group mt-2">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-medium select-none">
-    <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+    <span aria-hidden="true" class="inline-block transition-transform duration-150 group-open:rotate-90 text-[11px]">▶</span>
     {{ label }}
   </summary>
   <div class="mt-2">{{ caller() }}</div>
@@ -224,7 +224,7 @@
 {% macro explainer(label="Explanation") %}
 <details class="group mb-3">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium select-none">
-    <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+    <span aria-hidden="true" class="inline-block transition-transform duration-150 group-open:rotate-90 text-[11px]">▶</span>
     {{ label }}
   </summary>
   <div class="mt-2 p-4 bg-blue-50/40 border border-blue-200 rounded-lg text-sm text-slate-700 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_li]:mb-1.5">
@@ -1011,7 +1011,7 @@
       {% if p.description or p.eligibility or p.admissions_priority or p.requirements %}
       <details class="group mt-2">
         <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 select-none">
-          <span class="inline-block transition-transform group-open:rotate-90 text-[10px]">▸</span>
+          <span aria-hidden="true" class="inline-block transition-transform duration-150 group-open:rotate-90 text-[11px]">▶</span>
           Description, Eligibility & Requirements
         </summary>
         <div class="mt-2">
