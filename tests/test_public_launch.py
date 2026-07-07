@@ -108,6 +108,19 @@ def test_edge_lockdown_wrong_edge_token_redirects(client, monkeypatch):
     assert r.status_code == 301
 
 
+def test_edge_lockdown_non_ascii_token_rejected_not_500(client, monkeypatch):
+    """hmac.compare_digest raises TypeError on non-ASCII str input, so a
+    garbage token header (any bytes — header values decode via latin-1)
+    500'd the origin instead of being rejected. Regression pin: it must
+    behave exactly like a wrong token."""
+    monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", MCP_TOKEN)
+    r = client.get("/", headers={"X-Edge-Token": "café-token"}, follow_redirects=False)
+    assert r.status_code == 301
+    r = _post_mcp(client, {"X-Schools-Token": "café-token"})
+    assert r.status_code == 401
+
+
 def test_edge_lockdown_health_check_always_open(client, monkeypatch):
     monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
     monkeypatch.setenv("MCP_ACCESS_TOKEN", MCP_TOKEN)

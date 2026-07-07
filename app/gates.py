@@ -48,7 +48,14 @@ def _is_mcp_path(path: str) -> bool:
 def _token_matches(supplied: str | None, expected: str | None) -> bool:
     if not supplied or not expected:
         return False
-    return hmac.compare_digest(supplied, expected)
+    # Compare as bytes: hmac.compare_digest raises TypeError on str args
+    # containing non-ASCII, so a request with a garbage token header
+    # (latin-1 decodes anything) would 500 the origin instead of being
+    # rejected. Encoding both sides first makes any byte junk just fail.
+    return hmac.compare_digest(
+        supplied.encode("utf-8", "surrogateescape"),
+        expected.encode("utf-8", "surrogateescape"),
+    )
 
 
 def has_valid_mcp_token(scope) -> bool:
