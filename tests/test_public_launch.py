@@ -115,9 +115,12 @@ def test_edge_lockdown_non_ascii_token_rejected_not_500(client, monkeypatch):
     behave exactly like a wrong token."""
     monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
     monkeypatch.setenv("MCP_ACCESS_TOKEN", MCP_TOKEN)
-    r = client.get("/", headers={"X-Edge-Token": "café-token"}, follow_redirects=False)
+    # httpx refuses non-ASCII str header values, so send raw bytes — the
+    # same thing a hostile client puts on the wire.
+    bad = "café-token".encode("latin-1")
+    r = client.get("/", headers=[(b"x-edge-token", bad)], follow_redirects=False)
     assert r.status_code == 301
-    r = _post_mcp(client, {"X-Schools-Token": "café-token"})
+    r = client.post("/mcp/", headers=[(b"x-schools-token", bad)], json={})
     assert r.status_code == 401
 
 
