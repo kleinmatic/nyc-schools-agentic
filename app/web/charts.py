@@ -8,7 +8,13 @@ from shapely.geometry.polygon import orient
 
 from .. import data
 from ..services.analytics import aggregate_by_neighborhood
-from ..services.models import ChronicAbsenteeismRow, DemographicsYear, ExamRow
+from ..services.models import (
+    ChronicAbsenteeismRow,
+    DemographicsYear,
+    ExamRow,
+    GraduationRow,
+    RegentsRow,
+)
 
 
 @lru_cache(maxsize=2)
@@ -235,6 +241,69 @@ def chronic_subgroup_dots(rows: list[ChronicAbsenteeismRow]) -> dict:
             {"level": lvl, "rate": rate} for lvl, rate in sorted(all_students.items())
         ],
     }
+
+
+def grad_subgroup_dots(rows: list[GraduationRow]) -> dict:
+    """Latest-year 4-Year-cohort graduation rate by subgroup for the
+    school-page dot plot — same within-school-disparity grammar as
+    chronic_subgroup_dots (NYSED publishes two years; a trend line
+    would be two points). All Students rides separately as the
+    reference rule and feeds the Quick Stats card. Returns {} when
+    fewer than two non-suppressed subgroups exist."""
+    if not rows:
+        return {}
+    four_year = [r for r in rows if r.cohort == "4-Year" and r.grad_rate is not None]
+    if not four_year:
+        return {}
+    latest = max(r.year for r in four_year)
+    dots: list[dict] = []
+    all_students = None
+    for r in four_year:
+        if r.year != latest:
+            continue
+        if r.subgroup == "All Students":
+            all_students = r.grad_rate
+        else:
+            dots.append({
+                "subgroup": r.subgroup,
+                "rate": r.grad_rate,
+                "cohort_count": r.cohort_count,
+                "grad_count": r.grad_count,
+            })
+    if len(dots) < 2:
+        return {}
+    return {
+        "year": latest,
+        "year_label": _ay_label(latest - 1),
+        "all_students": all_students,
+        "dots": dots,
+    }
+
+
+def regents_exam_dumbbells(rows: list[RegentsRow]) -> dict:
+    """Latest-year per-exam Regents results for the school-page dumbbell
+    plot: % scoring ≥65 (passing) and ≥80 (mastery) per exam, sorted by
+    passing rate. Returns {} when the school has no scored exams in its
+    latest year."""
+    if not rows:
+        return {}
+    scored = [r for r in rows if r.pct_above_64 is not None]
+    if not scored:
+        return {}
+    latest = max(r.ay for r in scored)
+    exams = [
+        {
+            "exam": r.regents_exam,
+            "pass65": r.pct_above_64,
+            "mastery80": r.pct_above_79,
+            "n_tested": r.number_tested,
+        }
+        for r in scored if r.ay == latest
+    ]
+    if not exams:
+        return {}
+    exams.sort(key=lambda e: e["pass65"], reverse=True)
+    return {"ay": latest, "year_label": _ay_label(latest), "exams": exams}
 
 
 def exam_grade_year_levels(rows: list[ExamRow]) -> list[dict]:

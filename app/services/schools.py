@@ -344,6 +344,14 @@ def _exam_rows_for(dbn: str, df) -> list[ExamRow]:
     return out
 
 
+def _pct_0_100_to_fraction(v: Optional[float]) -> Optional[float]:
+    """The InfoHub Regents export carries percentages on a 0-100 scale,
+    unlike every other pct column in the store (0-1 fractions). Convert
+    at the service boundary so the site-wide contract ('percentages are
+    0..1 fractions') holds for RegentsRow consumers too."""
+    return v / 100.0 if v is not None else None
+
+
 def _regents_for(dbn: str) -> list[RegentsRow]:
     df = data.get_store().regents
     # All-Students filtering already happened at build time (build_db.py).
@@ -356,10 +364,10 @@ def _regents_for(dbn: str) -> list[RegentsRow]:
                 regents_exam=str(r.get("regents_exam", "")),
                 number_tested=_opt_int(r.get("number_tested")),
                 mean_score=_opt_float(r.get("mean_score")),
-                pct_below_65=_opt_float(r.get("below_65_pct")),
-                pct_above_64=_opt_float(r.get("above_64_pct")),
-                pct_above_79=_opt_float(r.get("above_79_pct")),
-                pct_college_ready=_opt_float(r.get("college_ready_pct")),
+                pct_below_65=_pct_0_100_to_fraction(_opt_float(r.get("below_65_pct"))),
+                pct_above_64=_pct_0_100_to_fraction(_opt_float(r.get("above_64_pct"))),
+                pct_above_79=_pct_0_100_to_fraction(_opt_float(r.get("above_79_pct"))),
+                pct_college_ready=_pct_0_100_to_fraction(_opt_float(r.get("college_ready_pct"))),
             )
         )
     out.sort(key=lambda x: (-x.ay, x.regents_exam))

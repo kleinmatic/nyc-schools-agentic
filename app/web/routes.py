@@ -29,8 +29,10 @@ from .charts import (
     chronic_subgroup_dots,
     citywide_level_breakdown,
     exam_grade_year_levels,
+    grad_subgroup_dots,
     homepage_citywide,
     homepage_nta_map,
+    regents_exam_dumbbells,
     school_demographics_trend,
 )
 
@@ -254,6 +256,8 @@ async def school_page(request: Request, dbn: str):
             "math_grade_year": exam_grade_year_levels(detail.math),
             "demographics_trend": school_demographics_trend(detail.demographics_by_year),
             "chronic_dots": chronic_subgroup_dots(detail.nysed.chronic_absenteeism) if detail.nysed else {},
+            "grad_dots": grad_subgroup_dots(detail.nysed.hs_graduation) if detail.nysed else {},
+            "regents_dumbbells": regents_exam_dumbbells(detail.regents),
             "ela_citywide_levels": citywide_level_breakdown("ela"),
             "math_citywide_levels": citywide_level_breakdown("math"),
         },

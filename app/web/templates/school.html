@@ -300,7 +300,9 @@
     {% if school.ptr and school.ptr.ratio is not none %}
       <div>{{ card_label("Pupil:teacher (" ~ school.ptr.ay ~ ")") }}{{ card_value("%.1f"|format(school.ptr.ratio)) }}</div>
     {% endif %}
-    {% if hs and hs.graduation_rate is not none %}
+    {% if grad_dots and grad_dots.all_students is not none %}
+      <div>{{ card_label("4-yr grad rate (" ~ grad_dots.year_label ~ ")") }}{{ card_value(pct(grad_dots.all_students)) }}</div>
+    {% elif hs and hs.graduation_rate is not none %}
       <div>{{ card_label("4-yr grad rate (" ~ hs.ay ~ ")") }}{{ card_value(pct(hs.graduation_rate)) }}</div>
     {% endif %}
     {% if hs and hs.college_career_rate is not none %}
@@ -556,12 +558,48 @@
 
 {# ---------- Regents ---------- #}
 {% if school.regents %}
-{% call ref_section("regents", "Regents Exams — All Students", vintage="2014–2022") %}
+<section id="regents" class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Regents Exams — All Students</h2>
   {{ provenance(
     ["nyc-regents.csv"],
     "NYS Regents exam results, from NYC DOE InfoHub. Years 2014-2022. Score thresholds: 65 = passing; 80 = mastery (Advanced Designation eligibility). College-ready cutoffs vary by exam.",
     label="NYS Regents Exams, NYC DOE InfoHub"
   ) }}
+  {% if regents_dumbbells %}
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-2">
+    <figcaption class="text-xs text-slate-500 mb-2">
+      <span class="font-medium text-slate-700">Passing and Mastery, by Exam</span> —
+      share of test-takers scoring ≥65 (passing, open circle) and ≥80 (mastery, filled circle)
+      on each Regents exam, {{ regents_dumbbells.year_label }}.
+    </figcaption>
+    <div id="regents-dumbbells"></div>
+  </figure>
+  <script>
+  (function() {
+    if (typeof Plot === "undefined") return;
+    const exams = {{ regents_dumbbells.exams | tojson }};
+    if (!exams.length) return;
+    const order = exams.map(e => e.exam);
+    const fmt = v => `${(v * 100).toFixed(1)}%`;
+    const withMastery = exams.filter(e => e.mastery80 != null);
+    document.getElementById("regents-dumbbells").append(Plot.plot({
+      height: 40 + 26 * order.length + 20,
+      marginLeft: 190, marginRight: 24, marginTop: 8, marginBottom: 28,
+      style: {fontSize: "12px"},
+      x: {label: null, tickFormat: ".0%", grid: true, domain: [0, 1]},
+      y: {domain: order, label: null},
+      marks: [
+        Plot.ruleY(withMastery, {y: "exam", x1: "mastery80", x2: "pass65", stroke: "#cbd5e1", strokeWidth: 1.5}),
+        Plot.dot(exams, {x: "pass65", y: "exam", r: 4.5, fill: "white", stroke: "#2a78d6", strokeWidth: 2,
+          title: d => `${d.exam}\n≥65 (passing): ${fmt(d.pass65)}${d.n_tested != null ? `\n${d.n_tested.toLocaleString()} tested` : ""}`}),
+        Plot.dot(withMastery, {x: "mastery80", y: "exam", r: 4.5, fill: "#2a78d6", stroke: "white", strokeWidth: 1.5,
+          title: d => `${d.exam}\n≥80 (mastery): ${fmt(d.mastery80)}`}),
+      ]
+    }));
+  })();
+  </script>
+  {% endif %}
+  {% call table_details("All Exams, All Years") %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -593,6 +631,7 @@
     </table>
   </div>
 {% endcall %}
+</section>
 {% endif %}
 
 {# ---------- SHSAT ---------- #}
@@ -639,6 +678,48 @@
     "Cohort graduation rates from the NYSED ESSA Report Card. Each row is one (year × subgroup × cohort-type). 4-Year = on-time graduation. 5-Year/6-Year include late-graduating students. 'Combined' is the official ESSA accountability rate that aggregates the cohorts.",
     label="NYSED School Report Card, 2025 release"
   ) }}
+  {% if grad_dots %}
+  <figure class="bg-white border border-slate-200 rounded-lg p-4 m-0 mb-2">
+    <figcaption class="text-xs text-slate-500 mb-2">
+      <span class="font-medium text-slate-700">Who Graduates on Time, by Group</span> —
+      4-year cohort graduation rate per student group, {{ grad_dots.year_label }} cohort.
+      The amber line marks the school-wide All Students rate.
+      Groups NYSED suppresses for privacy appear only in the table below.
+    </figcaption>
+    <div id="grad-dots"></div>
+  </figure>
+  <script>
+  (function() {
+    if (typeof Plot === "undefined") return;
+    const payload = {{ grad_dots | tojson }};
+    const dots = payload.dots;
+    if (!dots || dots.length < 2) return;
+    const order = [...dots].sort((a, b) => b.rate - a.rate).map(d => d.subgroup);
+    const fmt = v => `${(v * 100).toFixed(1)}%`;
+    document.getElementById("grad-dots").append(Plot.plot({
+      height: 40 + 26 * order.length + 20,
+      marginLeft: 200, marginRight: 24, marginTop: 8, marginBottom: 28,
+      style: {fontSize: "12px"},
+      x: {label: null, tickFormat: ".0%", grid: true, domain: [0, 1]},
+      y: {domain: order, label: null, tickFormat: s => ({
+        "Asian or Native Hawaiian/Other Pacific Islander": "Asian / Pacific Islander",
+        "American Indian or Alaska Native": "Amer. Indian / Alaska Native",
+      })[s] || s},
+      marks: [
+        ...(payload.all_students != null ? [Plot.ruleX([payload.all_students], {
+          stroke: "#d97706", strokeWidth: 1.5, strokeDasharray: "4,3",
+          title: () => `All Students: ${fmt(payload.all_students)}`
+        })] : []),
+        Plot.dot(dots, {
+          x: "rate", y: "subgroup",
+          r: 4.5, fill: "#2a78d6", stroke: "white", strokeWidth: 1.5,
+          title: d => `${d.subgroup}\n${fmt(d.rate)} graduated in 4 years${d.cohort_count != null ? ` (${d.grad_count ?? "?"} of ${d.cohort_count} students)` : ""}`
+        }),
+      ]
+    }));
+  })();
+  </script>
+  {% endif %}
   {% call table_details("All Subgroups & Cohort Types") %}
   <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
     <table class="min-w-full text-sm">

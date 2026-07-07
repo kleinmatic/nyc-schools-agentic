@@ -87,15 +87,17 @@ class ExamRow(BaseModel):
 
 
 class RegentsRow(BaseModel):
-    """One year × exam slice of a Regents exam, All Students."""
+    """One year × exam slice of a Regents exam, All Students. Percentage
+    fields are 0-1 fractions (converted from the InfoHub 0-100 scale at
+    the service boundary), matching every other pct field in the API."""
     ay: int
     regents_exam: str
     number_tested: Optional[int] = None
     mean_score: Optional[float] = None
-    pct_below_65: Optional[float] = None
-    pct_above_64: Optional[float] = None
-    pct_above_79: Optional[float] = None
-    pct_college_ready: Optional[float] = None
+    pct_below_65: Optional[float] = None  # fraction in [0, 1]
+    pct_above_64: Optional[float] = None  # fraction in [0, 1]
+    pct_above_79: Optional[float] = None  # fraction in [0, 1]
+    pct_college_ready: Optional[float] = None  # fraction in [0, 1]
 
 
 class ClassSizeRow(BaseModel):
