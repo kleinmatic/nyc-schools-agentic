@@ -195,6 +195,22 @@ def test_high_school_includes_regents():
     assert any("English" in e or "Algebra" in e or "Geometry" in e for e in exams)
 
 
+def test_regents_pcts_are_fractions():
+    """The InfoHub Regents export is 0-100; the service boundary must
+    convert to 0-1 fractions like every other pct in the API. Regression
+    pin for the '9902.9%' school-page table bug."""
+    detail = get_school("22K405")
+    assert detail is not None
+    scored = [r for r in detail.regents if r.pct_above_64 is not None]
+    assert scored, "expected at least one scored Regents row"
+    for r in scored:
+        assert 0.0 <= r.pct_above_64 <= 1.0
+        if r.pct_above_79 is not None:
+            assert 0.0 <= r.pct_above_79 <= 1.0
+        if r.pct_below_65 is not None:
+            assert 0.0 <= r.pct_below_65 <= 1.0
+
+
 def test_high_school_includes_hs_directory():
     detail = get_school("22K405")
     assert detail is not None

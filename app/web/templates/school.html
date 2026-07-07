@@ -161,7 +161,9 @@
     for (const x of xDomain) fullGrid.push({ grade: g, ay: x, gradeLabel: `Grade ${g}` });
   }
 
+  const gyHolder = document.getElementById("{{ prefix }}-grade-year");
   const plot = Plot.plot({
+    width: Math.max(320, gyHolder.clientWidth || 640),
     height: 40 + facetHeight * grades.length + 36,
     marginTop: 16, marginBottom: 36, marginLeft: 76, marginRight: 12,
     x: {
@@ -213,7 +215,7 @@
       }),
     ]
   });
-  document.getElementById("{{ prefix }}-grade-year").append(plot);
+  gyHolder.append(plot);
 })();
 </script>
 {% endif %}
@@ -582,9 +584,12 @@
     const order = exams.map(e => e.exam);
     const fmt = v => `${(v * 100).toFixed(1)}%`;
     const withMastery = exams.filter(e => e.mastery80 != null);
-    document.getElementById("regents-dumbbells").append(Plot.plot({
+    const holder = document.getElementById("regents-dumbbells");
+    const w = Math.max(320, holder.clientWidth || 640);
+    holder.append(Plot.plot({
+      width: w,
       height: 40 + 26 * order.length + 20,
-      marginLeft: 190, marginRight: 24, marginTop: 8, marginBottom: 28,
+      marginLeft: Math.min(190, Math.round(w * 0.45)), marginRight: 24, marginTop: 8, marginBottom: 28,
       style: {fontSize: "12px"},
       x: {label: null, tickFormat: ".0%", grid: true, domain: [0, 1]},
       y: {domain: order, label: null},
@@ -696,9 +701,12 @@
     if (!dots || dots.length < 2) return;
     const order = [...dots].sort((a, b) => b.rate - a.rate).map(d => d.subgroup);
     const fmt = v => `${(v * 100).toFixed(1)}%`;
-    document.getElementById("grad-dots").append(Plot.plot({
+    const holder = document.getElementById("grad-dots");
+    const w = Math.max(320, holder.clientWidth || 640);
+    holder.append(Plot.plot({
+      width: w,
       height: 40 + 26 * order.length + 20,
-      marginLeft: 200, marginRight: 24, marginTop: 8, marginBottom: 28,
+      marginLeft: Math.min(200, Math.round(w * 0.45)), marginRight: 24, marginTop: 8, marginBottom: 28,
       style: {fontSize: "12px"},
       x: {label: null, tickFormat: ".0%", grid: true, domain: [0, 1]},
       y: {domain: order, label: null, tickFormat: s => ({
@@ -818,9 +826,12 @@
     const order = [...dots].sort((a, b) => b.rate - a.rate).map(d => d.subgroup)
       .filter((s, i, arr) => arr.indexOf(s) === i);
     const fmt = v => `${(v * 100).toFixed(1)}%`;
+    const holder = document.getElementById("chronic-dots");
+    const w = Math.max(320, holder.clientWidth || 640);
     const plot = Plot.plot({
+      width: w,
       height: 40 + 26 * order.length * (faceted ? levels.length : 1) + 20,
-      marginLeft: 200, marginRight: 24, marginTop: 8, marginBottom: 28,
+      marginLeft: Math.min(200, Math.round(w * 0.45)), marginRight: 24, marginTop: 8, marginBottom: 28,
       style: {fontSize: "12px"},
       x: {label: null, tickFormat: ".0%", grid: true, zero: true},
       // Axis shortens NYSED's longest subgroup names; tooltips keep them verbatim.
@@ -842,7 +853,7 @@
         }),
       ]
     });
-    document.getElementById("chronic-dots").append(plot);
+    holder.append(plot);
   })();
   </script>
   {% endif %}
@@ -1391,7 +1402,9 @@
       h.className = "text-xs font-medium text-slate-700 mb-1";
       h.textContent = title;
       wrap.append(h);
+      holder.append(wrap);  // attach first so clientWidth reflects the grid cell
       wrap.append(Plot.plot({
+        width: Math.max(280, wrap.clientWidth || 440),
         height: 170, marginLeft: 44, marginRight: 84, marginTop: 8, marginBottom: 24,
         style: {fontSize: "11px"},
         x: {tickFormat: ayFmt, label: null, ticks: 5},
@@ -1403,37 +1416,37 @@
 
     // 1 — Enrollment (absolute count, zero-based)
     const enr = rows.filter(r => r.enrollment != null);
-    holder.append(panel("Enrollment", [
+    panel("Enrollment", [
       Plot.areaY(enr, {x: "ay", y: "enrollment", fill: "#2a78d6", fillOpacity: 0.12}),
       Plot.lineY(enr, {x: "ay", y: "enrollment", stroke: "#2a78d6", strokeWidth: 2,
         title: d => `${yearOf(d.ay)}\n${d.enrollment.toLocaleString()} students`}),
-    ], {zero: true, ticks: 4, tickFormat: d => d.toLocaleString()}));
+    ], {zero: true, ticks: 4, tickFormat: d => d.toLocaleString()});
 
     // 2 — Race / ethnicity shares
     const race = longify(RACE);
-    holder.append(panel("Race / Ethnicity", [
+    panel("Race / Ethnicity", [
       Plot.lineY(race, {x: "ay", y: "v", z: "series", stroke: d => d.color, strokeWidth: 2,
         title: d => `${d.series} · ${yearOf(d.ay)}\n${(d.v * 100).toFixed(1)}%`}),
       Plot.text(endLabels(race), {x: "ay", y: "yLab", text: d => `${d.series} ${(d.v * 100).toFixed(0)}%`,
         fill: "#334155", dx: 6, textAnchor: "start", fontSize: 10, stroke: "white", strokeWidth: 4, paintOrder: "stroke"}),
-    ], {zero: true, tickFormat: ".0%"}));
+    ], {zero: true, tickFormat: ".0%"});
 
     // 3 — ELL & SWD shares
     const need = longify(NEED);
-    holder.append(panel("English Language Learners & Students With Disabilities", [
+    panel("English Language Learners & Students With Disabilities", [
       Plot.lineY(need, {x: "ay", y: "v", z: "series", stroke: d => d.color, strokeWidth: 2,
         title: d => `${d.series} · ${yearOf(d.ay)}\n${(d.v * 100).toFixed(1)}%`}),
       Plot.text(endLabels(need), {x: "ay", y: "yLab", text: d => `${d.series} ${(d.v * 100).toFixed(0)}%`,
         fill: "#334155", dx: 6, textAnchor: "start", fontSize: 10, stroke: "white", strokeWidth: 4, paintOrder: "stroke"}),
-    ], {zero: true, tickFormat: ".0%"}));
+    ], {zero: true, tickFormat: ".0%"});
 
     // 4 — ENI (0–1 index, fixed domain)
     const eni = rows.filter(r => r.eni != null);
     if (eni.length >= 3) {
-      holder.append(panel("Economic Need Index (0–1)", [
+      panel("Economic Need Index (0–1)", [
         Plot.lineY(eni, {x: "ay", y: "eni", stroke: "#d97706", strokeWidth: 2,
           title: d => `${yearOf(d.ay)}\nENI ${d.eni.toFixed(2)}`}),
-      ], {domain: [0, 1], tickFormat: ".1f"}));
+      ], {domain: [0, 1], tickFormat: ".1f"});
     }
   })();
   </script>
