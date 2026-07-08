@@ -77,7 +77,11 @@ jobs:
           # data/ files MUST be materialized binaries, not LFS pointers.
           lfs: true
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to a commit SHA, not the mutable @master ref: this step runs
+      # in the deploy job with FLY_API_TOKEN in scope (which can read Fly
+      # secrets), so a compromised/retagged action would be a credential
+      # exfil path. Bump deliberately when upgrading.
+      - uses: superfly/flyctl-actions/setup-flyctl@dfdfedc86b296f5e5384f755a18bf400409a15d0 # v1.4
 
       - name: Deploy to Fly.io
         # COMMIT_SHA gets baked into the image and surfaced in the footer
