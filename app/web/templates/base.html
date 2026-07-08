@@ -16,6 +16,14 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="{{ self.og_title() }}">
   <meta name="twitter:description" content="{{ self.og_description() }}">
+  {# WebMCP origin trial (Chrome 149+). Token is public by design — it ships
+     in every page and is only valid for our origin. Scoped to
+     https://nycschools.datatribune.io (+subdomains), feature "WebMCP",
+     EXPIRES 2026-11-17 — re-register at
+     https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241
+     and swap the token before then. Inert on localhost / fly.dev (wrong
+     origin → Chrome ignores it). #}
+  <meta http-equiv="origin-trial" content="AkEck4xDH0TZQ/3KL2TuV3DCep3M0IXfH0jm36QfXvXlV8ujdmlGcibg14SMunH8WnStlCKsaZUoeHdo9WhPsw8AAABseyJvcmlnaW4iOiJodHRwczovL255Y3NjaG9vbHMuZGF0YXRyaWJ1bmUuaW86NDQzIiwiZmVhdHVyZSI6IldlYk1DUCIsImV4cGlyeSI6MTc5NDg3MzYwMCwiaXNTdWJkb21haW4iOnRydWV9">
   {# Google Analytics 4. Property G-KXSN2MX8CR. Adblockers will block this;
      that's fine. No consent banner — public, non-PII site. #}
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-KXSN2MX8CR"></script>
