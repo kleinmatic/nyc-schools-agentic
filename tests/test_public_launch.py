@@ -124,6 +124,46 @@ def test_edge_lockdown_non_ascii_token_rejected_not_500(client, monkeypatch):
     assert r.status_code == 401
 
 
+def test_edge_lockdown_redirect_encodes_crlf_and_non_latin1_path(monkeypatch):
+    """The 301 Location is built from the percent-DECODED path. A CR/LF in
+    it must not split the response into an injected header, and a non-latin-1
+    byte must not crash the encode into a 500 — both are percent-encoded."""
+    import asyncio
+
+    from app.gates import CANONICAL_HOST, EdgeLockdownMiddleware
+
+    monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
+
+    async def _app(scope, receive, send):  # never reached — redirect short-circuits
+        raise AssertionError("redirect branch should not fall through to the app")
+
+    mw = EdgeLockdownMiddleware(_app)
+
+    async def _run(path):
+        sent = []
+
+        async def send(msg):
+            sent.append(msg)
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        scope = {
+            "type": "http", "method": "GET", "path": path,
+            "query_string": b"", "headers": [], "client": ("1.2.3.4", 0),
+        }
+        await mw(scope, receive, send)
+        return sent
+
+    for path in ("/\r\nSet-Cookie: pwned=1", "/café/€", "/school/\r\n15K321"):
+        sent = asyncio.run(_run(path))
+        start = next(m for m in sent if m["type"] == "http.response.start")
+        assert start["status"] == 301
+        location = dict(start["headers"])[b"location"]
+        assert b"\r" not in location and b"\n" not in location
+        assert location.startswith(f"https://{CANONICAL_HOST}".encode())
+
+
 def test_edge_lockdown_health_check_always_open(client, monkeypatch):
     monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
     monkeypatch.setenv("MCP_ACCESS_TOKEN", MCP_TOKEN)

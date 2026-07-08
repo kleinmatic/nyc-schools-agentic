@@ -24,6 +24,7 @@ need a code path.
 """
 import hmac
 import os
+from urllib.parse import quote
 
 CANONICAL_HOST = "nycschools.datatribune.io"
 
@@ -112,7 +113,14 @@ class EdgeLockdownMiddleware:
         ):
             return await self.app(scope, receive, send)
         if scope.get("method") in ("GET", "HEAD"):
-            location = f"https://{CANONICAL_HOST}{path}"
+            # uvicorn delivers `path` percent-DECODED, so a request like
+            # /%0d%0aSet-Cookie:x would inject CR/LF into the Location header
+            # (response splitting) and a non-latin-1 path would crash the
+            # .encode("latin-1") below. quote() re-encodes it to pure,
+            # CRLF-free ASCII. query_string stays raw wire bytes — it can't
+            # carry a literal CR/LF (that would have broken the request line
+            # the server already parsed).
+            location = f"https://{CANONICAL_HOST}{quote(path, safe='/')}"
             if scope.get("query_string"):
                 location += "?" + scope["query_string"].decode("latin-1")
             await _send_response(
