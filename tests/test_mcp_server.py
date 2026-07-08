@@ -97,6 +97,34 @@ async def test_get_school_returns_none_for_missing_dbn(mcp_client):
     assert r.data is None
 
 
+async def test_intentional_valueerror_reaches_agent_as_toolerror(mcp_client):
+    """mask_error_details is on, but the service layer's curated bad-argument
+    messages must still reach the agent so it can self-correct — they're
+    re-raised as ToolError, which FastMCP never masks (F7)."""
+    from fastmcp.exceptions import ToolError
+    with pytest.raises(ToolError) as exc:
+        await mcp_client.call_tool(
+            "get_school_metric", {"dbn": "15K321", "metric": "not_a_real_metric"}
+        )
+    msg = str(exc.value)
+    assert "unknown metric" in msg.lower()
+    assert "not_a_real_metric" in msg
+
+
+async def test_unexpected_exception_is_masked_no_internal_leak(mcp_client, monkeypatch):
+    """An unexpected exception (here a KeyError naming an internal column)
+    must be masked — the agent gets a generic error, not our internals."""
+    import app.mcp_server.server as srv
+
+    def _boom(*a, **k):
+        raise KeyError("secret_internal_column_name")
+
+    monkeypatch.setattr(srv, "_search_schools", _boom)
+    with pytest.raises(Exception) as exc:
+        await mcp_client.call_tool("search_schools", {"query": "x", "limit": 1})
+    assert "secret_internal_column_name" not in str(exc.value)
+
+
 @respx.mock
 async def test_find_schools_for_address_combines_geocode_and_zoning(mcp_client):
     """The tool's value-add over plain geocode_address: it stitches the

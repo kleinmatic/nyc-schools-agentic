@@ -2,7 +2,11 @@
 no business logic, no dataframe access, no transport leakage in services/."""
 from typing import Literal, Optional
 
+import functools
+import inspect
+
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from pydantic import BaseModel
 
 from ..services.analytics import (
@@ -93,6 +97,10 @@ Available metrics:
 
 mcp = FastMCP(
     name="nyc-schools",
+    # Hide unexpected internal exceptions from token-holders (recon leg of
+    # the C3 audit chain). Intentional ValueError validation messages are
+    # re-surfaced as ToolError by the @tool wrapper (_surface_value_errors).
+    mask_error_details=True,
     instructions=(
         "Tools for querying NYC public school data: demographics, NY State "
         "exam results, attendance zones, peer comparisons, and DOE/NYSED "
@@ -139,13 +147,56 @@ mcp = FastMCP(
 )
 
 
+def _surface_value_errors(fn):
+    """Wrap a tool so a service-layer ValueError becomes a ToolError.
+
+    mask_error_details=True hides unexpected exceptions (pandas KeyError,
+    bad dtype) from token-holders — no internal column names / paths leak.
+    But the service layer raises ValueError with curated, actionable
+    messages for bad arguments ("unknown metric: 'foo'. Valid: [...]"), and
+    those must reach the agent so it can self-correct and retry (an
+    MCP/WebMCP best practice). ToolError is the one exception FastMCP always
+    surfaces verbatim, even under masking. Masking happens inside the tool
+    runner — below any middleware — so the conversion has to sit here, at
+    the tool boundary. services/ must never import a transport type, so the
+    adapter owns it."""
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await fn(*args, **kwargs)
+            except ValueError as e:
+                raise ToolError(str(e)) from e
+        return wrapper
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as e:
+            raise ToolError(str(e)) from e
+    return wrapper
+
+
+def tool(*args, **kwargs):
+    """Drop-in for @mcp.tool that also runs the ValueError→ToolError
+    conversion (see _surface_value_errors). Supports both the bare
+    `@tool` and the parameterized `@tool(description=...)` forms."""
+    if len(args) == 1 and not kwargs and callable(args[0]):
+        return mcp.tool(_surface_value_errors(args[0]))
+
+    def deco(fn):
+        return mcp.tool(*args, **kwargs)(_surface_value_errors(fn))
+    return deco
+
+
 class FindSchoolsForAddressResult(BaseModel):
     """Combined geocode + zoning lookup. Returned by find_schools_for_address."""
     geocoding: GeocodingResult
     schools: ZonedSearchResult
 
 
-@mcp.tool
+@tool
 def search_schools(query: str, limit: int = 10) -> list[SchoolSummary]:
     """Fuzzy-search NYC public schools by name.
 
@@ -157,7 +208,7 @@ def search_schools(query: str, limit: int = 10) -> list[SchoolSummary]:
     return _search_schools(query, limit=limit)
 
 
-@mcp.tool
+@tool
 def get_school(dbn: str) -> Optional[SchoolDetail]:
     """Get the full report for one school by DBN.
 
@@ -173,7 +224,7 @@ def get_school(dbn: str) -> Optional[SchoolDetail]:
     return _get_school(dbn)
 
 
-@mcp.tool
+@tool
 async def find_schools_for_address(address: str) -> Optional[FindSchoolsForAddressResult]:
     """Find the elementary and middle schools whose attendance zones
     contain a given NYC street address.
@@ -206,7 +257,7 @@ async def find_schools_for_address(address: str) -> Optional[FindSchoolsForAddre
     return FindSchoolsForAddressResult(geocoding=geo, schools=schools)
 
 
-@mcp.tool
+@tool
 async def geocode_address(address: str) -> Optional[GeocodingResult]:
     """Resolve a NYC street address to lat/lon + borough via NYC Planning
     Labs' GeoSearch API. Mostly an escape hatch — for the common case of
@@ -215,7 +266,7 @@ async def geocode_address(address: str) -> Optional[GeocodingResult]:
     return await _geocode(address)
 
 
-@mcp.tool
+@tool
 def list_high_schools(
     borough: Optional[Borough] = None,
     accessibility: Optional[Accessibility] = None,
@@ -241,7 +292,7 @@ def list_high_schools(
     )
 
 
-@mcp.tool(description=_TOP_SCHOOLS_DESC)
+@tool(description=_TOP_SCHOOLS_DESC)
 def top_schools(
     metric: MetricName,
     level: SchoolLevel = "high",
@@ -255,7 +306,7 @@ def top_schools(
     )
 
 
-@mcp.tool(description=_BULK_METRICS_DESC)
+@tool(description=_BULK_METRICS_DESC)
 def bulk_metrics(
     level: SchoolLevel = "high",
     metrics: Optional[list[MetricName]] = None,
@@ -274,7 +325,7 @@ Available metrics:
 {_METRIC_DOC_BLOCK}"""
 
 
-@mcp.tool(description=_TOP_NEIGHBORHOODS_DESC)
+@tool(description=_TOP_NEIGHBORHOODS_DESC)
 def top_neighborhoods(
     metric: MetricName,
     level: SchoolLevel = "high",
@@ -288,7 +339,7 @@ def top_neighborhoods(
     )
 
 
-@mcp.tool
+@tool
 def borough_summary(
     metrics: Optional[list[MetricName]] = None,
     level: Optional[SchoolLevel] = "high",
@@ -308,7 +359,7 @@ def borough_summary(
     )
 
 
-@mcp.tool
+@tool
 def schools_in_neighborhood(
     query: str,
     level: Optional[SchoolLevel] = None,
@@ -334,7 +385,7 @@ def schools_in_neighborhood(
     return _schools_in_neighborhood(query=query, level=level, limit=limit)
 
 
-@mcp.tool
+@tool
 def schools_in_district(
     district: int,
     level: Literal["elementary", "middle", "high"],
@@ -372,7 +423,7 @@ def schools_in_district(
     return _schools_in_district(district=district, level=level)
 
 
-@mcp.tool
+@tool
 def get_neighborhood(
     query: str,
     level: Optional[SchoolLevel] = None,
@@ -398,7 +449,7 @@ def get_neighborhood(
     return _get_neighborhood(query=query, level=level)
 
 
-@mcp.tool
+@tool
 def school_staffing(dbn: str) -> Optional[StaffingInfo]:
     """Counseling + social-work staffing for one school: FTE counts and
     pupils-per-staff ratios.
@@ -416,7 +467,7 @@ def school_staffing(dbn: str) -> Optional[StaffingInfo]:
     return _school_staffing(dbn)
 
 
-@mcp.tool
+@tool
 def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
     """Outcomes for the Students-With-Disabilities (SWD) subgroup at one
     school — distinct from `swd_pct` on the school summary.
@@ -452,7 +503,7 @@ def school_swd_outcomes(dbn: str) -> Optional[SwdOutcomes]:
     return _school_swd_outcomes(dbn)
 
 
-@mcp.tool
+@tool
 def co_located_schools(dbn: str) -> list[CoLocatedSchool]:
     """Schools sharing a building with the given school.
 
@@ -539,7 +590,7 @@ For HS specifically: `list_high_schools(accessibility="Fully Accessible")` if th
 """
 
 
-@mcp.tool
+@tool
 def school_peers(
     dbn: str,
     scope: PeerScope = "neighborhood",
@@ -566,7 +617,7 @@ def school_peers(
 # single value for a specific entity. Distinct school and neighborhood
 # universes — they don't share a single dispatcher.
 
-@mcp.tool
+@tool
 def list_school_metrics() -> list[SchoolMetricDef]:
     """Every per-school metric this server can answer. Returns id, label,
     unit, applicable school levels, source-table provenance, and vintage
@@ -585,7 +636,7 @@ def list_school_metrics() -> list[SchoolMetricDef]:
     return _list_school_metrics()
 
 
-@mcp.tool
+@tool
 def list_neighborhood_metrics() -> list[NeighborhoodMetricDef]:
     """Every per-neighborhood (NTA) metric this server can answer. Each
     entry is an aggregation over the schools in an NTA and names its
@@ -600,7 +651,7 @@ def list_neighborhood_metrics() -> list[NeighborhoodMetricDef]:
     return _list_neighborhood_metrics()
 
 
-@mcp.tool
+@tool
 def get_school_metric(dbn: str, metric: str) -> Optional[SchoolMetricValue]:
     """Look up one metric for one school by DBN. Returns the value plus
     label, unit, and vintage note. Discovery counterpart to
@@ -620,7 +671,7 @@ def get_school_metric(dbn: str, metric: str) -> Optional[SchoolMetricValue]:
     return _get_school_metric(dbn=dbn, metric=metric)
 
 
-@mcp.tool
+@tool
 def get_neighborhood_metric(
     nta: str,
     metric: str,
