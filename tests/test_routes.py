@@ -419,6 +419,7 @@ def test_ms_school_page_imperative_tool_includes_admission_methods(client):
     # The agent_context JSON is dumped inline as `const CONTEXT = {...}`.
     assert '"ms_admission":' in text
     assert '"admission_methods":' in text
-    # And the tool description should mention the field so the agent
-    # knows when to surface it.
-    assert "ms_admission is populated" in text
+    # And the tool description should mention the section so the agent
+    # knows when to request it — priority strings surfaced verbatim.
+    assert "ms_admission = how the school admits" in text
+    assert "quote the published priority strings verbatim" in text

@@ -89,38 +89,91 @@ def test_webmcp_toolname_is_unique_per_page(client, path, toolname):
     )
 
 
+# The two imperative-tool descriptions, verbatim from school.html. Pinned
+# here so the length caps (Chrome WebMCP security guidance: lean tool
+# descriptions) fail loudly if someone fattens them back up.
+SCHOOL_TOOL_DESCRIPTION = (
+    "Call this first on any question about the school on this page. Always "
+    "returns identity and headline stats; pass sections to add comparison "
+    "blocks. Pair every stat with its cohort position, in neutral positional "
+    "language — highest/lowest, above/below the median — never "
+    "best/worst/better/worse. Sections: peer_ranks = citywide rank vs "
+    "same-level NYC schools; peer_neighborhood = same-NTA peers; "
+    "peer_district = same-district peers (null for HS — city-wide choice); "
+    "co_located_schools = schools sharing this building; staffing = "
+    "counselor/social-worker FTE; ms_admission = how the school admits — "
+    "quote the published priority strings verbatim; all = everything."
+)
+SWD_TOOL_DESCRIPTION = (
+    "Returns this school's Students-With-Disabilities (SWD) subgroup "
+    "outcomes — graduation, chronic absenteeism, CCCR, ESSA — each with "
+    "cohort_context: rank vs the same-level NYC SWD cohort, citywide median, "
+    "and extremes. Quote cohort_context.narrative verbatim; it uses neutral "
+    "positional language (highest/lowest quartile, above/below the median). "
+    "Call this only for special-education questions: IEPs, learning "
+    "disabilities, autism, speech delays, or how the school serves students "
+    "with disabilities."
+)
+
+
 @pytest.mark.parametrize("dbn", ["15K321", "75K004", "02M475"])
 def test_school_page_registers_imperative_current_school_tool(client, dbn):
     """School pages register a WebMCP imperative tool that returns the
-    current school's identity + peer_ranks + staffing so an in-browser
-    agent has page context without DOM access."""
+    current school's identity + selectable comparison blocks so an
+    in-browser agent has page context without DOM access."""
     r = client.get(f"/school/{dbn}")
     assert r.status_code == 200
+    # Chrome 150+ API surface, with the pre-150 fallback still present.
+    assert "document.modelContext" in r.text
     assert "navigator.modelContext" in r.text
     assert 'registerTool' in r.text
     assert 'name: "get_current_school_details"' in r.text
     # DBN must appear in the embedded JSON context payload.
     assert f'"dbn": "{dbn}"' in r.text
-    # All four comparison dimensions must travel in the always-first tool.
+    # All four comparison dimensions must travel in the embedded context
+    # (execute() selects from it client-side via `sections`).
     assert '"peer_ranks":' in r.text
     assert '"peer_neighborhood":' in r.text
     assert '"peer_district":' in r.text
     assert '"co_located_schools":' in r.text
+    # Composability: the `sections` inputSchema enum must be declared.
+    assert (
+        'enum: ["peer_ranks", "peer_neighborhood", "peer_district", '
+        '"co_located_schools", "staffing", "ms_admission", "all"]'
+    ) in r.text
 
 
 def test_school_page_registers_swd_specific_tool_when_outcomes_exist(client):
     """Second WebMCP tool — only registered when there's SWD data to
-    return. Description steers the agent to call it ONLY on IEP/special-ed
-    questions, not on generic ones. PS 321 has SWD data, so it should
-    register the tool."""
+    return. Description steers the agent to call it for IEP/special-ed
+    questions specifically. PS 321 has SWD data, so it should register
+    the tool."""
     r = client.get("/school/15K321")
     assert r.status_code == 200
     assert 'name: "get_swd_outcomes_for_current_school"' in r.text
     # Tool description must name the IEP / special-ed trigger conditions
-    # so the agent doesn't fire it on generic questions.
+    # so the agent knows when this tool applies.
     assert "IEP" in r.text
     # cohort_context must travel in the SWD tool's payload.
     assert '"cohort_context":' in r.text
+
+
+def test_school_page_imperative_tool_descriptions_are_lean(client):
+    """Chrome WebMCP guidance: tool descriptions ≤ 500 chars (our hard cap
+    700), lean outputs. Pin the rendered descriptions verbatim and cap
+    their length so drift or bloat fails here, not in an agent session."""
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    assert SCHOOL_TOOL_DESCRIPTION in r.text
+    assert SWD_TOOL_DESCRIPTION in r.text
+    assert len(SCHOOL_TOOL_DESCRIPTION) <= 700
+    assert len(SWD_TOOL_DESCRIPTION) <= 500
+    # Positive-language rule: descriptions say when to call, never "Do NOT".
+    assert "Do NOT" not in SCHOOL_TOOL_DESCRIPTION
+    assert "Do NOT" not in SWD_TOOL_DESCRIPTION
+    # execute() must return a string, not a raw object (Chrome guidance).
+    assert "return JSON.stringify(payload);" in r.text
+    assert "return JSON.stringify(SWD_CONTEXT);" in r.text
 
 
 def test_school_page_renders_swd_cohort_narrative(client):

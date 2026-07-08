@@ -1553,47 +1553,57 @@
    needing special-ed context, instead of paying for it on every page hit. #}
 <script>
 (function() {
-  if (!('modelContext' in navigator) || !('registerTool' in navigator.modelContext)) return;
+  // Chrome 150+ exposes the WebMCP API on document.modelContext; older
+  // builds used navigator.modelContext. Feature-detect both.
+  const mc = document.modelContext ?? navigator.modelContext;
+  if (!mc || !('registerTool' in mc)) return;
 
-  // Tool 1 — always called first on a school page. Identity + demographics
-  // + counseling staffing + peer_ranks (rank vs same-level NYC schools on
-  // ENI / ELA / math / PTR / chronic absent) + co-located schools.
+  // Tool 1 — always called first on a school page. Identity/headline
+  // scalars always return; the six big blocks (peer_ranks,
+  // peer_neighborhood, peer_district, co_located_schools, staffing,
+  // ms_admission) are opt-in via `sections` so the default payload stays
+  // lean. Default: identity + peer_ranks. "all" = everything.
   const CONTEXT = {{ agent_context | tojson }};
-  navigator.modelContext.registerTool({
+  const SECTIONS = ["peer_ranks", "peer_neighborhood", "peer_district", "co_located_schools", "staffing", "ms_admission"];
+  // annotations: untrustedContentHint deliberately omitted — payloads are
+  // our own curated government data, no user-generated content.
+  mc.registerTool({
     name: "get_current_school_details",
-    description: [
-      "Returns details about the school the user is currently viewing — identity, demographics, counseling staffing, District 75 flag, and FOUR comparison dimensions the agent should pick from based on the question.",
-      "ALWAYS call this FIRST on any school-page question.",
-      "JOURNALISM RULE: never report a stat in isolation. Every number must be paired with where it falls in a comparable cohort. Use neutral positional language (highest/lowest/above-median/below-median), not evaluative (best/worst/better/worse).",
-      "Comparison dimensions and when to use each:",
-      "  • peer_ranks — citywide rank vs all same-level NYC schools on each headline metric (ENI, ELA, math, PTR, chronic absent). Each entry carries rank, total, and the highest/lowest school by name. Use for 'how does this school rank in NYC?'",
-      "  • peer_neighborhood — every school in the same NTA at the same school level, with per-school metrics. Use for 'compared to other schools in [neighborhood]'. Hand-compute rank or pick out specific peers.",
-      "  • peer_district — every school in the same geographic district at the same level, with metrics. Use for 'in District X' questions. NULL for HS (city-wide choice — say so).",
-      "  • co_located_schools — schools sharing this building (each entry includes is_d75). Use for 'what other schools are in this building?' and to call out D75 special-ed programs co-located here when relevant.",
-      "If ms_admission is populated (it will be on any school in the NYC DOE MS Directory — pure MS, K-8, 6-12), surface admission_methods + the per-program priorities verbatim when the user asks 'how does this school admit?' or 'how do I apply?'. The cascade order in priorities is the published order; do not assert that zone-residency is the top priority — at most NYC MS, siblings and district-residency rank above zone."
-    ].join("\n"),
-    inputSchema: { type: "object", properties: {} },
-    execute() { return CONTEXT; },
+    description: "Call this first on any question about the school on this page. Always returns identity and headline stats; pass sections to add comparison blocks. Pair every stat with its cohort position, in neutral positional language — highest/lowest, above/below the median — never best/worst/better/worse. Sections: peer_ranks = citywide rank vs same-level NYC schools; peer_neighborhood = same-NTA peers; peer_district = same-district peers (null for HS — city-wide choice); co_located_schools = schools sharing this building; staffing = counselor/social-worker FTE; ms_admission = how the school admits — quote the published priority strings verbatim; all = everything.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sections: {
+          type: "array",
+          items: { type: "string", enum: ["peer_ranks", "peer_neighborhood", "peer_district", "co_located_schools", "staffing", "ms_admission", "all"] },
+          description: "Comparison blocks to include. Default: peer_ranks. Use all for every block. Identity fields always return."
+        }
+      }
+    },
+    execute(args) {
+      const requested = args && Array.isArray(args.sections) && args.sections.length
+        ? args.sections : ["peer_ranks"];
+      const want = new Set(requested);  // unrecognized names fall through silently
+      const payload = {};
+      for (const [key, value] of Object.entries(CONTEXT)) {
+        if (!SECTIONS.includes(key) || want.has("all") || want.has(key)) payload[key] = value;
+      }
+      return JSON.stringify(payload);
+    },
     annotations: { readOnlyHint: true }
   });
 
   {% if agent_swd_context %}
-  // Tool 2 — called only when the user identifies as needing IEP /
-  // special-education context. Returns the Students-With-Disabilities
+  // Tool 2 — the special-education payload: Students-With-Disabilities
   // subgroup outcomes (grad, chronic, CCCR, ESSA) WITH cohort_context
   // per metric — rank/median/extremes vs the same-level NYC SWD cohort,
-  // plus a ready-to-quote narrative string.
+  // plus a ready-to-quote narrative string. Small payload, no sections.
   const SWD_CONTEXT = {{ agent_swd_context | tojson }};
-  navigator.modelContext.registerTool({
+  mc.registerTool({
     name: "get_swd_outcomes_for_current_school",
-    description: [
-      "Returns Students-With-Disabilities (SWD) subgroup outcomes for this school — graduation cohorts, chronic absenteeism, CCCR level, ESSA status — PLUS cohort_context per metric with rank vs the same-level NYC SWD subgroup, citywide median, and the highest/lowest schools by name.",
-      "Call this when the user mentions an IEP, special education, a learning delay or disability, emotional regulation, autism, speech delays, or asks how this school serves students with disabilities.",
-      "Surface cohort_context.narrative strings verbatim — they are pre-written in neutral, journalistic language (highest/lowest quartile, above/below the median). Do not paraphrase as 'best' / 'worst' / 'better' / 'worse'.",
-      "Do NOT call this for generic non-IEP questions about the school."
-    ].join("\n"),
+    description: "Returns this school's Students-With-Disabilities (SWD) subgroup outcomes — graduation, chronic absenteeism, CCCR, ESSA — each with cohort_context: rank vs the same-level NYC SWD cohort, citywide median, and extremes. Quote cohort_context.narrative verbatim; it uses neutral positional language (highest/lowest quartile, above/below the median). Call this only for special-education questions: IEPs, learning disabilities, autism, speech delays, or how the school serves students with disabilities.",
     inputSchema: { type: "object", properties: {} },
-    execute() { return SWD_CONTEXT; },
+    execute() { return JSON.stringify(SWD_CONTEXT); },
     annotations: { readOnlyHint: true }
   });
   {% endif %}
