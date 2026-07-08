@@ -111,7 +111,23 @@ async def home(request: Request):
 
 
 @router.get("/search", response_class=HTMLResponse)
-async def search(request: Request, q: str = ""):
+async def search(request: Request, q: str = "", format: str = ""):
+    # format=json → structured results for agents. Same service call as the
+    # HTML path; raw internal codes (no `level`/`pretty` display filters).
+    # This is what base.html's respondWith handler fetches when an agent
+    # invokes the search-schools-by-name WebMCP form, so the page answers
+    # in place instead of navigating.
+    if format == "json":
+        if not q.strip():
+            return JSONResponse(
+                {"error": "Missing required parameter: q"}, status_code=400
+            )
+        return JSONResponse(
+            {
+                "query": q,
+                "results": [s.model_dump(mode="json") for s in search_schools(q)],
+            }
+        )
     results = search_schools(q)
     template = "partials/results.html" if _is_htmx(request) else "search.html"
     # No dashboard on /search?q=… — search-result focus. Empty-query
@@ -124,7 +140,26 @@ async def search(request: Request, q: str = ""):
 
 
 @router.get("/zoned", response_class=HTMLResponse)
-async def zoned_page(request: Request, address: str = ""):
+async def zoned_page(request: Request, address: str = "", format: str = ""):
+    # format=json → the ZonedSearchResult model_dump plus the input address,
+    # for agents (the respondWith path of the find-zoned-schools-by-address
+    # WebMCP form). Raw service payload — no display filters.
+    if format == "json":
+        if not address.strip():
+            return JSONResponse(
+                {"error": "Missing required parameter: address"}, status_code=400
+            )
+        json_geo = await geocode(address)
+        json_result = (
+            find_zoned_schools(json_geo.lat, json_geo.lon) if json_geo else None
+        )
+        return JSONResponse(
+            {
+                "address": address,
+                "geocoded": json_geo.model_dump(mode="json") if json_geo else None,
+                "result": json_result.model_dump(mode="json") if json_result else None,
+            }
+        )
     geo = await geocode(address) if address.strip() else None
     result = find_zoned_schools(geo.lat, geo.lon) if geo else None
     # When the address falls in a district that runs MS by choice, pull
@@ -454,6 +489,7 @@ Journalism-style accountability and equity data for every NYC public school, key
 - [Homepage](https://nycschools.datatribune.io/) — leaderboards by metric and by neighborhood
 - [Search](https://nycschools.datatribune.io/search) — fuzzy school search by name or DBN
 - [Zoned schools](https://nycschools.datatribune.io/zoned) — address → zoned ES + MS
+- `/search` and `/zoned` accept `format=json` for structured results (same service-layer payloads the HTML shows) — the WebMCP forms answer agents in place via this.
 - [Sources](https://nycschools.datatribune.io/sources) — every dataset and its vintage
 
 ## Reference

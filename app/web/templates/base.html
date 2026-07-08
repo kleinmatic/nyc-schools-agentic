@@ -184,6 +184,31 @@
       document.querySelector(`.agent-active-pill[data-toolname="${e.toolName}"]`)
         ?.classList.add('active');
     });
+
+    // Progressive enhancement for agent-invoked WebMCP form submits
+    // (Chrome declarative API): when the submit event carries
+    // agentInvoked + respondWith, answer the agent with structured JSON
+    // from the same endpoint (format=json) instead of navigating away.
+    // Capture phase so it covers WebMCP forms anywhere in the document —
+    // the site-wide global forms and the inline ones on / and /zoned.
+    // Human submits and browsers without respondWith fall through to the
+    // normal GET navigation.
+    document.addEventListener('submit', (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement) || !form.matches('form[toolname]')) return;
+      if (e.agentInvoked !== true || typeof e.respondWith !== 'function') return;
+      e.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      params.set('format', 'json');
+      e.respondWith(fetch(`${form.action}?${params}`).then((r) => r.text()));
+    }, true);
+
+    // toolcancel (declarative API): the user cancelled agent form
+    // activity — retire any lit agent pills.
+    window.addEventListener('toolcancel', () => {
+      document.querySelectorAll('.agent-active-pill.active')
+        .forEach((el) => el.classList.remove('active'));
+    });
   </script>
 </body>
 </html>
