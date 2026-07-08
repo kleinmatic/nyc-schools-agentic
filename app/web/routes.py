@@ -1,6 +1,7 @@
 """HTML routes. Thin adapters over services/schools.py — no business logic here."""
 import itertools
 import os
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -306,6 +307,43 @@ async def sources_page(request: Request):
     return templates.TemplateResponse(request, "sources.html", {})
 
 
+@router.get("/neighborhood", response_class=HTMLResponse)
+async def neighborhood_query(request: Request, q: str = "", format: str = ""):
+    """Query-param entry point for the find-schools-in-neighborhood WebMCP
+    form (declarative forms submit query strings, not path segments).
+    format=json → the NeighborhoodDetail payload minus the boundary
+    polygon (map-only weight, useless to agents) plus other_candidates so
+    an agent can disambiguate — "maspeth" top-matches Elmhurst-Maspeth
+    with Maspeth as runner-up. HTML → 303 to the canonical slug page."""
+    if format == "json":
+        if not q.strip():
+            return JSONResponse(
+                {"error": "Missing required parameter: q"}, status_code=400
+            )
+        detail = get_neighborhood(q)
+        if detail is None:
+            return JSONResponse(
+                {"error": f"No NYC neighborhood (NTA) matched {q!r}.", "query": q},
+                status_code=404,
+            )
+        payload = detail.model_dump(mode="json", exclude={"boundary"})
+        payload["query"] = q
+        payload["url"] = f"/neighborhood/{quote(detail.nta_name.replace(' ', '-'))}"
+        return JSONResponse(payload)
+    if not q.strip():
+        return RedirectResponse("/", status_code=303)
+    detail = get_neighborhood(q)
+    if detail is None:
+        return HTMLResponse(
+            content=f"<h1>Neighborhood not found</h1><p>No NTA matched <code>{escape(q)}</code>.</p>",
+            status_code=404,
+        )
+    # Canonical slug redirect (NTA slug convention: spaces → dashes).
+    return RedirectResponse(
+        f"/neighborhood/{quote(detail.nta_name.replace(' ', '-'))}", status_code=303
+    )
+
+
 @router.get("/neighborhood/{query:path}", response_class=HTMLResponse)
 async def neighborhood_page(request: Request, query: str):
     """Neighborhood (NTA) report. `query` is fuzzy-matched, so colloquial
@@ -468,6 +506,22 @@ _WEB_MCP_TOOLS = [
         "endpoint": "/zoned",
         "method": "GET",
     },
+    {
+        "name": "find-schools-in-neighborhood",
+        "description": "List the NYC public schools in a named neighborhood (NTA), with the neighborhood's rank vs other NYC neighborhoods on key metrics. Names are fuzzy-matched — colloquial forms like 'Park Slope' work; when a name is ambiguous the result's other_candidates lists close alternates to offer the user.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "q": {
+                    "type": "string",
+                    "description": "A NYC neighborhood name, e.g. 'Maspeth', 'Park Slope', 'Mott Haven'. Fuzzy-matched against the city's 195 official NTA names.",
+                },
+            },
+            "required": ["q"],
+        },
+        "endpoint": "/neighborhood",
+        "method": "GET",
+    },
 ]
 
 
@@ -489,7 +543,8 @@ Journalism-style accountability and equity data for every NYC public school, key
 - [Homepage](https://nycschools.datatribune.io/) — leaderboards by metric and by neighborhood
 - [Search](https://nycschools.datatribune.io/search) — fuzzy school search by name or DBN
 - [Zoned schools](https://nycschools.datatribune.io/zoned) — address → zoned ES + MS
-- `/search` and `/zoned` accept `format=json` for structured results (same service-layer payloads the HTML shows) — the WebMCP forms answer agents in place via this.
+- [Neighborhood lookup](https://nycschools.datatribune.io/neighborhood?q=park+slope) — fuzzy NTA match → school roster + neighborhood peer ranks
+- `/search`, `/zoned`, and `/neighborhood` accept `format=json` for structured results (same service-layer payloads the HTML shows) — the WebMCP forms answer agents in place via this.
 - [Sources](https://nycschools.datatribune.io/sources) — every dataset and its vintage
 
 ## Reference

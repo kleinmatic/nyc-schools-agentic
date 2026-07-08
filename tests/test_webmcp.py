@@ -19,19 +19,28 @@ def client():
 @pytest.mark.parametrize(
     "path, expected_tool",
     [
-        # Pages that host the toolnames inline in their primary content.
+        # Pages that host toolnames inline in their primary content pick
+        # the rest up via the webmcp_exclude re-include of the global
+        # partial — every page must expose all three tools.
         ("/zoned", "find-zoned-schools-by-address"),
+        ("/zoned", "search-schools-by-name"),
+        ("/zoned", "find-schools-in-neighborhood"),
         ("/search", "search-schools-by-name"),
         ("/search", "find-zoned-schools-by-address"),
+        ("/search", "find-schools-in-neighborhood"),
         ("/", "search-schools-by-name"),
         ("/", "find-zoned-schools-by-address"),
-        # Pages that pick up both toolnames via the base.html global block.
+        ("/", "find-schools-in-neighborhood"),
+        # Pages that pick up all toolnames via the base.html global block.
         ("/school/15K321", "search-schools-by-name"),
         ("/school/15K321", "find-zoned-schools-by-address"),
+        ("/school/15K321", "find-schools-in-neighborhood"),
         ("/neighborhood/Park-Slope-Gowanus", "search-schools-by-name"),
         ("/neighborhood/Park-Slope-Gowanus", "find-zoned-schools-by-address"),
+        ("/neighborhood/Park-Slope-Gowanus", "find-schools-in-neighborhood"),
         ("/sources", "search-schools-by-name"),
         ("/sources", "find-zoned-schools-by-address"),
+        ("/sources", "find-schools-in-neighborhood"),
     ],
 )
 def test_webmcp_toolname_present(client, path, expected_tool):
@@ -65,16 +74,20 @@ def test_webmcp_input_has_param_description(client, path):
     "path, toolname",
     [
         # Spec compliance: each toolname must appear exactly once per page.
-        # Pages with inline forms (/, /zoned) suppress the global block; pages
-        # without inline forms pick up the single global instance. We match
-        # ` toolname="..."` (leading space) to exclude `data-toolname="..."`
-        # on the agent-active-pill <button> — that's a JS-side selector hook,
-        # not a WebMCP form annotation.
+        # Pages with inline forms (/, /zoned) exclude those names from the
+        # global-partial re-include; pages without inline forms pick up the
+        # single global instance. We match ` toolname="..."` (leading space)
+        # to exclude `data-toolname="..."` on the agent-active-pill <button>
+        # — that's a JS-side selector hook, not a WebMCP form annotation.
         ("/", "search-schools-by-name"),
         ("/", "find-zoned-schools-by-address"),
+        ("/", "find-schools-in-neighborhood"),
         ("/zoned", "find-zoned-schools-by-address"),
+        ("/zoned", "search-schools-by-name"),
+        ("/zoned", "find-schools-in-neighborhood"),
         ("/school/15K321", "search-schools-by-name"),
         ("/school/15K321", "find-zoned-schools-by-address"),
+        ("/school/15K321", "find-schools-in-neighborhood"),
         ("/neighborhood/Park-Slope-Gowanus", "search-schools-by-name"),
         ("/sources", "search-schools-by-name"),
     ],
@@ -225,14 +238,18 @@ def test_llms_txt_returns_200_with_orientation_block(client):
     assert "\n> " in text
 
 
-def test_webmcp_manifest_returns_valid_json_with_both_tools(client):
+def test_webmcp_manifest_returns_valid_json_with_all_tools(client):
     r = client.get("/.well-known/webmcp")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
     manifest = r.json()
     assert manifest["name"] == "nyc-schools"
     tool_names = {t["name"] for t in manifest["tools"]}
-    assert tool_names == {"search-schools-by-name", "find-zoned-schools-by-address"}
+    assert tool_names == {
+        "search-schools-by-name",
+        "find-zoned-schools-by-address",
+        "find-schools-in-neighborhood",
+    }
     # Each tool carries its endpoint + method so a pre-visit agent knows
     # how to invoke without parsing the HTML form.
     for t in manifest["tools"]:

@@ -100,6 +100,57 @@ def test_zoned_json_missing_address_is_structured_error_not_html(client):
     assert "address" in r.json()["error"]
 
 
+# ----- /neighborhood?format=json -----
+
+def test_neighborhood_json_fuzzy_matches_and_carries_candidates(client):
+    """'maspeth' top-matches Elmhurst-Maspeth with Maspeth itself as a
+    runner-up — the exact ambiguity that made an agent answer the wrong
+    neighborhood. The JSON contract must surface other_candidates so the
+    agent can disambiguate with the user."""
+    r = client.get("/neighborhood", params={"q": "maspeth", "format": "json"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    body = r.json()
+    assert body["query"] == "maspeth"
+    assert body["nta_name"] == "Elmhurst-Maspeth"
+    assert "Maspeth" in body["other_candidates"]
+    assert body["n_schools"] == len(body["schools"]) > 0
+    assert body["url"] == "/neighborhood/Elmhurst-Maspeth"
+    # The boundary polygon is map-only weight — excluded from the agent
+    # payload.
+    assert "boundary" not in body
+
+
+def test_neighborhood_json_missing_q_is_structured_error_not_html(client):
+    r = client.get("/neighborhood", params={"format": "json"})
+    assert r.status_code == 400
+    assert r.headers["content-type"].startswith("application/json")
+    assert "q" in r.json()["error"]
+
+
+def test_neighborhood_json_no_match_is_structured_404(client):
+    r = client.get(
+        "/neighborhood", params={"q": "zzzzqqqq nowhere", "format": "json"}
+    )
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.json()["query"] == "zzzzqqqq nowhere"
+
+
+def test_neighborhood_html_query_redirects_to_canonical_slug(client):
+    r = client.get(
+        "/neighborhood", params={"q": "park slope"}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/neighborhood/Park-Slope-Gowanus"
+
+
+def test_neighborhood_html_blank_q_redirects_home(client):
+    r = client.get("/neighborhood", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/"
+
+
 # ----- HTML path unchanged without format=json -----
 
 def test_search_html_path_unchanged_without_format(client):

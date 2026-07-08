@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Find Zoned Schools — The Data Tribune{% endblock %}
 {% block meta_description %}Find the NYC public elementary and middle schools zoned for your address. Geocoded against NYC's official school-zone polygons.{% endblock %}
-{# /zoned hosts the find-zoned-schools-by-address toolname inline. Suppress
-   the global forms block so we don't duplicate that toolname; the global
-   `search-schools-by-name` is also redundant here since /search is one
-   click away in the masthead. #}
-{% block global_webmcp_forms %}{% endblock %}
+{# /zoned hosts the find-zoned-schools-by-address toolname inline —
+   exclude it from the global block (WebMCP requires unique toolnames per
+   document) but keep search + neighborhood exposed so agents have the
+   full tool set on this page too. #}
+{% block global_webmcp_forms %}{% with webmcp_exclude=("find-zoned-schools-by-address",) %}{% include "partials/_webmcp_global_forms.html" %}{% endwith %}{% endblock %}
 {% block content %}
 
 <div class="mb-8">

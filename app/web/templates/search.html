@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}NYC Schools — The Data Tribune{% endblock %}
 {% block meta_description %}A data report on every NYC public school: demographics, test scores, attendance, accountability. Searchable by name, DBN, or address — and queryable by AI agents over MCP.{% endblock %}
-{# Homepage hosts both WebMCP toolnames inline in its hero — suppress the
-   global block to avoid duplicate toolnames in the document. #}
-{% block global_webmcp_forms %}{% endblock %}
+{# Homepage hosts the search + zoned toolnames inline in its hero —
+   exclude those from the global block (WebMCP requires unique toolnames
+   per document) but keep the rest of the tool set exposed. #}
+{% block global_webmcp_forms %}{% with webmcp_exclude=("search-schools-by-name", "find-zoned-schools-by-address") %}{% include "partials/_webmcp_global_forms.html" %}{% endwith %}{% endblock %}
 {% block content %}
 {% if not query %}
 <section class="mb-10 text-center">

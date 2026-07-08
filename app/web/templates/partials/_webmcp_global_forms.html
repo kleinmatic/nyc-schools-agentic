@@ -1,16 +1,19 @@
 {# Compact site-wide WebMCP-annotated forms. Included from base.html on
-   every page EXCEPT pages that already host the same toolnames in their
-   primary content (the homepage / and /zoned) — those override the
-   `global_webmcp_forms` block to empty so we never duplicate a toolname
-   within one document (WebMCP spec requires unique toolnames per page).
+   every page. A page that hosts one of these toolnames inline in its
+   primary content overrides the `global_webmcp_forms` block and
+   re-includes this partial inside {% with webmcp_exclude=(...) %} naming
+   the duplicated toolnames — WebMCP requires unique toolnames per
+   document, but every page should still expose the full tool set.
 
    Visible UI is intentionally small — these are an "agent-discoverable
    action surface for any page" first, "extra search affordance for
    humans" second. Keeps the page hierarchy clean while still meeting
    the WebMCP rule that every annotated action maps to a real
    human-browseable page. #}
+{% set _skip = webmcp_exclude or () %}
 <section class="max-w-4xl mx-auto px-6 pt-6 pb-2">
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-slate-200 rounded-lg p-4">
+    {% if "search-schools-by-name" not in _skip %}
     <form action="/search" method="get"
           toolname="search-schools-by-name"
           tooldescription="Search NYC public schools by name or DBN. Returns a ranked list of matching schools with summary info."
@@ -26,7 +29,9 @@
       >
     </form>
     <button type="button" class="agent-active-pill" data-toolname="search-schools-by-name" disabled aria-live="polite">Agent activated!</button>
+    {% endif %}
 
+    {% if "find-zoned-schools-by-address" not in _skip %}
     <form action="/zoned" method="get"
           toolname="find-zoned-schools-by-address"
           tooldescription="Find the NYC public schools an address is zoned for. Returns the zoned elementary school (where one exists) plus, for middle school, any school-specific zone-priority polygon hits and the district admission mechanic — NYC middle school is district-based choice, not strict zoning."
@@ -42,5 +47,24 @@
       >
     </form>
     <button type="button" class="agent-active-pill" data-toolname="find-zoned-schools-by-address" disabled aria-live="polite">Agent activated!</button>
+    {% endif %}
+
+    {% if "find-schools-in-neighborhood" not in _skip %}
+    <form action="/neighborhood" method="get"
+          toolname="find-schools-in-neighborhood"
+          tooldescription="List the NYC public schools in a named neighborhood (NTA), with the neighborhood's rank vs other NYC neighborhoods on key metrics. Names are fuzzy-matched — colloquial forms like 'Park Slope' work; when a name is ambiguous the result's other_candidates lists close alternates to offer the user."
+          toolautosubmit>
+      <label class="text-xs text-slate-500 uppercase tracking-wide block mb-1">Schools by Neighborhood</label>
+      <input
+        type="search"
+        name="q"
+        autocomplete="off"
+        placeholder="e.g. Maspeth, Park Slope"
+        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:border-slate-500 focus:outline-none"
+        toolparamdescription="A NYC neighborhood name, e.g. 'Maspeth', 'Park Slope', 'Mott Haven'. Fuzzy-matched against the city's 195 official NTA names."
+      >
+    </form>
+    <button type="button" class="agent-active-pill" data-toolname="find-schools-in-neighborhood" disabled aria-live="polite">Agent activated!</button>
+    {% endif %}
   </div>
 </section>
