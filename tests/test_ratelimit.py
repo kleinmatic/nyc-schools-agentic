@@ -40,43 +40,38 @@ def test_healthz_is_exempt():
         assert client.get("/healthz").status_code == 200  # …healthz unaffected
 
 
-def test_forwarded_ip_keys_per_caller_for_trusted_requests(monkeypatch):
-    """With a valid edge token the forwarding headers are trusted, so two
-    end-clients behind Cloudflare get separate buckets."""
-    monkeypatch.setenv("EDGE_TOKEN", "edge-secret")
+def test_fly_client_ip_keys_per_caller():
+    """Fly-Client-IP is set (and overwritten) by the Fly proxy, so it's the
+    trustworthy per-client key for direct-to-origin traffic: two distinct
+    values get separate buckets."""
     client = _make_client(rate=0.001, burst=1)
-    t = {"X-Edge-Token": "edge-secret"}
-    assert client.get("/", headers={**t, "X-Forwarded-For": "1.1.1.1"}).status_code == 200
-    assert client.get("/", headers={**t, "X-Forwarded-For": "1.1.1.1"}).status_code == 429
-    # A different caller has its own bucket.
-    assert client.get("/", headers={**t, "X-Forwarded-For": "2.2.2.2"}).status_code == 200
+    assert client.get("/", headers={"Fly-Client-IP": "9.9.9.9"}).status_code == 200
+    assert client.get("/", headers={"Fly-Client-IP": "9.9.9.9"}).status_code == 429
+    # A different client has its own bucket.
+    assert client.get("/", headers={"Fly-Client-IP": "1.1.1.1"}).status_code == 200
 
 
-def test_fly_client_ip_wins_over_x_forwarded_for(monkeypatch):
-    """For a trusted caller — here a direct MCP consumer with a valid
-    token — Fly-Client-IP takes precedence over X-Forwarded-For."""
-    monkeypatch.setenv("MCP_ACCESS_TOKEN", "mcp-secret")
+def test_fly_client_ip_wins_over_x_forwarded_for():
+    """Fly-Client-IP takes precedence; X-Forwarded-For is never consulted
+    (Fly appends to it, so its leftmost hop is client-controlled)."""
     client = _make_client(rate=0.001, burst=1)
-    base = {"X-Schools-Token": "mcp-secret"}
-    h1 = {**base, "Fly-Client-IP": "9.9.9.9", "X-Forwarded-For": "1.1.1.1"}
-    h2 = {**base, "Fly-Client-IP": "9.9.9.9", "X-Forwarded-For": "8.8.8.8"}
+    h1 = {"Fly-Client-IP": "9.9.9.9", "X-Forwarded-For": "1.1.1.1"}
+    h2 = {"Fly-Client-IP": "9.9.9.9", "X-Forwarded-For": "8.8.8.8"}
     assert client.get("/", headers=h1).status_code == 200
     # Same Fly-Client-IP → same bucket, despite the differing XFF.
     assert client.get("/", headers=h2).status_code == 429
 
 
-def test_untrusted_caller_cannot_rotate_buckets_via_forwarded_headers():
-    """No valid edge/MCP token → forwarding headers are ignored and the
-    caller is keyed on the transport peer, so rotating Fly-Client-IP /
-    X-Forwarded-For per request cannot mint fresh buckets. This is the
-    C1/C2 limiter-bypass fix: without it a direct-to-origin flood evades
-    the app's only abuse control."""
+def test_x_forwarded_for_alone_cannot_rotate_buckets():
+    """X-Forwarded-For is client-spoofable, so it must NOT key the bucket —
+    with no Fly-Client-IP, rotating XFF keeps the same transport-peer
+    bucket. This is the C1/C2 limiter-bypass fix: trusting XFF let a
+    direct-to-origin flood mint a fresh bucket per request and evade the
+    app's only abuse control."""
     client = _make_client(rate=0.001, burst=1)
-    assert client.get("/", headers={"Fly-Client-IP": "9.9.9.9"}).status_code == 200
-    # Different spoofed header values, same real transport peer → same
-    # bucket → throttled.
-    assert client.get("/", headers={"Fly-Client-IP": "8.8.8.8"}).status_code == 429
-    assert client.get("/", headers={"X-Forwarded-For": "7.7.7.7"}).status_code == 429
+    assert client.get("/", headers={"X-Forwarded-For": "9.9.9.9"}).status_code == 200
+    # Different spoofed XFF, same real transport peer → same bucket → 429.
+    assert client.get("/", headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 429
 
 
 def test_cf_connecting_ip_trusted_only_with_valid_edge_token(monkeypatch):
