@@ -75,6 +75,27 @@ def test_mcp_gate_does_not_touch_html_routes(client, monkeypatch):
     assert client.get("/").status_code == 200
 
 
+def test_mcp_gate_accepts_multiple_named_tokens(client, monkeypatch):
+    """Per-consumer tokens: each named token in MCP_ACCESS_TOKENS is
+    accepted, and a value not in the set is 401'd — so one consumer can be
+    revoked by dropping its entry without disturbing the others."""
+    monkeypatch.delenv("MCP_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("MCP_ACCESS_TOKENS", "publisher:pub-secret,owner:own-secret")
+    assert _post_mcp(client, {"X-Schools-Token": "pub-secret"}).status_code == 200
+    assert _post_mcp(client, {"X-Schools-Token": "own-secret"}).status_code == 200
+    assert _post_mcp(client, {"X-Schools-Token": "revoked-value"}).status_code == 401
+
+
+def test_mcp_gate_dual_valid_during_cutover(client, monkeypatch):
+    """Cutover window: the legacy single token AND the new named set are
+    honored at once, so a consumer migrates to its own token with no break
+    before the shared value is retired."""
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", "old-shared")
+    monkeypatch.setenv("MCP_ACCESS_TOKENS", "publisher:new-pub")
+    assert _post_mcp(client, {"X-Schools-Token": "old-shared"}).status_code == 200
+    assert _post_mcp(client, {"X-Schools-Token": "new-pub"}).status_code == 200
+
+
 # ----- edge lockdown -----
 
 def test_edge_lockdown_redirects_direct_get(client, monkeypatch):

@@ -4,10 +4,14 @@ the Data Tribune launch at datatribune.io).
 Two pure-ASGI middlewares, both dormant until their env var is set — so
 local dev, tests, and CI are unchanged until `fly secrets set` arms them:
 
-- McpAccessGateMiddleware: with MCP_ACCESS_TOKEN set, every /mcp/*
+- McpAccessGateMiddleware: with a token configured, every /mcp/*
   request must carry `X-Schools-Token: <value>` or gets a clean 401.
-  Owner decision 2026-07-06: hard token wall, not throttled-public —
-  "keep proprietary data proprietary."
+  Tokens come from the legacy single MCP_ACCESS_TOKEN and/or the
+  per-consumer MCP_ACCESS_TOKENS set (comma-separated id:secret) — the
+  gate accepts any of them, so one consumer can be revoked without
+  disturbing the rest, and both env vars together give a dual-valid
+  migration window. Owner decision 2026-07-06: hard token wall, not
+  throttled-public — "keep proprietary data proprietary."
 - EdgeLockdownMiddleware: with EDGE_TOKEN set, non-MCP traffic must
   arrive through Cloudflare (which stamps `X-Edge-Token` via a Transform
   Rule on the canonical host). Direct-to-origin browsers get a 301 to
@@ -28,7 +32,8 @@ from urllib.parse import quote
 
 CANONICAL_HOST = "nycschools.datatribune.io"
 
-_MCP_TOKEN_ENV = "MCP_ACCESS_TOKEN"
+_MCP_TOKEN_ENV = "MCP_ACCESS_TOKEN"    # legacy single shared token
+_MCP_TOKENS_ENV = "MCP_ACCESS_TOKENS"  # per-consumer set: comma-separated id:secret
 _EDGE_TOKEN_ENV = "EDGE_TOKEN"
 _MCP_HEADER = b"x-schools-token"
 _EDGE_HEADER = b"x-edge-token"
@@ -59,8 +64,49 @@ def _token_matches(supplied: str | None, expected: str | None) -> bool:
     )
 
 
+def _accepted_mcp_tokens() -> list[tuple[str, str]]:
+    """(id, secret) pairs the MCP gate accepts. Reads the legacy single
+    MCP_ACCESS_TOKEN plus the per-consumer MCP_ACCESS_TOKENS set
+    (comma-separated, each "id:secret", or a bare secret → id "default").
+    Named per-consumer tokens let us attribute and revoke one caller
+    without disturbing the others; the legacy var keeps the wall up and,
+    set alongside the new set, gives a dual-valid window so a consumer can
+    migrate to its own token before the shared one is retired."""
+    pairs: list[tuple[str, str]] = []
+    single = os.environ.get(_MCP_TOKEN_ENV)
+    if single:
+        pairs.append(("shared", single))
+    for item in os.environ.get(_MCP_TOKENS_ENV, "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        cid, sep, secret = item.partition(":")
+        if sep:
+            pairs.append((cid.strip() or "default", secret.strip()))
+        else:
+            pairs.append(("default", item))
+    return pairs
+
+
+def mcp_gate_armed() -> bool:
+    return bool(_accepted_mcp_tokens())
+
+
+def matched_mcp_token_id(scope) -> str | None:
+    """The consumer id whose token the request carries, or None. Returned
+    separately from the boolean so a future audit-log line can attribute a
+    call to a consumer."""
+    supplied = _header(scope, _MCP_HEADER)
+    if not supplied:
+        return None
+    for cid, secret in _accepted_mcp_tokens():
+        if _token_matches(supplied, secret):
+            return cid
+    return None
+
+
 def has_valid_mcp_token(scope) -> bool:
-    return _token_matches(_header(scope, _MCP_HEADER), os.environ.get(_MCP_TOKEN_ENV))
+    return matched_mcp_token_id(scope) is not None
 
 
 def has_valid_edge_token(scope) -> bool:
@@ -86,7 +132,7 @@ class McpAccessGateMiddleware:
         if (
             scope["type"] != "http"
             or not _is_mcp_path(scope["path"])
-            or not os.environ.get(_MCP_TOKEN_ENV)
+            or not mcp_gate_armed()
             or has_valid_mcp_token(scope)
         ):
             return await self.app(scope, receive, send)
