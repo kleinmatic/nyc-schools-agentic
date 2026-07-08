@@ -5,12 +5,16 @@ response streaming and can interfere with the MCP Streamable HTTP (SSE)
 mount. On an allowed request it passes straight through; over the limit
 it answers 429 with Retry-After and never touches the wrapped app.
 
-Keying: CF-Connecting-IP (trusted ONLY on requests bearing a valid
-X-Edge-Token — otherwise a direct-to-origin caller could spoof it to
-rotate buckets) → Fly-Client-IP (set by Fly's proxy; behind Cloudflare
-this is a CF edge address, hence the CF header taking precedence) →
-first X-Forwarded-For hop → transport peer address. The Fly proxy is
-the trust boundary in production, and proxy-level concurrency limits
+Keying: forwarding headers are honored only for a KNOWN caller — one
+behind Cloudflare (valid X-Edge-Token, stamped by the CF Transform
+Rule) or a direct MCP consumer (valid X-Schools-Token). For such a
+caller: CF-Connecting-IP → Fly-Client-IP → first X-Forwarded-For hop.
+An untrusted direct-to-origin caller is keyed on the transport peer
+(the Fly proxy address) instead — so it can't rotate a forwarded header
+to mint a fresh bucket per request and evade the limiter; untrusted
+callers share the peer bucket, which is self-limiting, not exploitable.
+The Fly proxy is the trust boundary in production (--forwarded-allow-ips
+is narrowed to it in the Dockerfile) and proxy-level concurrency limits
 (fly.toml) backstop header games. State is per-process and resets on
 deploy — fine for a single-machine app; move to a shared store before
 scaling out.
@@ -45,19 +49,25 @@ class RateLimitMiddleware:
     def _client_ip(self, scope) -> str:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                    for k, v in scope.get("headers", [])}
-        ip = None
-        if headers.get("cf-connecting-ip"):
-            from .gates import has_valid_edge_token
-            if has_valid_edge_token(scope):
-                ip = headers["cf-connecting-ip"]
-        if not ip:
-            ip = headers.get("fly-client-ip")
-        if not ip and (xff := headers.get("x-forwarded-for")):
-            ip = xff.split(",")[0].strip()
-        if not ip:
-            client = scope.get("client")
-            ip = client[0] if client else "unknown"
-        return ip
+        # Forwarding headers are attacker-settable, so honor them ONLY for a
+        # known caller: behind Cloudflare (valid edge token) or a direct MCP
+        # consumer (valid MCP token). An untrusted direct-to-origin caller is
+        # keyed on the transport peer instead, so rotating Fly-Client-IP /
+        # X-Forwarded-For per request can't mint a fresh bucket and evade the
+        # limiter (the C1/C2 bypass fix). The MCP-token branch is what keeps
+        # the agentic-newsroom consumer on its own real-IP bucket rather than
+        # collapsing every direct MCP caller onto the shared Fly-proxy peer.
+        from .gates import has_valid_edge_token, has_valid_mcp_token
+        trusted_edge = has_valid_edge_token(scope)
+        if trusted_edge and headers.get("cf-connecting-ip"):
+            return headers["cf-connecting-ip"]
+        if trusted_edge or has_valid_mcp_token(scope):
+            if headers.get("fly-client-ip"):
+                return headers["fly-client-ip"]
+            if xff := headers.get("x-forwarded-for"):
+                return xff.split(",")[0].strip()
+        client = scope.get("client")
+        return client[0] if client else "unknown"
 
     def _prune(self, now: float) -> None:
         """Drop buckets idle long enough to have refilled completely —
