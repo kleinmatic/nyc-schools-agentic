@@ -18,6 +18,27 @@ def test_search_by_short_name_finds_ps_321():
     assert any(s.dbn == "15K321" for s in results)
 
 
+def test_oversized_search_query_returns_empty_without_fuzzy_scan():
+    """F4 input cap: a DoS-shaped query is rejected before the rapidfuzz
+    scan over ~1,800 names, instead of burning CPU proportional to its
+    length."""
+    assert search_schools("x" * 5000) == []
+
+
+def test_oversized_neighborhood_query_returns_none():
+    """Same cap on the NTA fuzzy match (get_neighborhood → _fuzzy_match_ntas)."""
+    from app.services.analytics import get_neighborhood
+    assert get_neighborhood("x" * 5000) is None
+
+
+def test_oversized_address_short_circuits_before_geocode():
+    """F4: an over-length address returns None WITHOUT an outbound GeoSearch
+    call. No respx mock is installed, so any real call would raise — reaching
+    None proves the length guard short-circuits before the network."""
+    import asyncio
+    assert asyncio.run(geocode("x" * 5000)) is None
+
+
 def test_search_handles_periods_in_ps_abbreviation():
     """The school's canonical name is 'P.S. 321 William Penn' (with
     periods); a user typing the more common abbreviation 'PS 321' should

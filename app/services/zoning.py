@@ -25,6 +25,10 @@ from .models import GeocodingResult, ZonedSchoolMatch, ZonedSearchResult
 
 GEOSEARCH_URL = "https://geosearch.planninglabs.nyc/v2/search"
 HTTP_TIMEOUT = 10.0
+# Cap the address before it's forwarded to GeoSearch and stored as a cache
+# key (F4): bounds the outbound request payload and the per-key cache
+# memory, and rejects DoS-shaped inputs. Real NYC addresses are «100 chars.
+MAX_ADDRESS_LEN = 256
 
 # TTL/LRU cache over geocode results (issue #4): without it every /zoned
 # hit and every MCP geocode_address / find_schools_for_address call is an
@@ -46,7 +50,7 @@ async def geocode(address: str) -> Optional[GeocodingResult]:
     """Resolve a street address to lat/lon via NYC GeoSearch. Returns None
     if the address is empty, the API errors, or no features come back."""
     address = (address or "").strip()
-    if not address:
+    if not address or len(address) > MAX_ADDRESS_LEN:
         return None
     key = " ".join(address.casefold().split())
     now = time.monotonic()

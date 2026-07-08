@@ -53,6 +53,10 @@ _SWD_SUBGROUP = "Students with Disabilities"
 _GRAD_COHORT_ORDER = {"4-Year": 0, "5-Year": 1, "6-Year": 2}
 
 DBN_RE = re.compile(r"^\d{0,2}[MXKQR]\d{1,4}$", re.IGNORECASE)
+# Cap free-text search input before the rapidfuzz scan over ~1,800 school
+# names (fuzzy CPU scales with query length). Real names/DBNs are «128
+# chars; anything longer is a DoS-shaped input, so treat it as no match.
+MAX_QUERY_LEN = 128
 _BUDGET_RE = re.compile(r"[^0-9.\-]")
 _CLEAN_NAME_RE = re.compile(r"[^a-z0-9 ]")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -232,7 +236,7 @@ def search_schools(query: str, limit: int = 10) -> list[SchoolSummary]:
     Latest academic year only — one row per school.
     """
     q = (query or "").strip()
-    if not q:
+    if not q or len(q) > MAX_QUERY_LEN:
         return []
 
     df = data.get_store().demographics

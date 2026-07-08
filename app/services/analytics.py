@@ -560,6 +560,10 @@ def homepage_borough_grid() -> BoroughGrid:
 # of the NTA name); fragment-level false positives like "xyzzy fake
 # neighborhood" matching 'Norwood' on 'ood' score ~77.
 _NTA_FUZZY_MIN_SCORE = 85
+# Cap the query before scoring it against all 195 NTA names (fuzzy CPU
+# scales with query length). Neighborhood names are short; anything past
+# this is a DoS-shaped input, treated as no match.
+_NTA_QUERY_MAX_LEN = 128
 # Other candidates that scored within this many points of the top match
 # get surfaced for the caller to consider.
 _NTA_OTHER_CANDIDATE_BAND = 15
@@ -582,7 +586,7 @@ def _ntas_with_boros(store) -> list[tuple[str, Optional[str]]]:
 def _fuzzy_match_ntas(query: str, store) -> list[tuple[str, Optional[str], int]]:
     """Score every NTA against the query and return ranked candidates."""
     q = query.strip()
-    if not q:
+    if not q or len(q) > _NTA_QUERY_MAX_LEN:
         return []
     pairs = _ntas_with_boros(store)
     scored: list[tuple[str, Optional[str], int]] = []
