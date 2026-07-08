@@ -125,6 +125,59 @@ class _McpTrailingSlashMiddleware:
         await self.app(scope, receive, send)
 
 
+class _McpBodyLimitMiddleware:
+    """Reject oversized request bodies on the MCP mount before they're
+    buffered into memory (F14). MCP JSON-RPC requests are KB-scale; the cap
+    is generous. Pure ASGI and REQUEST-side only — it fast-rejects on a
+    declared Content-Length and otherwise wraps `receive` to bound streamed
+    bytes; it never touches `send`, so the Streamable HTTP (SSE) response
+    stream is unaffected. Scoped to /mcp/* — web routes are GET-only and
+    carry no body. Runs inside the MCP access gate, so a tokenless oversized
+    POST is 401'd (body never read) before this ever sees it."""
+    MAX_BODY = 1_000_000  # 1 MB
+
+    def __init__(self, app):
+        self.app = app
+
+    async def _reject(self, send):
+        body = b'{"detail":"Request body too large."}'
+        await send({"type": "http.response.start", "status": 413, "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ]})
+        await send({"type": "http.response.body", "body": body})
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/mcp"):
+            return await self.app(scope, receive, send)
+        for k, v in scope.get("headers", []):
+            if k == b"content-length":
+                try:
+                    over = int(v) > self.MAX_BODY
+                except ValueError:
+                    over = True
+                if over:
+                    return await self._reject(send)
+                break
+        # Chunked / unset Content-Length: cap accumulated body bytes and cut
+        # the stream (http.disconnect) if a caller streams past the limit, so
+        # memory stays bounded even without a declared length.
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            if received > self.MAX_BODY:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.MAX_BODY:
+                    return {"type": "http.disconnect"}
+            return message
+
+        await self.app(scope, limited_receive, send)
+
+
 # Streamable HTTP ASGI sub-app. path="/" makes it serve at the mount point
 # itself, so the canonical URL is /mcp/ (with trailing slash).
 mcp_app = mcp.http_app(path="/")
@@ -134,15 +187,18 @@ app = FastAPI(
     lifespan=combine_lifespans(data_lifespan, mcp_app.lifespan),
 )
 # add_middleware is LIFO — last added runs outermost. Execution order:
-#   SecurityHeaders → RateLimit → EdgeLockdown → McpAccessGate →
-#   McpTrailingSlash → router
+#   SecurityHeaders → RateLimit → McpAccessGate → EdgeLockdown →
+#   McpBodyLimit → McpTrailingSlash → router
 # Headers outermost so every response (429s, 401s, 301s included) gets
 # them. Rate limit before the gates so floods 429 cheaply. MCP gate
 # OUTSIDE the edge gate is deliberate: a bad-token /mcp/* request must
-# 401, never 301 to an HTML page (see app/gates.py). Both gates are
-# dormant until MCP_ACCESS_TOKEN / EDGE_TOKEN are set. Rate-limit knobs:
+# 401, never 301 to an HTML page (see app/gates.py). The MCP body-size
+# limit sits INSIDE both gates, so a tokenless oversized POST is 401'd
+# before its body is ever read. Both gates are dormant until
+# MCP_ACCESS_TOKEN / EDGE_TOKEN are set. Rate-limit knobs:
 # RATE_LIMIT_RATE / RATE_LIMIT_BURST; policy published in /llms.txt.
 app.add_middleware(_McpTrailingSlashMiddleware)
+app.add_middleware(_McpBodyLimitMiddleware)
 app.add_middleware(EdgeLockdownMiddleware)
 app.add_middleware(McpAccessGateMiddleware)
 app.add_middleware(RateLimitMiddleware)

@@ -164,6 +164,23 @@ def test_edge_lockdown_redirect_encodes_crlf_and_non_latin1_path(monkeypatch):
         assert location.startswith(f"https://{CANONICAL_HOST}".encode())
 
 
+def test_mcp_body_size_limit_rejects_oversized_post(client):
+    """A POST to /mcp/ over the 1 MB cap is rejected with 413 before the
+    body is buffered/parsed (F14). Gates are dormant in this fixture, so
+    this exercises the body limit itself, not auth."""
+    big = b"x" * (1_000_001)
+    r = client.post("/mcp/", content=big,
+                    headers={"content-type": "application/json"})
+    assert r.status_code == 413
+
+
+def test_mcp_normal_sized_post_not_body_limited(client):
+    """A normal small MCP POST is unaffected by the body cap — it reaches
+    the mount and gets a real MCP response (not a 413)."""
+    r = _post_mcp(client)
+    assert r.status_code != 413
+
+
 def test_edge_lockdown_health_check_always_open(client, monkeypatch):
     monkeypatch.setenv("EDGE_TOKEN", EDGE_TOKEN)
     monkeypatch.setenv("MCP_ACCESS_TOKEN", MCP_TOKEN)
