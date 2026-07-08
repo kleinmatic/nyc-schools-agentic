@@ -112,9 +112,29 @@ def test_bucket_refills_over_time(monkeypatch):
 
 def test_prune_drops_fully_refilled_buckets(monkeypatch):
     import app.ratelimit as rl
+    from collections import OrderedDict
     t = {"now": 1000.0}
     monkeypatch.setattr(rl.time, "monotonic", lambda: t["now"])
     mw = RateLimitMiddleware(lambda s, r, sd: None, rate=1.0, burst=2, max_buckets=10)
-    mw._buckets = {f"ip{i}": (0.0, 900.0) for i in range(11)}  # idle 100s > 2s refill
+    mw._buckets = OrderedDict((f"ip{i}", (0.0, 900.0)) for i in range(11))  # idle 100s > 2s refill
     mw._prune(t["now"])
     assert mw._buckets == {}
+
+
+def test_evict_hard_caps_when_every_bucket_is_fresh(monkeypatch):
+    """A live flood keeps every bucket fresh, so idle-prune frees nothing;
+    _evict must then hard-drop the least-recently-used entries to the cap,
+    or the map grows unbounded and the prune scan re-runs per request."""
+    import app.ratelimit as rl
+    from collections import OrderedDict
+    t = {"now": 1000.0}
+    monkeypatch.setattr(rl.time, "monotonic", lambda: t["now"])
+    mw = RateLimitMiddleware(lambda s, r, sd: None, rate=1.0, burst=2, max_buckets=5)
+    # 8 buckets, all just touched (fresh) → idle-prune removes none.
+    mw._buckets = OrderedDict((f"ip{i}", (0.0, t["now"])) for i in range(8))
+    mw._evict(t["now"])
+    assert len(mw._buckets) == 5
+    # LRU: the three oldest (ip0..ip2) are evicted, newest retained.
+    assert "ip0" not in mw._buckets
+    assert "ip2" not in mw._buckets
+    assert "ip7" in mw._buckets

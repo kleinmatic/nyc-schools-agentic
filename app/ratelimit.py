@@ -27,6 +27,7 @@ import json
 import math
 import os
 import time
+from collections import OrderedDict
 
 
 class RateLimitMiddleware:
@@ -43,8 +44,10 @@ class RateLimitMiddleware:
         self.burst = float(burst if burst is not None else os.environ.get("RATE_LIMIT_BURST", 120))
         self.exempt_paths = exempt_paths
         self.max_buckets = max_buckets
-        # ip -> (tokens, monotonic timestamp of last update)
-        self._buckets: dict[str, tuple[float, float]] = {}
+        # ip -> (tokens, monotonic timestamp of last update). OrderedDict so
+        # eviction can drop least-recently-used entries (move_to_end on every
+        # touch keeps insertion order == recency order).
+        self._buckets: "OrderedDict[str, tuple[float, float]]" = OrderedDict()
 
     def _client_ip(self, scope) -> str:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
@@ -71,13 +74,24 @@ class RateLimitMiddleware:
 
     def _prune(self, now: float) -> None:
         """Drop buckets idle long enough to have refilled completely —
-        forgetting them is lossless."""
+        forgetting them is lossless. Deletes in place so the OrderedDict's
+        recency ordering survives."""
         full_after = self.burst / self.rate if self.rate > 0 else 60.0
-        self._buckets = {
-            ip: (tokens, ts)
-            for ip, (tokens, ts) in self._buckets.items()
-            if now - ts < full_after
-        }
+        stale = [ip for ip, (_, ts) in self._buckets.items()
+                 if now - ts >= full_after]
+        for ip in stale:
+            del self._buckets[ip]
+
+    def _evict(self, now: float) -> None:
+        """Bound memory. First drop idle-refilled buckets (lossless). If a
+        live flood keeps every bucket fresh so nothing is idle, hard-evict
+        the least-recently-used entries down to the cap — otherwise the map
+        grows unbounded AND the prune scan re-runs on every request (O(n)
+        CPU amplification that scales with the attack). LRU order is kept by
+        move_to_end on every touch."""
+        self._prune(now)
+        while len(self._buckets) > self.max_buckets:
+            self._buckets.popitem(last=False)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["path"] in self.exempt_paths:
@@ -88,13 +102,14 @@ class RateLimitMiddleware:
         tokens, last = self._buckets.get(ip, (self.burst, now))
         tokens = min(self.burst, tokens + (now - last) * self.rate)
 
-        if tokens >= 1.0:
-            self._buckets[ip] = (tokens - 1.0, now)
-            if len(self._buckets) > self.max_buckets:
-                self._prune(now)
-            return await self.app(scope, receive, send)
+        allowed = tokens >= 1.0
+        self._buckets[ip] = (tokens - 1.0 if allowed else tokens, now)
+        self._buckets.move_to_end(ip)
+        if len(self._buckets) > self.max_buckets:
+            self._evict(now)
 
-        self._buckets[ip] = (tokens, now)
+        if allowed:
+            return await self.app(scope, receive, send)
         retry_after = max(1, math.ceil((1.0 - tokens) / self.rate)) if self.rate > 0 else 60
         body = json.dumps({
             "detail": "Rate limit exceeded — this is a shared public server. "
