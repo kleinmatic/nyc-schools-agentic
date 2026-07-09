@@ -90,13 +90,81 @@ def build_snapshots():
     return _filtered_columns(df, keep)
 
 
-def build_exam(loader_name):
-    """Filter to All Students rows + needed columns."""
+# NYSED SRC annual grades-3-8 assessment feathers → DOE-shaped exam rows for the
+# years the upstream DOE workbooks don't yet cover (2023-24 onward). Built HERE
+# (not upstream) per the Option-B refresh plan: the DOE loaders (exams.load_ela /
+# load_math) take no year param and read a static mirror file that stops at AY2022,
+# so newer years are sourced from the NYSED School Report Card database (the same
+# pipeline that already keeps the nysed_* tables current). We read the cached SRC
+# feather, filter to All-Students per-grade rows, join BEDS→DBN at build time, and
+# APPEND to the DOE rows so every downstream consumer keeps the same
+# dbn/ay/grade/level_*_pct schema and simply sees new AY rows appear.
+#
+# Vintage note: NY reset grades-3-8 standards + scale in 2023 (Next-Gen Learning
+# Standards). mean_scale_score is NOT comparable across the 2022/2024 boundary;
+# level_3_4_pct proficiency is only loosely comparable. The 2024+ rows carry the
+# new-standard values as-is — the display layer must annotate the standards break
+# (there is no AY2023 row here yet: that year needs SRC2024, a heavy fetch left as
+# a documented follow-on, so the exam series runs …2021, 2022, [2023 gap], 2024, 2025).
+NYSED_EXAM_FEATHER = {
+    "load_ela": "nysed-src-2025-annual-em-ela.feather",
+    "load_math": "nysed-src-2025-annual-em-math.feather",
+}
+
+
+def _beds_to_dbn_crosswalk():
+    """Most-recent non-zero BEDS per DBN → {12-char NYSED ENTITY_CD: DBN}.
+
+    Mirrors the service-layer join (analytics._beds_to_str over demographics.beds)
+    so build-time coverage of the NYSED-sourced exam rows matches how the app
+    already links its other NYSED tables to DBNs."""
+    from nycschools import schools
+    demo = schools.load_school_demographics()[["dbn", "ay", "beds"]].copy()
+    demo["beds"] = pd.to_numeric(demo["beds"], errors="coerce").fillna(0).astype("int64")
+    demo = demo[demo["beds"] > 0].sort_values("ay").drop_duplicates("dbn", keep="last")
+    entity = demo["beds"].astype(str).str.zfill(12)
+    return dict(zip(entity, demo["dbn"]))
+
+
+def _nysed_exam_rows(loader_name, crosswalk):
+    """Reshape a NYSED SRC annual grades-3-8 feather into the DOE exam schema."""
+    path = SOURCE / NYSED_EXAM_FEATHER[loader_name]
+    if not path.exists():
+        return None
+    df = pd.read_feather(path)
+    df = df[df["SUBGROUP_NAME"] == "All Students"].copy()
+    # Keep the per-grade rows (ELA3..ELA8 / MATH3..MATH8) AND the all-grades
+    # aggregate (ELA3_8 / MATH3_8), which becomes the DOE-schema "All Grades" row
+    # that the analytics layer (leaderboards, peer ranks, metric registry) selects on.
+    df = df[df["ASSESSMENT_NAME"].str.fullmatch(r"[A-Z]+(3_8|[3-8])", na=False)]
+    df["dbn"] = df["ENTITY_CD"].map(crosswalk)
+    df = df.dropna(subset=["dbn"])
+    df["ay"] = pd.to_numeric(df["YEAR"], errors="coerce").astype("Int64")
+    # grade stored as TEXT to match the DOE tables: "3".."8" or "All Grades".
+    is_agg = df["ASSESSMENT_NAME"].str.endswith("3_8")
+    df["grade"] = df["ASSESSMENT_NAME"].str[-1].mask(is_agg, "All Grades")
+    df["number_tested"] = pd.to_numeric(df["NUM_TESTED"], errors="coerce")
+    df["mean_scale_score"] = pd.to_numeric(df["MEAN_SCORE"], errors="coerce")
+    for i in (1, 2, 3, 4):
+        df[f"level_{i}_pct"] = pd.to_numeric(df.get(f"LEVEL{i}_%TESTED"), errors="coerce") / 100.0
+    df["level_3_4_pct"] = pd.to_numeric(df["PER_PROF"], errors="coerce") / 100.0
+    df = df[df["number_tested"].fillna(0) > 0]
+    return _filtered_columns(df, EXAM_KEEP)
+
+
+def build_exam(loader_name, crosswalk=None):
+    """DOE All-Students exam rows (through AY2022) plus NYSED SRC rows for the
+    newer years the DOE workbooks don't cover yet (AY2024+)."""
     from nycschools import exams
     df = getattr(exams, loader_name)()
     if "category" in df.columns:
         df = df[df["category"].fillna("All Students") == "All Students"]
-    return _filtered_columns(df, EXAM_KEEP)
+    doe = _filtered_columns(df, EXAM_KEEP)
+    if crosswalk is not None and loader_name in NYSED_EXAM_FEATHER:
+        nysed = _nysed_exam_rows(loader_name, crosswalk)
+        if nysed is not None and len(nysed):
+            doe = pd.concat([doe, nysed], ignore_index=True)
+    return doe
 
 
 def build_regents():
@@ -265,11 +333,12 @@ def main():
         DB_PATH.unlink()
     print(f"Building {DB_PATH} from {SOURCE}/ ...")
 
+    crosswalk = _beds_to_dbn_crosswalk()
     tables = {
         "demographics": build_demographics(),
         "snapshots": build_snapshots(),
-        "exams_ela": build_exam("load_ela"),
-        "exams_math": build_exam("load_math"),
+        "exams_ela": build_exam("load_ela", crosswalk),
+        "exams_math": build_exam("load_math", crosswalk),
         "regents": build_regents(),
         "class_size": build_class_size(),
         "ptr": build_ptr(),
