@@ -138,6 +138,8 @@
       <div class="text-[11px] text-slate-400 mt-2">
         Source: NYC DOE InfoHub, NYS grades 3–8 test results. No state tests were given
         in spring 2020 or spring 2021 (COVID-19) — the gap is real, not missing data.
+        New York changed its testing standards in 2023 (Common Core → Next Generation),
+        so the line breaks at that year: results before and after are not comparable.
       </div>
   </figure>
 
@@ -259,7 +261,14 @@
         Plot.gridY({ stroke: grid, strokeOpacity: 1 }),
         Plot.rect([{ x1: 2018.5, x2: 2020.5, y1: 0, y2: 0.7 }],
           { x1: "x1", x2: "x2", y1: "y1", y2: "y2", fill: "#f1f5f9" }),
-        Plot.lineY(prof, { x: "ay", y: "pct", z: "subject", stroke: "subject", strokeWidth: 2, curve: "linear" }),
+        // Divide the line into old (≤2022, Common Core) and new (≥2023, Next
+        // Generation) eras so no segment spans the incomparable standards
+        // change. Colour still keys off subject; z carries subject + era.
+        ...(prof.some(d => d.era === "new" && d.pct != null) ? [
+          Plot.ruleX([2022.5], { stroke: "#94a3b8", strokeDasharray: "3,3", strokeWidth: 1 }),
+          Plot.text([{ x: 2022.5, y: 0.68 }], { x: "x", y: "y", text: ["New standard →"], fill: "#64748b", fontSize: 10, textAnchor: "start", dx: 4 }),
+        ] : []),
+        Plot.lineY(prof, { x: "ay", y: "pct", z: d => `${d.subject}|${d.era}`, stroke: "subject", strokeWidth: 2, curve: "linear" }),
         Plot.dot(points, {
           x: "ay", y: "pct", fill: "subject", r: 4, stroke: "white", strokeWidth: 2,
           tip: true,

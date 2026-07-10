@@ -33,6 +33,7 @@ from .charts import (
     grad_subgroup_dots,
     homepage_citywide,
     homepage_nta_map,
+    partition_exam_rows,
     regents_exam_dumbbells,
     school_demographics_trend,
 )
@@ -290,6 +291,8 @@ async def school_page(request: Request, dbn: str):
             "agent_swd_context": _agent_swd_context_for_school(swd),
             "ela_grade_year": exam_grade_year_levels(detail.ela),
             "math_grade_year": exam_grade_year_levels(detail.math),
+            "ela_rows_split": partition_exam_rows(detail.ela),
+            "math_rows_split": partition_exam_rows(detail.math),
             "demographics_trend": school_demographics_trend(detail.demographics_by_year),
             "chronic_dots": chronic_subgroup_dots(detail.nysed.chronic_absenteeism) if detail.nysed else {},
             "grad_dots": grad_subgroup_dots(detail.nysed.hs_graduation) if detail.nysed else {},
