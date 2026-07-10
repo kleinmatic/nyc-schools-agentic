@@ -102,13 +102,24 @@ def build_snapshots():
 #
 # Vintage note: NY reset grades-3-8 standards + scale in 2023 (Next-Gen Learning
 # Standards). mean_scale_score is NOT comparable across the 2022/2024 boundary;
-# level_3_4_pct proficiency is only loosely comparable. The 2024+ rows carry the
-# new-standard values as-is — the display layer must annotate the standards break
-# (there is no AY2023 row here yet: that year needs SRC2024, a heavy fetch left as
-# a documented follow-on, so the exam series runs …2021, 2022, [2023 gap], 2024, 2025).
+# level_3_4_pct proficiency is only loosely comparable. The 2023+ rows carry the
+# new-standard values as-is — the display layer must annotate the standards break.
+#
+# Each loader maps to an ordered list of (feather_filename, years_to_take): every
+# SRC feather contributes ONLY the year(s) it is authoritative for, so we never
+# double-add a year that appears in two databases. AY2023 comes from SRC2024;
+# AY2024 + AY2025 come from SRC2025. (SRC2024 also carries 2024, and SRC2025 also
+# carries 2023 as its prior-year comparison — the year filter keeps each canonical.)
+# The exam series is now contiguous: …2021, 2022, 2023, 2024, 2025.
 NYSED_EXAM_FEATHER = {
-    "load_ela": "nysed-src-2025-annual-em-ela.feather",
-    "load_math": "nysed-src-2025-annual-em-math.feather",
+    "load_ela": [
+        ("nysed-src-2024-annual-em-ela.feather", (2023,)),
+        ("nysed-src-2025-annual-em-ela.feather", (2024, 2025)),
+    ],
+    "load_math": [
+        ("nysed-src-2024-annual-em-math.feather", (2023,)),
+        ("nysed-src-2025-annual-em-math.feather", (2024, 2025)),
+    ],
 }
 
 
@@ -126,12 +137,8 @@ def _beds_to_dbn_crosswalk():
     return dict(zip(entity, demo["dbn"]))
 
 
-def _nysed_exam_rows(loader_name, crosswalk):
-    """Reshape a NYSED SRC annual grades-3-8 feather into the DOE exam schema."""
-    path = SOURCE / NYSED_EXAM_FEATHER[loader_name]
-    if not path.exists():
-        return None
-    df = pd.read_feather(path)
+def _reshape_nysed_exam_feather(df, crosswalk):
+    """Reshape one NYSED SRC annual grades-3-8 feather into the DOE exam schema."""
     df = df[df["SUBGROUP_NAME"] == "All Students"].copy()
     # Keep the per-grade rows (ELA3..ELA8 / MATH3..MATH8) AND the all-grades
     # aggregate (ELA3_8 / MATH3_8), which becomes the DOE-schema "All Grades" row
@@ -150,6 +157,24 @@ def _nysed_exam_rows(loader_name, crosswalk):
     df["level_3_4_pct"] = pd.to_numeric(df["PER_PROF"], errors="coerce") / 100.0
     df = df[df["number_tested"].fillna(0) > 0]
     return _filtered_columns(df, EXAM_KEEP)
+
+
+def _nysed_exam_rows(loader_name, crosswalk):
+    """Concatenate DOE-schema exam rows across every SRC feather for this loader,
+    taking from each feather only the year(s) it is authoritative for."""
+    frames = []
+    for filename, years in NYSED_EXAM_FEATHER[loader_name]:
+        path = SOURCE / filename
+        if not path.exists():
+            continue
+        df = pd.read_feather(path)
+        keep = pd.to_numeric(df["YEAR"], errors="coerce").isin(years)
+        df = df[keep]
+        if len(df):
+            frames.append(_reshape_nysed_exam_feather(df, crosswalk))
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
 
 
 def build_exam(loader_name, crosswalk=None):
