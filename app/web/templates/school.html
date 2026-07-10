@@ -221,6 +221,79 @@
 {% endif %}
 {% endmacro %}
 
+{# Full-history grades-3-8 exam table (one grade × year per row). Shared by
+   the old-standard and new-standard blocks so the two eras never share a
+   table. #}
+{% macro exam_table(rows) %}
+<div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+  <table class="min-w-full text-sm">
+    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <tr>
+        <th class="px-4 py-2 text-left">Year</th>
+        <th class="px-4 py-2 text-left">Grade</th>
+        <th class="px-4 py-2 text-right">Tested</th>
+        <th class="px-4 py-2 text-right">Mean score</th>
+        <th class="px-4 py-2 text-right">% Lvl 1</th>
+        <th class="px-4 py-2 text-right">% Lvl 2</th>
+        <th class="px-4 py-2 text-right">% Lvl 3</th>
+        <th class="px-4 py-2 text-right">% Lvl 4</th>
+        <th class="px-4 py-2 text-right">% Proficient</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for r in rows %}
+      <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
+        <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
+        <td class="px-4 py-2">{{ r.grade }}</td>
+        <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
+        <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+        <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
+        <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
+        <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
+        <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
+        <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{# One standards-era block: short hed, comparability dek, the grade × year
+   chart, and the full-history table. The 2023 standards reset means the old
+   and new eras get physically separate charts and tables; never a shared axis
+   or table across the divide. Both blocks always render their hed + dek so the
+   split is legible even before an era has data — the era lacking rows shows an
+   empty-state line instead of a chart (e.g. Next-Generation results before the
+   2023 data lands). #}
+{% macro exam_era_block(prefix, hed, dek, chart_data, citywide_levels, rows, table_label, chart_caption, empty_note) %}
+<div class="mb-8">
+  <h3 class="text-base font-semibold text-slate-800">{{ hed }}</h3>
+  <p class="text-sm text-slate-600 mt-0.5 mb-3">{{ dek }}</p>
+  {% if rows %}
+    {{ grade_year_figure(prefix, chart_data, citywide_levels, "Grades 3–8 by Year", chart_caption) }}
+    {% call table_details(table_label) %}
+      {{ exam_table(rows) }}
+    {% endcall %}
+  {% else %}
+    <p class="text-sm text-slate-500 bg-white border border-dashed border-slate-200 rounded-lg p-4">{{ empty_note }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# One shared comparability note for the whole 3-8 exam area (ELA + math). #}
+{% macro standards_divide_note() %}
+<div class="bg-amber-50/60 border border-amber-200 rounded-lg p-4 text-sm text-slate-700 leading-relaxed mb-8">
+  <p class="font-medium text-slate-800 mb-1">A note on comparing years</p>
+  <p>New York replaced its grades 3–8 testing standards in 2023. Results through 2022
+  reflect the <strong>Common Core Learning Standards</strong> (2013–2022); results from
+  2023 on reflect the <strong>Next Generation Learning Standards</strong> (2023–present),
+  first administered in spring 2023. Because the two sets of tests measure different
+  standards on different scales, scores before and after 2023 are shown in separate
+  blocks and cannot be compared across the 2023 divide.</p>
+</div>
+{% endmacro %}
+
 {% macro explainer(label="Explanation") %}
 <details class="group mb-3">
   <summary class="cursor-pointer list-none [&::-webkit-details-marker]:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium select-none">
@@ -452,6 +525,12 @@
   <h2 class="text-xs uppercase tracking-[0.25em] text-slate-500 font-semibold">Performance</h2>
 </div>
 
+{# One shared comparability note for the whole 3-8 exam area (covers both the
+   ELA and math pairs below), rendered once whenever either exam set exists. #}
+{% if school.ela or school.math %}
+{{ standards_divide_note() }}
+{% endif %}
+
 {# ---------- Exams: ELA ---------- #}
 {% if school.ela %}
 <section id="ela" class="mb-10">
@@ -461,47 +540,28 @@
     "NYS grades 3-8 English Language Arts test results, from NYC DOE InfoHub Excel exports (2013-2018, 2021-2022; no 2019-20 due to COVID). Filtered to All Students rows; the underlying file also breaks results out by 14 demographic categories. Charter schools merged in via charter-ela.csv.",
     label="NYS Grades 3–8 ELA Exams, NYC DOE InfoHub"
   ) }}
-  {{ grade_year_figure(
-    "ela",
-    ela_grade_year,
+  {{ exam_era_block(
+    "ela-old",
+    "Old Standard",
+    "Grades 3–8 tests under the Common Core standards. Not comparable to 2023-onward results.",
+    ela_grade_year.old,
     ela_citywide_levels,
-    "All years × all grades",
-    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+    ela_rows_split.old,
+    "Full ELA Results Table — Old Standard",
+    "One row per grade (3–8); within each row, stacked % at each proficiency level over time. Reds = not proficient (Levels 1–2); blues = proficient (Levels 3–4). The thin white line marks this school's proficient boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019–20 and 2020–21 — those years are blank.",
+    "No Common Core-era ELA results are on file for this school.")
   }}
-  {% call table_details("Full ELA Results Table") %}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Grade</th>
-          <th class="px-4 py-2 text-right">Tested</th>
-          <th class="px-4 py-2 text-right">Mean score</th>
-          <th class="px-4 py-2 text-right">% Lvl 1</th>
-          <th class="px-4 py-2 text-right">% Lvl 2</th>
-          <th class="px-4 py-2 text-right">% Lvl 3</th>
-          <th class="px-4 py-2 text-right">% Lvl 4</th>
-          <th class="px-4 py-2 text-right">% Proficient</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.ela %}
-        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2">{{ r.grade }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endcall %}
+  {{ exam_era_block(
+    "ela-new",
+    "New Standard",
+    "Grades 3–8 tests under New York’s Next Generation standards, first given in 2023. Not comparable to earlier years.",
+    ela_grade_year.new,
+    [],
+    ela_rows_split.new,
+    "Full ELA Results Table — New Standard",
+    "One row per grade (3–8); within each row, stacked % at each proficiency level over time. Reds = not proficient (Levels 1–2); blues = proficient (Levels 3–4). The thin white line marks this school's proficient boundary for each year.",
+    "Next Generation ELA results (2023 and later) will appear here once that data is published.")
+  }}
 </section>
 {% endif %}
 
@@ -514,47 +574,28 @@
     "Same shape as ELA. NYS grades 3-8 mathematics test results from NYC DOE InfoHub. Charters merged in via charter-math.csv.",
     label="NYS Grades 3–8 Math Exams, NYC DOE InfoHub"
   ) }}
-  {{ grade_year_figure(
-    "math",
-    math_grade_year,
+  {{ exam_era_block(
+    "math-old",
+    "Old Standard",
+    "Grades 3–8 tests under the Common Core standards. Not comparable to 2023-onward results.",
+    math_grade_year.old,
     math_citywide_levels,
-    "All years × all grades",
-    "One row per grade (3-8); within each row, stacked % at each proficiency level over time. Reds = not proficient (L1, L2); blues = proficient (L3, L4). The thin white line marks this school's L2/L3 boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019-20 and 2020-21 — those years are blank.")
+    math_rows_split.old,
+    "Full Math Results Table — Old Standard",
+    "One row per grade (3–8); within each row, stacked % at each proficiency level over time. Reds = not proficient (Levels 1–2); blues = proficient (Levels 3–4). The thin white line marks this school's proficient boundary for each year. The rightmost column in each row is the NYC citywide cohort for the latest year, rendered at reduced opacity as a comparator. State tests were cancelled in 2019–20 and 2020–21 — those years are blank.",
+    "No Common Core-era math results are on file for this school.")
   }}
-  {% call table_details("Full Math Results Table") %}
-  <div class="overflow-x-auto bg-white border border-slate-200 rounded-lg">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th class="px-4 py-2 text-left">Year</th>
-          <th class="px-4 py-2 text-left">Grade</th>
-          <th class="px-4 py-2 text-right">Tested</th>
-          <th class="px-4 py-2 text-right">Mean score</th>
-          <th class="px-4 py-2 text-right">% Lvl 1</th>
-          <th class="px-4 py-2 text-right">% Lvl 2</th>
-          <th class="px-4 py-2 text-right">% Lvl 3</th>
-          <th class="px-4 py-2 text-right">% Lvl 4</th>
-          <th class="px-4 py-2 text-right">% Proficient</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-slate-100">
-        {% for r in school.math %}
-        <tr class="{% if r.grade == 'All Grades' %}bg-slate-50 font-medium{% endif %}">
-          <td class="px-4 py-2 font-mono text-xs">{{ r.ay }}</td>
-          <td class="px-4 py-2">{{ r.grade }}</td>
-          <td class="px-4 py-2 text-right">{{ num(r.number_tested) }}</td>
-          <td class="px-4 py-2 text-right">{% if r.mean_scale_score is not none %}{{ "%.1f"|format(r.mean_scale_score) }}{% else %}—{% endif %}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_1) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_2) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_3) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_level_4) }}</td>
-          <td class="px-4 py-2 text-right">{{ pct(r.pct_proficient) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endcall %}
+  {{ exam_era_block(
+    "math-new",
+    "New Standard",
+    "Grades 3–8 tests under New York’s Next Generation standards, first given in 2023. Not comparable to earlier years.",
+    math_grade_year.new,
+    [],
+    math_rows_split.new,
+    "Full Math Results Table — New Standard",
+    "One row per grade (3–8); within each row, stacked % at each proficiency level over time. Reds = not proficient (Levels 1–2); blues = proficient (Levels 3–4). The thin white line marks this school's proficient boundary for each year.",
+    "Next Generation math results (2023 and later) will appear here once that data is published.")
+  }}
 </section>
 {% endif %}
 

@@ -85,6 +85,10 @@ def homepage_citywide() -> dict:
             row = by_ay.get(ay)
             proficiency.append({
                 "subject": subject, "ay": ay, "year": _ay_label(ay),
+                # era splits the trend line at the 2023 Common-Core →
+                # Next-Generation standards divide so the client never draws a
+                # single line segment across the incomparable boundary.
+                "era": "old" if ay <= LAST_COMMON_CORE_AY else "new",
                 "pct": row["pct"] if row else None,
                 "n_tested": row["n_tested"] if row else None,
             })
@@ -306,17 +310,51 @@ def regents_exam_dumbbells(rows: list[RegentsRow]) -> dict:
     return {"ay": latest, "year_label": _ay_label(latest), "exams": exams}
 
 
-def exam_grade_year_levels(rows: list[ExamRow]) -> list[dict]:
+# New York reset its grades-3-8 testing standards in spring 2023: from the
+# Common Core Learning Standards (tests 2013-2022) to the Next Generation
+# Learning Standards (tests 2023-present). Scale scores and proficiency
+# percentages are NOT comparable across the divide, so the exam displays are
+# physically split into an "old" block (ay <= this) and a "new" block
+# (ay > this). Split by year boundary, never by hardcoded present-years, so a
+# backfilled AY 2023 automatically lands in the new block.
+LAST_COMMON_CORE_AY = 2022
+
+
+def _partition_by_standard(items: list, ay_of) -> dict:
+    """Split a list of exam-era items into old / new blocks at the 2023
+    standards divide. `ay_of` extracts the academic year from an item."""
+    old, new = [], []
+    for it in items:
+        (old if ay_of(it) <= LAST_COMMON_CORE_AY else new).append(it)
+    return {"old": old, "new": new}
+
+
+def partition_exam_rows(rows: list[ExamRow]) -> dict:
+    """Split raw per-grade exam rows (for the full-history tables) into the
+    old-standard and new-standard blocks. Returns {"old": [...], "new": [...]}
+    of ExamRow models, each preserving the service-layer row order."""
+    if not rows:
+        return {"old": [], "new": []}
+    return _partition_by_standard(rows, lambda r: r.ay)
+
+
+def exam_grade_year_levels(rows: list[ExamRow]) -> dict:
     """Per-grade time series of proficiency-level breakdown — input for
     the grade-faceted stacked-area chart. Each output entry is one
     (grade × academic-year × level) with raw pct + n_tested. Excludes
     'All Grades' and any row with no students tested.
 
+    Returns {"old": [...], "new": [...]}: the results are partitioned at the
+    2023 Common-Core → Next-Generation standards divide (see
+    LAST_COMMON_CORE_AY) so the template renders two separate charts — a
+    reader is never invited to compare scores across the incomparable divide.
+
     COVID-cancelled years (AY 2019, AY 2020) are simply absent from the
     output — the chart consumer is expected to handle the gap visually
-    (Plot's linear curve will draw a straight segment across it)."""
+    (Plot's linear curve will draw a straight segment across it). Both
+    cancelled years sit in the old block."""
     if not rows:
-        return []
+        return {"old": [], "new": []}
     out: list[dict] = []
     for r in rows:
         if r.grade == "All Grades" or not r.number_tested:
@@ -335,6 +373,6 @@ def exam_grade_year_levels(rows: list[ExamRow]) -> list[dict]:
                 "pct": pct or 0.0,
                 "n_tested": r.number_tested,
             })
-    return out
+    return _partition_by_standard(out, lambda d: d["ay"])
 
 
