@@ -287,6 +287,8 @@ After CI runs and passes, the deploy workflow picks up the new commit, fetches t
 
 After step 2, the 1.5 GB `school-data/SRC2025_Group3.mdb` can be deleted to reclaim disk — the feathers extracted from it are the working source.
 
+**Grades 3-8 exams (ELA/math) span two sources by design.** The DOE loaders (`exams.load_ela/load_math` → `nyc-ela.csv`/`nyc-math.csv`) are frozen at AY2022, so `build_db.py` sources **AY2023+ from the NYSED SRC** annual grades-3-8 feathers instead (`_nysed_exam_rows` reshapes them into the DOE exam schema and appends). AY2023 comes from the SRC2024 database, AY2024/2025 from SRC2025; the series is contiguous 2021→2025. Because NY reset testing standards in 2023 (Common Core → Next Generation), the display layer renders separate Old/New Standard blocks — see the standards-split rule in CLAUDE.md. **Quirk:** NYSED packaged SRC2024 as `SRC2024_Group5.mdb` (prior years were `Group3`); upstream `nysed_src.extract_mdb` greps for `Group3`, so a from-scratch SRC2024 fetch needs the extracted `.mdb` renamed to the `Group3` path (or the upstream group-name lookup generalized — fix pending in the `kleinmatic/nycschools` fork).
+
 ### Why we don't use upstream's `python -m nycschools.dataloader -d`
 
 Upstream's bulk-archive bootstrap downloads a single `.7z` from a Google Drive link. **That link is dead** as of 2026 and returns a 404 HTML page. The package's own `dataloader.load()` already has a per-file fallback to `https://data.mixi.nyc/<filename>` — that host is alive and serves all the cleaned files individually. `scripts/fetch_data.py` calls each loader once to pre-warm the cache via that fallback.
