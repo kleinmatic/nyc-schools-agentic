@@ -121,19 +121,29 @@
       <div id="citywide-proficiency"></div>
       <details class="mt-2">
         <summary class="text-[11px] text-slate-500 cursor-pointer">Data table</summary>
-        <table class="text-xs text-slate-600 mt-1 tabular-nums">
-          <thead><tr class="text-left text-slate-400"><th class="pr-4 font-normal">Year</th><th class="pr-4 font-normal">ELA</th><th class="font-normal">Math</th></tr></thead>
-          <tbody>
-          {% for row in citywide.proficiency if row.subject == "ELA" %}
-            {% set math_row = (citywide.proficiency | selectattr("subject", "equalto", "Math") | selectattr("ay", "equalto", row.ay) | list | first) %}
-            <tr>
-              <td class="pr-4">{{ row.year }}</td>
-              <td class="pr-4">{% if row.pct is not none %}{{ "%.1f"|format(row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
-              <td>{% if math_row and math_row.pct is not none %}{{ "%.1f"|format(math_row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
-            </tr>
+        {# Split at the 2023 standards divide — Common Core (≤2022) and Next
+           Generation (≥2023) proficiency are not comparable, so they render as
+           separate tables, never one continuous column (mirrors the school page). #}
+        <div class="mt-1 space-y-3">
+          {% for era_key, era_label in [("old", "Old Standard (Common Core)"), ("new", "New Standard (Next Generation)")] %}
+          <div>
+            <div class="text-[11px] font-medium text-slate-500 mb-0.5">{{ era_label }}</div>
+            <table class="text-xs text-slate-600 tabular-nums">
+              <thead><tr class="text-left text-slate-400"><th class="pr-4 font-normal">Year</th><th class="pr-4 font-normal">ELA</th><th class="font-normal">Math</th></tr></thead>
+              <tbody>
+              {% for row in citywide.proficiency if row.subject == "ELA" and row.era == era_key %}
+                {% set math_row = (citywide.proficiency | selectattr("subject", "equalto", "Math") | selectattr("ay", "equalto", row.ay) | list | first) %}
+                <tr>
+                  <td class="pr-4">{{ row.year }}</td>
+                  <td class="pr-4">{% if row.pct is not none %}{{ "%.1f"|format(row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+                  <td>{% if math_row and math_row.pct is not none %}{{ "%.1f"|format(math_row.pct * 100) }}%{% else %}<span class="text-slate-300">N/A</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
           {% endfor %}
-          </tbody>
-        </table>
+        </div>
       </details>
       <div class="text-[11px] text-slate-400 mt-2">
         Source: NYC DOE InfoHub, NYS grades 3–8 test results. No state tests were given
