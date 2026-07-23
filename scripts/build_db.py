@@ -143,7 +143,12 @@ def _reshape_nysed_exam_feather(df, crosswalk):
     # Keep the per-grade rows (ELA3..ELA8 / MATH3..MATH8) AND the all-grades
     # aggregate (ELA3_8 / MATH3_8), which becomes the DOE-schema "All Grades" row
     # that the analytics layer (leaderboards, peer ranks, metric registry) selects on.
-    df = df[df["ASSESSMENT_NAME"].str.fullmatch(r"[A-Z]+(3_8|[3-8])", na=False)]
+    # Anchor on ELA|MATH explicitly: the ELA/math feathers only carry ELA*/MATH*
+    # assessments today, but NYSED also ships all-caps-free names (Combined7Math,
+    # RegentsMath8, Science8). The subject anchor makes the intent defensive-by-design
+    # rather than leaning on NYSED's casing convention — a stray all-caps non-ELA/math
+    # assessment ending 3-8 would otherwise be silently reshaped in as a grade row.
+    df = df[df["ASSESSMENT_NAME"].str.fullmatch(r"(ELA|MATH)(3_8|[3-8])", na=False)]
     df["dbn"] = df["ENTITY_CD"].map(crosswalk)
     df = df.dropna(subset=["dbn"])
     df["ay"] = pd.to_numeric(df["YEAR"], errors="coerce").astype("Int64")
