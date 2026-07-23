@@ -51,7 +51,7 @@ from .schools import _to_summary
 METRIC_DESCRIPTIONS: dict[str, str] = {
     "eni": "Economic Need Index, 0..1 (latest year). NYC DOE's poverty composite. Use for equity ranking.",
     "poverty_pct": "Share of students directly certified via HRA/SNAP/Medicaid (0..1, latest year). Stricter than the older FRPL definition.",
-    "attendance_rate": "Daily attendance rate, 0..1, from DOE school snapshot (mostly AY 2016 vintage).",
+    "attendance_rate": "Daily attendance rate, 0..1, from the DOE School Quality Snapshot (latest published year, SY 2024-25).",
     "chronic_absent_rate": "Share of students absent ≥18 days (0..1, NYSED latest year, All Students). Lower values mean fewer chronically-absent students; pass ascending=True to top_schools to lead with the lowest.",
     "ela_pct_proficient": "Share of students at NYS ELA Level 3-4 (0..1, All Grades, latest year). ES/MS/K-8/6-12 only.",
     "math_pct_proficient": "Share of students at NYS Math Level 3-4 (0..1, All Grades, latest year). ES/MS/K-8/6-12 only.",

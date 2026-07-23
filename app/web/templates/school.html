@@ -1182,11 +1182,11 @@
 
 {# ---------- DOE snapshot ---------- #}
 {% if snap %}
-{% call ref_section("school-info", "School Info", vintage="2016 DOE snapshot") %}
+{% call ref_section("school-info", "School Info", vintage=("SY " ~ snap.ay ~ "-" ~ "%02d"|format((snap.ay + 1) % 100)) if snap.ay is not none else "DOE snapshot") %}
   {{ provenance(
     ["snapshot.feather"],
-    "Scraped from the NYC DOE per-school portal pages. Most rows are dated to 2016 in the upstream cache, so this section is older than NYSED data — useful for principal name, admissions method, and quality-review URL but stale for performance metrics.",
-    label="NYC DOE school portal snapshot, ~2016"
+    "Scraped from the NYC DOE School Quality Snapshot per-school portal pages" ~ (" (SY " ~ snap.ay ~ "-" ~ "%02d"|format((snap.ay + 1) % 100) ~ ", the latest published year)" if snap.ay is not none else "") ~ " — the source for principal name, admissions method, and quality-review year. Descriptive fields are current; the DOE no longer publishes a quality-review URL or review dates in this feed.",
+    label=("NYC DOE School Quality Snapshot, SY " ~ snap.ay ~ "-" ~ "%02d"|format((snap.ay + 1) % 100)) if snap.ay is not none else "NYC DOE School Quality Snapshot"
   ) }}
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     {% if snap.address %}<div><dt class="text-slate-500">Address</dt><dd>{{ snap.address }}{% if snap.city_state_zip %}, {{ snap.city_state_zip }}{% endif %}</dd></div>{% endif %}
@@ -1196,7 +1196,7 @@
     {% if snap.ms_admissions %}<div><dt class="text-slate-500">MS admissions</dt><dd>{{ snap.ms_admissions }}</dd></div>{% endif %}
     {% if snap.co_located %}<div><dt class="text-slate-500">Co-located</dt><dd>{{ snap.co_located }}{% if snap.co_located_n %} · {{ snap.co_located_n }} other school(s){% endif %}</dd></div>{% endif %}
     {% if snap.teacher_3yr_exp_pct is not none %}<div><dt class="text-slate-500">Teachers w/ 3+ yrs exp</dt><dd>{{ pct(snap.teacher_3yr_exp_pct) }}</dd></div>{% endif %}
-    {% if snap.quality_review_url %}<div><dt class="text-slate-500">Quality review</dt><dd><a class="underline" href="{{ snap.quality_review_url }}">{{ snap.quality_review_year }}{% if snap.dates_of_review %} ({{ snap.dates_of_review }}){% endif %}</a></dd></div>{% endif %}
+    {% if snap.quality_review_year is not none %}<div><dt class="text-slate-500">Quality review</dt><dd>{% if snap.quality_review_url %}<a class="underline" href="{{ snap.quality_review_url }}">{{ snap.quality_review_year }}{% if snap.dates_of_review %} ({{ snap.dates_of_review }}){% endif %}</a>{% else %}{{ snap.quality_review_year }}{% if snap.dates_of_review %} ({{ snap.dates_of_review }}){% endif %}{% endif %}</dd></div>{% endif %}
     {% if snap.website %}<div><dt class="text-slate-500">Website</dt><dd><a class="underline" href="https://{{ snap.website }}">{{ snap.website }}</a></dd></div>{% endif %}
   </dl>
 {% endcall %}

@@ -277,7 +277,11 @@ def _snapshot_for(dbn: str) -> Optional[SnapshotInfo]:
     rows = df[df["dbn"] == dbn]
     if rows.empty:
         return None
-    r = rows.iloc[0]
+    # Latest snapshot year per school. The scrape/build row order isn't
+    # guaranteed newest-first (threaded scrape completes out of order, and the
+    # SQLite table is physically ascending by ay), so select the max ay
+    # explicitly — mirroring _attendance_for — rather than trusting iloc[0].
+    r = rows.sort_values("ay").iloc[-1] if "ay" in rows.columns else rows.iloc[0]
     return SnapshotInfo(
         ay=_opt_int(r.get("ay")),
         address=_opt_str(r.get("address")),
