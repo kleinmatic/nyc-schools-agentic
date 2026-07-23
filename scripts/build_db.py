@@ -91,26 +91,30 @@ def build_snapshots():
 
 
 # NYSED SRC annual grades-3-8 assessment feathers → DOE-shaped exam rows for the
-# years the upstream DOE workbooks don't yet cover (2023-24 onward). Built HERE
-# (not upstream) per the Option-B refresh plan: the DOE loaders (exams.load_ela /
-# load_math) take no year param and read a static mirror file that stops at AY2022,
-# so newer years are sourced from the NYSED School Report Card database (the same
-# pipeline that already keeps the nysed_* tables current). We read the cached SRC
+# years the upstream DOE workbooks don't cover. Built HERE (not upstream): the DOE
+# loaders (exams.load_ela / load_math) take no year param and read a static mirror
+# that stops early, so newer years come from the NYSED School Report Card database
+# (the same pipeline that keeps the nysed_* tables current). We read the cached SRC
 # feather, filter to All-Students per-grade rows, join BEDS→DBN at build time, and
 # APPEND to the DOE rows so every downstream consumer keeps the same
 # dbn/ay/grade/level_*_pct schema and simply sees new AY rows appear.
 #
-# Vintage note: NY reset grades-3-8 standards + scale in 2023 (Next-Gen Learning
-# Standards). mean_scale_score is NOT comparable across the 2022/2024 boundary;
-# level_3_4_pct proficiency is only loosely comparable. The 2023+ rows carry the
-# new-standard values as-is — the display layer must annotate the standards break.
+# YEAR CONVENTION (critical): the DOE `ay` is the FALL/start year (upstream computes
+# ay = test_year - 1, e.g. ay 2021 = tests given spring 2022). NYSED's `YEAR` is the
+# SPRING/end year (YEAR 2025 = SY2024-25 = spring 2025). `_reshape_nysed_exam_feather`
+# subtracts 1 so NYSED conforms to the DOE fall-year axis; without it the NYSED years
+# render one school-year too high and misfile across the standards divide.
 #
-# Each loader maps to an ordered list of (feather_filename, years_to_take): every
-# SRC feather contributes ONLY the year(s) it is authoritative for, so we never
-# double-add a year that appears in two databases. AY2023 comes from SRC2024;
-# AY2024 + AY2025 come from SRC2025. (SRC2024 also carries 2024, and SRC2025 also
-# carries 2023 as its prior-year comparison — the year filter keeps each canonical.)
-# The exam series is now contiguous: …2021, 2022, 2023, 2024, 2025.
+# STANDARDS DIVIDE = SOURCE BOUNDARY. NY replaced Common Core with the Next Generation
+# Learning Standards; the LAST Common Core administration was spring 2022 (ay 2021)
+# and the FIRST Next Gen was spring 2023 (ay 2022). Scores/scale are NOT comparable
+# across it. We source each side from the standard that owns it: DOE supplies Common
+# Core (ay ≤ 2021), NYSED supplies Next Gen (ay ≥ 2022, from YEAR 2023/2024/2025).
+# DOE's own last year (ay 2022 = spring 2023) is actually Next Gen and would DUPLICATE
+# NYSED's ay 2022 — build_exam drops DOE ay ≥ 2022 so NYSED is the single Next-Gen
+# source (uniform ~1.3k-school coverage across the whole new-standard block).
+# Resulting ay series: 2012..2021 (DOE, Common Core; COVID gap 2019-20), then
+# 2022, 2023, 2024 (NYSED, Next Gen). Newest ay 2024 = SY2024-25.
 NYSED_EXAM_FEATHER = {
     "load_ela": [
         ("nysed-src-2024-annual-em-ela.feather", (2023,)),
@@ -151,7 +155,9 @@ def _reshape_nysed_exam_feather(df, crosswalk):
     df = df[df["ASSESSMENT_NAME"].str.fullmatch(r"(ELA|MATH)(3_8|[3-8])", na=False)]
     df["dbn"] = df["ENTITY_CD"].map(crosswalk)
     df = df.dropna(subset=["dbn"])
-    df["ay"] = pd.to_numeric(df["YEAR"], errors="coerce").astype("Int64")
+    # NYSED YEAR is the spring/end year; conform to the DOE fall-year `ay` axis
+    # (ay = spring_year - 1) so labels and the standards-divide boundary line up.
+    df["ay"] = pd.to_numeric(df["YEAR"], errors="coerce").astype("Int64") - 1
     # grade stored as TEXT to match the DOE tables: "3".."8" or "All Grades".
     is_agg = df["ASSESSMENT_NAME"].str.endswith("3_8")
     df["grade"] = df["ASSESSMENT_NAME"].str[-1].mask(is_agg, "All Grades")
@@ -182,15 +188,22 @@ def _nysed_exam_rows(loader_name, crosswalk):
     return pd.concat(frames, ignore_index=True)
 
 
+LAST_COMMON_CORE_AY = 2021  # last Common Core administration (spring 2022)
+
+
 def build_exam(loader_name, crosswalk=None):
-    """DOE All-Students exam rows (through AY2022) plus NYSED SRC rows for the
-    newer years the DOE workbooks don't cover yet (AY2024+)."""
+    """Common Core exam rows from the DOE loader (ay ≤ 2021) plus Next Generation
+    rows from NYSED SRC (ay ≥ 2022). The DOE loader's own last year (ay 2022 =
+    spring 2023) is already Next Gen and would duplicate NYSED's ay 2022, so when
+    NYSED is supplying this subject we bound the DOE side at the Common Core years
+    and let NYSED be the single Next-Gen source (see the module comment above)."""
     from nycschools import exams
     df = getattr(exams, loader_name)()
     if "category" in df.columns:
         df = df[df["category"].fillna("All Students") == "All Students"]
     doe = _filtered_columns(df, EXAM_KEEP)
     if crosswalk is not None and loader_name in NYSED_EXAM_FEATHER:
+        doe = doe[pd.to_numeric(doe["ay"], errors="coerce") <= LAST_COMMON_CORE_AY]
         nysed = _nysed_exam_rows(loader_name, crosswalk)
         if nysed is not None and len(nysed):
             doe = pd.concat([doe, nysed], ignore_index=True)

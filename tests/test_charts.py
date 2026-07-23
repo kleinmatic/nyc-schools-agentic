@@ -41,6 +41,38 @@ def test_homepage_citywide_proficiency_has_covid_gap():
         assert rows[2022]["n_tested"] > 100_000
 
 
+def test_grades_3_8_standards_divide_boundary():
+    """The Common Core -> Next Generation reset lands between ay 2021 (last
+    Common Core, spring 2022) and ay 2022 (first Next Gen, spring 2023). This
+    boundary was wrong once: NYSED's spring-year YEAR was stored raw as the
+    fall-year ay, misfiling a Next-Gen year into the Common-Core block and
+    labeling every NYSED year +1 (newest showed "2025-26"). Pin it."""
+    from app.web.charts import LAST_COMMON_CORE_AY, homepage_citywide
+
+    assert LAST_COMMON_CORE_AY == 2021
+    cw = homepage_citywide()
+    rows = {r["ay"]: r for r in cw["proficiency"] if r["subject"] == "ELA"}
+    assert rows[2021]["era"] == "old"   # last Common Core
+    assert rows[2022]["era"] == "new"   # first Next Gen
+    assert max(rows) == 2024            # newest = SY2024-25, not a phantom 2025
+    assert rows[2024]["year"] == "2024-25"
+    assert all(r["year"] != "2025-26" for r in cw["proficiency"])
+
+
+def test_grades_3_8_ay2022_is_next_generation_scale():
+    """Scale scores prove ay 2022 (spring 2023) is Next Generation (~450), not
+    Common Core (~600). If ay 2022 shows Common-Core-magnitude scale scores
+    again, the DOE/NYSED year offset has regressed."""
+    from app import data
+
+    ela = data.get_store().ela
+    def avg_scale(ay):
+        r = ela[(ela["ay"] == ay) & (ela["grade"] == "3")]
+        return float(r["mean_scale_score"].mean())
+    assert avg_scale(2021) > 550   # Common Core scale
+    assert avg_scale(2022) < 500   # Next Generation scale
+
+
 def test_homepage_nta_map_covers_every_nta():
     fc = homepage_nta_map()
     assert fc["type"] == "FeatureCollection"

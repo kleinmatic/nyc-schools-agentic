@@ -29,8 +29,8 @@
   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
     <div><dt class="font-medium">School demographics</dt><dd class="text-slate-600 mt-1">2005 – 2024-25 · NYC DOE annual demographic snapshot — enrollment, race, ELL, SWD, poverty, ENI.</dd></div>
     <div><dt class="font-medium">DOE per-school snapshots</dt><dd class="text-slate-600 mt-1">SY 2024-25 · DOE School Quality Snapshot per-school portal scrape — principal, admissions method, and quality-review year. The DOE no longer publishes a quality-review URL or review dates in this feed.</dd></div>
-    <div><dt class="font-medium">3-8 ELA exams</dt><dd class="text-slate-600 mt-1">2012 – 2025 (no 2019-20, 2020-21 — COVID) · NYS English Language Arts state tests. A 2023 standards change (Common Core → Next Generation) means results before and after 2023 aren't comparable, and are shown separately.</dd></div>
-    <div><dt class="font-medium">3-8 math exams</dt><dd class="text-slate-600 mt-1">2012 – 2025 (no 2019-20, 2020-21 — COVID) · NYS mathematics state tests. A 2023 standards change (Common Core → Next Generation) means results before and after 2023 aren't comparable, and are shown separately.</dd></div>
+    <div><dt class="font-medium">3-8 ELA exams</dt><dd class="text-slate-600 mt-1">2012-13 – 2024-25 (no spring 2020 or 2021 — COVID) · NYS English Language Arts state tests. See "The 2023 Standards Change" below.</dd></div>
+    <div><dt class="font-medium">3-8 math exams</dt><dd class="text-slate-600 mt-1">2012-13 – 2024-25 (no spring 2020 or 2021 — COVID) · NYS mathematics state tests. See "The 2023 Standards Change" below.</dd></div>
     <div><dt class="font-medium">Regents exams</dt><dd class="text-slate-600 mt-1">2014 – 2022 · NYS Regents results, all subjects.</dd></div>
     <div><dt class="font-medium">Class size</dt><dd class="text-slate-600 mt-1">2022-23 · DOE InfoHub class-size report.</dd></div>
     <div><dt class="font-medium">Pupil-to-teacher ratio</dt><dd class="text-slate-600 mt-1">2022-23 · Same DOE InfoHub release as class size.</dd></div>
@@ -39,6 +39,27 @@
     <div><dt class="font-medium">High School Directory</dt><dd class="text-slate-600 mt-1">AY 2021 · NYC Open Data HS directory dataset (8b6c-7uty) — admissions programs, AP courses, sports, transit.</dd></div>
     <div><dt class="font-medium">School locations</dt><dd class="text-slate-600 mt-1">Fiscal year 2019-20 · NYC Open Data school location points (resource wg9x-4ke6). Includes lat/lon, NTA, council district, BBL.</dd></div>
   </dl>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">The 2023 Standards Change (Grades 3-8 Exams)</h2>
+  <p class="text-sm text-slate-600">
+    In 2023 New York replaced the Common Core Learning Standards (tested 2013–2022)
+    with the Next Generation Learning Standards (2023–present). The tests, scale
+    scores, and proficiency cutoffs all changed, so results before and after the
+    reset are <strong>not comparable</strong>. We never plot or tabulate across the
+    divide: every grades-3-8 display is split into a Common Core block (through the
+    2021-22 school year) and a Next Generation block (2022-23 onward).
+  </p>
+  <p class="text-sm text-slate-600 mt-3">
+    The two sides come from two sources, each the authoritative publisher for its
+    standard. Common Core years come from the NYC DOE test-results files (via the
+    <code>nycschools</code> package). Next Generation years — 2022-23 onward — come
+    from the <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://data.nysed.gov/downloads.php">NYSED School Report Card Database</a>,
+    which gives the newer years consistent statewide coverage. The two feeds are
+    joined on the state BEDS code and reconciled to a single school-year convention
+    so the years line up across the seam.
+  </p>
 </section>
 
 <section class="mb-10">

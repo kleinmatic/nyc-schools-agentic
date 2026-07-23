@@ -311,13 +311,13 @@ def regents_exam_dumbbells(rows: list[RegentsRow]) -> dict:
 
 
 # New York reset its grades-3-8 testing standards in spring 2023: from the
-# Common Core Learning Standards (tests 2013-2022) to the Next Generation
-# Learning Standards (tests 2023-present). Scale scores and proficiency
-# percentages are NOT comparable across the divide, so the exam displays are
-# physically split into an "old" block (ay <= this) and a "new" block
-# (ay > this). Split by year boundary, never by hardcoded present-years, so a
-# backfilled AY 2023 automatically lands in the new block.
-LAST_COMMON_CORE_AY = 2022
+# Common Core Learning Standards to the Next Generation Learning Standards.
+# Scale scores and proficiency percentages are NOT comparable across the divide,
+# so the exam displays are physically split into an "old" block (ay <= this) and
+# a "new" block (ay > this). The boundary is the fall-year `ay`: the last Common
+# Core administration was spring 2022 = ay 2021, the first Next Gen was spring
+# 2023 = ay 2022. Split by year boundary, never by hardcoded present-years.
+LAST_COMMON_CORE_AY = 2021
 
 
 def _partition_by_standard(items: list, ay_of) -> dict:

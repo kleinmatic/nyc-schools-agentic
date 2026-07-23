@@ -513,34 +513,44 @@ _HOMEPAGE_NTA_LEADERBOARDS = (
         "description": "Average Regents passing rate (≥65) across high schools in each NTA. NTAs with fewer than 5 high schools excluded.",
         "metric": "regents_pct_above_64",
         "level": "high",
-        "year_label": "2022",
     },
     {
         "title": "Top Neighborhoods — Elementary Schools",
         "description": "Average ELA proficiency (Level 3-4) across elementary schools in each NTA.",
         "metric": "ela_pct_proficient",
         "level": "elementary",
-        "year_label": "2022",
     },
 )
+
+# Which store table's latest ay dates each homepage NTA board (year_label is
+# derived from the data, not hardcoded — a stale hardcode previously stamped
+# refreshed exam years with an old label).
+_HOMEPAGE_NTA_YEAR_TABLE = {
+    "regents_pct_above_64": "regents",
+    "ela_pct_proficient": "ela",
+}
 
 _HOMEPAGE_BOROUGH_METRICS = ("eni", "attendance_rate", "regents_pct_above_64", "graduation_rate_4yr")
 
 
 @lru_cache(maxsize=4)
 def homepage_neighborhood_leaderboards(per_table: int = 5) -> list[NeighborhoodLeaderboard]:
+    store = data.get_store()
     out: list[NeighborhoodLeaderboard] = []
     for cfg in _HOMEPAGE_NTA_LEADERBOARDS:
         rows = aggregate_by_neighborhood(
             metric=cfg["metric"], level=cfg["level"], limit=per_table,
         )
+        table = _HOMEPAGE_NTA_YEAR_TABLE.get(cfg["metric"])
+        ay = int(getattr(store, table)["ay"].max()) if table else None
+        year_label = f"{ay}-{(ay + 1) % 100:02d}" if ay is not None else ""
         out.append(NeighborhoodLeaderboard(
             title=cfg["title"],
             description=cfg["description"],
             metric=cfg["metric"],
             metric_label=METRIC_LABELS.get(cfg["metric"], cfg["metric"]),
             metric_format=METRIC_FORMATS.get(cfg["metric"], "pct"),
-            year_label=cfg["year_label"],
+            year_label=year_label,
             rows=rows,
         ))
     return out
