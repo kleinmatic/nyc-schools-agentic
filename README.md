@@ -105,7 +105,7 @@ Used by `top_schools` and `bulk_metrics`. All values are 0..1 fractions except `
 |---|---|---|---|
 | `eni` | DOE demographics | all levels | Economic Need Index; equity-proxy of choice (see [ENI vs poverty_pct](#eni-vs-poverty_pct--which-to-use-for-equity-comparisons)). |
 | `poverty_pct` | DOE demographics | all levels | Direct certification (HRA / SNAP / Medicaid / temp housing). |
-| `attendance_rate` | DOE snapshots | all levels | Mostly AY 2016 vintage. |
+| `attendance_rate` | DOE snapshots | all levels | SY 2024-25 (DOE School Quality Snapshot). |
 | `chronic_absent_rate` | NYSED SRC | all levels | ≥18 days absent. **Lower is better** — pass `ascending=True` to top_schools. |
 | `ela_pct_proficient` / `math_pct_proficient` | NYS 3-8 exams | ES/MS/K-8/6-12 only | Level 3-4, All Grades, latest year. |
 | `regents_pct_above_64` / `regents_pct_above_79` | DOE Regents | HS / 6-12 only | Mean across all exams, latest year. ≥65 = passing; ≥80 = mastery. |
@@ -287,7 +287,7 @@ After CI runs and passes, the deploy workflow picks up the new commit, fetches t
 
 After step 2, the 1.5 GB `school-data/SRC2025_Group3.mdb` can be deleted to reclaim disk — the feathers extracted from it are the working source.
 
-**Grades 3-8 exams (ELA/math) span two sources by design.** The DOE loaders (`exams.load_ela/load_math` → `nyc-ela.csv`/`nyc-math.csv`) are frozen at AY2022, so `build_db.py` sources **AY2023+ from the NYSED SRC** annual grades-3-8 feathers instead (`_nysed_exam_rows` reshapes them into the DOE exam schema and appends). AY2023 comes from the SRC2024 database, AY2024/2025 from SRC2025; the series is contiguous 2021→2025. Because NY reset testing standards in 2023 (Common Core → Next Generation), the display layer renders separate Old/New Standard blocks — see the standards-split rule in CLAUDE.md. **Quirk:** NYSED packaged SRC2024 as `SRC2024_Group5.mdb` (prior years were `Group3`); upstream `nysed_src.extract_mdb` greps for `Group3`, so a from-scratch SRC2024 fetch needs the extracted `.mdb` renamed to the `Group3` path (or the upstream group-name lookup generalized — fix pending in the `kleinmatic/nycschools` fork).
+**Grades 3-8 exams (ELA/math) span two sources, split at the 2023 standards reset — source = standard.** NY replaced the Common Core standards with the Next Generation standards; the last Common Core test was spring 2022 (`ay 2021`), the first Next Gen was spring 2023 (`ay 2022`), and scores aren't comparable across. Common Core years (`ay ≤ 2021`) come from the DOE loaders (`exams.load_ela/load_math`); Next Generation years (`ay ≥ 2022`) are reshaped from the **NYSED SRC** annual grades-3-8 feathers in `build_db.py` (`_nysed_exam_rows`). **Year-convention gotcha:** DOE `ay` is the *fall* year (`ay = test_year − 1`), but NYSED `YEAR` is the *spring* year, so the reshape does `ay = YEAR − 1` to conform; and because the DOE's own last year (`ay 2022` = spring 2023) is *already* Next Gen and would duplicate NYSED's `ay 2022`, `build_exam` drops DOE `ay ≥ 2022` so NYSED is the single Next-Gen source. Resulting series: `ay 2012..2021` (DOE) then `2022, 2023, 2024` (NYSED); newest `ay 2024` = SY2024-25. The display renders separate Old/New Standard blocks — see the standards-split rule in CLAUDE.md. **Quirk:** NYSED packaged SRC2024 as `SRC2024_Group5.mdb` (prior years were `Group3`); upstream `nysed_src.extract_mdb` greps for `Group3`, so a from-scratch SRC2024 fetch needs the extracted `.mdb` renamed to the `Group3` path (or the upstream group-name lookup generalized — fix pending in the `kleinmatic/nycschools` fork).
 
 ### Why we don't use upstream's `python -m nycschools.dataloader -d`
 
@@ -334,7 +334,7 @@ The tables described below are the **on-disk and in-memory** shapes after `scrip
 | Dataset | Rows | Granularity | Year coverage | Key fields |
 |---|---:|---|---|---|
 | `demographics` | ~32k | dbn × ay | 2005–2024 | enrollment by grade, race %, ELL %, SWD %, poverty %, ENI, zip |
-| `snapshots` | ~7.7k | dbn (mostly latest) | mostly 2016 vintage | principal, address, attendance, chronic absence, admissions method, quality review |
+| `snapshots` | ~2k | dbn (latest) | SY 2024-25 | principal, address, attendance, admissions method, quality-review year |
 | `ela` | ~594k | dbn × grade × category × ay | 2013–2018, 2021–2022 | mean scale score, % at each level, % proficient |
 | `math` | ~586k | dbn × grade × category × ay | 2013–2018, 2021–2022 | same as ELA, math version |
 | `regents` | ~534k | dbn × exam × category × ay | 2014–2022 | mean score, % below 65, % ≥ 65, % ≥ 80, % college-ready |
@@ -355,7 +355,7 @@ The tables described below are the **on-disk and in-memory** shapes after `scrip
 Widest annual coverage in the project. Use this to answer "how has this school changed over time?" Includes total + per-grade enrollment (3K–12), gender (female/male/non-binary as N and pct), 7 race/ethnicity buckets, ELL, SWD, poverty count + pct, and **ENI** (Economic Need Index — NYC's wealth-adjusted poverty proxy on a 0–1 scale). Latest year cached: 2024-25. See "ENI vs poverty_pct" below for which to use as the equity proxy.
 
 **`snapshots`** — `snapshot.load_snapshots()` → `snapshot.feather`
-DOE official school portal snapshot, scraped at one point in time (most rows are dated `ay=2016`). Useful for: principal name + tenure + phone, full address, attendance, chronic absence, official admissions method (Zoned, Screened, etc.), quality review URL + year, teacher-3yr-experience pct, co-location info. **Caveat:** not all DBNs are present (e.g., Midwood `22K405` has no row).
+DOE School Quality Snapshot, scraped from the per-school portal (refreshed to **SY 2024-25**, `ay=2024`, ~2k schools — one latest row per school). Useful for: principal name + tenure + phone, full address, attendance, official admissions method (Zoned, Screened, etc.), quality-review **year** (the DOE retired the review URL + dates fields), teacher-3yr-experience pct, co-location info. **Caveat:** not all DBNs are present (e.g., Midwood `22K405` has no row).
 
 **`ela` / `math`** — `exams.load_ela()` / `load_math()` → `nyc-ela.csv`, `nyc-math.csv`
 NYS grades 3–8 standardized exams in long format. **Categories** include All Students plus 14 demographic breakdowns (Asian, Black, Hispanic, White, Multi-Racial, Native American, Female, Male, Current ELL, Ever ELL, Never ELL, Econ Disadv, Not Econ Disadv, SWD, Not SWD). **Grades** 3–8 individually plus an "All Grades" aggregate row per category × year. **COVID gap:** no 2019 or 2020 testing. Charter schools are merged in (look at the `charter` column).
