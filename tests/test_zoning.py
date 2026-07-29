@@ -10,7 +10,12 @@ import httpx
 import pytest
 import respx
 
-from app.services.zoning import GEOSEARCH_URL, find_zoned_schools, geocode
+from app.services.zoning import (
+    GEOCODE_ATTEMPTS,
+    GEOSEARCH_URL,
+    find_zoned_schools,
+    geocode,
+)
 
 
 PS321_LAT = 40.671816
@@ -94,6 +99,66 @@ async def test_geocode_http_500_returns_none():
     assert await geocode("180 7 Ave") is None
 
 
+# ----- geocode() retry on flaky upstream -----
+#
+# GeoSearch intermittently 4xx/5xx/times-out on requests it answers
+# correctly moments later (measured 2026-07-29: 5 of 15 identical requests
+# failed). One blip must not collapse the address chain.
+
+
+@respx.mock
+async def test_geocode_retries_transient_failure_then_succeeds():
+    """A 500 then a 400 then a 200 → the real result, not None."""
+    route = respx.get(GEOSEARCH_URL).mock(
+        side_effect=[
+            httpx.Response(500),
+            httpx.Response(400),
+            httpx.Response(200, json=_OK_BODY),
+        ]
+    )
+    result = await geocode("180 7 Ave Brooklyn")
+    assert result is not None, "a recoverable upstream blip must not surface as no-match"
+    assert result.lat == 40.671816
+    assert route.call_count == 3
+
+
+@respx.mock
+async def test_geocode_retries_timeouts():
+    """Connect/read timeouts are retried the same as bad status codes."""
+    route = respx.get(GEOSEARCH_URL).mock(
+        side_effect=[
+            httpx.ReadTimeout("timed out"),
+            httpx.Response(200, json=_OK_BODY),
+        ]
+    )
+    assert await geocode("180 7 Ave Brooklyn") is not None
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_geocode_gives_up_after_max_attempts():
+    """Sustained upstream failure still returns None, bounded by attempts."""
+    route = respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(500))
+    assert await geocode("180 7 Ave Brooklyn") is None
+    assert route.call_count == GEOCODE_ATTEMPTS
+
+
+@respx.mock
+async def test_geocode_does_not_retry_definitive_no_match():
+    """200 + empty features is a real answer — one call, and it stays cached.
+
+    GeoSearch answers an unknown address with 200/empty, never a 4xx, so
+    retrying here would triple traffic for every bad address a user types.
+    """
+    route = respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(200, json={"features": []})
+    )
+    assert await geocode("garbage address xyzzy") is None
+    assert route.call_count == 1
+
+
+
+
 @respx.mock
 async def test_geocode_malformed_geometry_returns_none():
     """A feature with missing coordinates is treated as no match."""
@@ -146,10 +211,17 @@ async def test_geocode_caches_definitive_no_match():
 
 @respx.mock
 async def test_geocode_does_not_cache_transient_errors():
-    """A 500 must not poison the cache — the next call retries upstream."""
+    """A failed lookup must not poison the cache — the next call retries.
+
+    Takes GEOCODE_ATTEMPTS failures to produce a None at all now that
+    geocode() retries; the point of the test is that the resulting None is
+    never cached, so a flaky window can't pin a bogus miss for the TTL.
+    """
     route = respx.get(GEOSEARCH_URL)
-    route.side_effect = [httpx.Response(500), httpx.Response(200, json=_OK_BODY)]
+    route.side_effect = [httpx.Response(500)] * GEOCODE_ATTEMPTS + [
+        httpx.Response(200, json=_OK_BODY)
+    ]
     assert await geocode("180 7 Ave Brooklyn") is None
     result = await geocode("180 7 Ave Brooklyn")
     assert result is not None and result.lat == 40.671816
-    assert route.call_count == 2
+    assert route.call_count == GEOCODE_ATTEMPTS + 1

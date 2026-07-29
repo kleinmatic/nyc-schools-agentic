@@ -9,6 +9,7 @@ Two pieces:
    zones contain that point. Some zone polygons serve multiple DBNs
    (comma-separated in the source data); we split on commas.
 """
+import asyncio
 import re
 import time
 from collections import OrderedDict
@@ -24,7 +25,23 @@ from .models import GeocodingResult, ZonedSchoolMatch, ZonedSearchResult
 
 
 GEOSEARCH_URL = "https://geosearch.planninglabs.nyc/v2/search"
-HTTP_TIMEOUT = 10.0
+# Per-ATTEMPT timeout, not per-call: with GEOCODE_ATTEMPTS below, worst-case
+# wall time is roughly GEOCODE_ATTEMPTS * HTTP_TIMEOUT + the backoff sum.
+HTTP_TIMEOUT = 5.0
+
+# GeoSearch is intermittently unreliable: measured 2026-07-29, 5 of 15
+# identical requests for a valid address failed (400, 500, and a timeout)
+# while the other 10 returned the correct result. Without a retry a single
+# upstream blip collapses the whole address chain to "no result" — that's
+# the demo's opening step and the address-based MCP tools.
+#
+# Retrying a 4xx is deliberate and safe here: GeoSearch answers an unknown
+# address with 200 + an empty `features` array, so a 4xx is never a
+# legitimate "no such address" signal, only upstream misbehavior. A
+# definitive no-match (200, empty features) is NOT retried — it's a real
+# answer, and it stays cached as before.
+GEOCODE_ATTEMPTS = 3
+GEOCODE_BACKOFF_S = 0.25
 # Cap the address before it's forwarded to GeoSearch and stored as a cache
 # key (F4): bounds the outbound request payload and the per-key cache
 # memory, and rejects DoS-shaped inputs. Real NYC addresses are «100 chars.
@@ -48,7 +65,8 @@ def clear_geocode_cache() -> None:
 
 async def geocode(address: str) -> Optional[GeocodingResult]:
     """Resolve a street address to lat/lon via NYC GeoSearch. Returns None
-    if the address is empty, the API errors, or no features come back."""
+    if the address is empty, no features come back, or the API still errors
+    after GEOCODE_ATTEMPTS tries (see the retry rationale above)."""
     address = (address or "").strip()
     if not address or len(address) > MAX_ADDRESS_LEN:
         return None
@@ -58,16 +76,24 @@ async def geocode(address: str) -> Optional[GeocodingResult]:
     if hit is not None and now - hit[0] < GEOCODE_CACHE_TTL_S:
         _geocode_cache.move_to_end(key)
         return hit[1]
-    try:
-        # Client per call on purpose: a module-level AsyncClient binds its
-        # connection pool to one event loop, which breaks under the many
-        # short-lived loops tests create. The cache absorbs the volume.
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            r = await client.get(GEOSEARCH_URL, params={"text": address, "size": 1})
-        r.raise_for_status()
-        body = r.json()
-    except (httpx.HTTPError, ValueError):
-        return None
+    body = None
+    for attempt in range(GEOCODE_ATTEMPTS):
+        try:
+            # Client per call on purpose: a module-level AsyncClient binds its
+            # connection pool to one event loop, which breaks under the many
+            # short-lived loops tests create. The cache absorbs the volume.
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                r = await client.get(GEOSEARCH_URL, params={"text": address, "size": 1})
+            r.raise_for_status()
+            body = r.json()
+            break
+        except (httpx.HTTPError, ValueError):
+            # Transient upstream failure. Back off and retry; on the last
+            # attempt fall through to None *without* caching, so a flaky
+            # window doesn't pin a bogus miss for the next 24h.
+            if attempt == GEOCODE_ATTEMPTS - 1:
+                return None
+            await asyncio.sleep(GEOCODE_BACKOFF_S * (2**attempt))
     result = _parse_geosearch(body, address)
     _geocode_cache[key] = (now, result)
     _geocode_cache.move_to_end(key)
