@@ -8,6 +8,15 @@ import os
 os.environ.setdefault("RATE_LIMIT_RATE", "1000000")
 os.environ.setdefault("RATE_LIMIT_BURST", "1000000")
 
+# The committed geocode seed (data/geocode-seed.json) answers before the
+# network, which is the point of it in production — but it would silently
+# short-circuit every respx-mocked geocode test, making them assert
+# against a route that was never called. Point the seed at nothing by
+# default; tests that exercise seeding set the path themselves, and
+# test_zoning::test_committed_seed_covers_the_demo_address checks the
+# real file.
+os.environ.setdefault("GEOCODE_SEED_PATH", "/nonexistent-seed-in-tests.json")
+
 import pytest
 
 from app import data

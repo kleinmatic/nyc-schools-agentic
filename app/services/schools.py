@@ -73,15 +73,79 @@ def _clean_name(name: str) -> str:
     return _WHITESPACE_RE.sub(" ", s).strip()
 
 
+# Most NYC schools are known by a level prefix plus a number, and people
+# type that number far more reliably than anything else about the school.
+# Two things follow:
+#
+#   1. The prefix is written every possible way — "P.S. 30", "PS 030",
+#      "ps30" — and the level prefixes are colloquially INTERCHANGEABLE.
+#      A parent says "MS 123" for a school the DOE calls J.H.S. 123;
+#      I.S. and M.S. are used for each other constantly. Treating the
+#      prefix as literal text to fuzzy-match gets this wrong: pure
+#      rapidfuzz on "IS 123" scored I.S. 232 and I.S. 237 above the
+#      actual J.H.S. 123, which fell out of the results entirely.
+#   2. The NUMBER is the high-signal token and fuzzy matching dilutes it —
+#      "33" partial-matches 333, 336 and 430 about as well as it matches
+#      33. So an exact number match earns a large explicit boost, ahead
+#      of the fuzzy score, and the prefix contributes a smaller one.
+#
+# Prefix is a boost and never a filter: plenty of schools carry two
+# prefixes ("P.S./I.S. 187"), and a school's DOE prefix often disagrees
+# with the grades it actually serves.
+_PREFIX_CLASSES = {
+    "ps": "elementary",
+    "is": "middle",
+    "ms": "middle",
+    "jhs": "middle",
+    "hs": "high",
+}
+# "ps30" with no space — clean_name leaves the prefix glued to the number.
+_GLUED_PREFIX_RE = re.compile(r"\b(ps|is|ms|jhs|hs)(\d)")
+# A level prefix anywhere in a raw school name, tolerating the periods and
+# slashes the DOE writes ("P.S./I.S. 187", "The Christa McAuliffe
+# School\I.S. 187"). Guarded on both sides so ordinary words don't match.
+_NAME_PREFIX_RE = re.compile(r"(?<![a-z])(p\.?s|i\.?s|m\.?s|j\.?h\.?s|h\.?s)(?![a-z])", re.I)
+# The school's own number: the first standalone number in its name.
+_NAME_NUMBER_RE = re.compile(r"\b(\d{1,4})\b")
+# A query that leads with an optional prefix and a number: "321",
+# "ps 321", "is 123 bronx". Trailing words are ignored here — they still
+# feed the fuzzy score.
+_QUERY_NUMBER_RE = re.compile(r"^(?:(ps|is|ms|jhs|hs)\s+)?(\d{1,4})\b")
+
+NUMBER_MATCH_BOOST = 25.0
+PREFIX_CLASS_BOOST = 8.0
+
+
 def _search_normalize(name: str) -> str:
     """Normalize a school name for fuzzy SEARCH (slightly more aggressive
     than `_clean_name`). On top of clean_name's lowercase + punctuation
-    strip — so 'P.S. 321' becomes 'ps 321' — also strips leading zeros
-    from any number, so 'PS 039 Henry Bristow' matches a user typing
-    'PS 39'. Common when users half-remember the school number."""
+    strip — so 'P.S. 321' becomes 'ps 321' — it splits a prefix glued to
+    its number ('ps30' → 'ps 30') and strips leading zeros from any
+    number, so 'PS 039 Henry Bristow' matches a user typing 'PS 39'.
+    Both are common when users half-remember the school number.
+
+    Order matters: the glue split has to run before the zero strip, since
+    'ps030' has no word boundary in front of the zeros."""
     if not name:
         return ""
-    return _LEADING_ZEROS_RE.sub(r"\1", _clean_name(name))
+    s = _GLUED_PREFIX_RE.sub(r"\1 \2", _clean_name(name))
+    return _LEADING_ZEROS_RE.sub(r"\1", s)
+
+
+def _name_prefix_classes(raw_name: str) -> set[str]:
+    """Level classes a school name claims. Read off the RAW name, before
+    clean_name strips the punctuation that separates a double prefix —
+    'P.S./I.S. 187' becomes 'psis 187' once cleaned, which is neither."""
+    return {
+        _PREFIX_CLASSES[m.group(1).replace(".", "").lower()]
+        for m in _NAME_PREFIX_RE.finditer(raw_name or "")
+        if m.group(1).replace(".", "").lower() in _PREFIX_CLASSES
+    }
+
+
+def _name_number(search_name: str) -> Optional[str]:
+    m = _NAME_NUMBER_RE.search(search_name or "")
+    return m.group(1) if m else None
 
 
 def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
@@ -141,6 +205,22 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
             df["short_name"].fillna("").apply(_search_normalize) == q_search,
             "_match",
         ] += 5
+
+    # Numbered-school boosts. Applied BEFORE the >= 80 cutoff on purpose:
+    # the whole problem is that the right school scores below the noise on
+    # fuzzy alone ("IS 123" vs "J.H.S. 123"), so the boost has to be able
+    # to carry it over the threshold, not just reorder what survived.
+    numbered = _QUERY_NUMBER_RE.match(q_search)
+    if numbered:
+        q_prefix_class = _PREFIX_CLASSES.get(numbered.group(1) or "")
+        q_number = numbered.group(2)
+        same_number = df["_search_name"].apply(_name_number) == q_number
+        df.loc[same_number, "_match"] += NUMBER_MATCH_BOOST
+        if q_prefix_class:
+            same_class = df["school_name"].fillna("").apply(
+                lambda sn: q_prefix_class in _name_prefix_classes(sn)
+            )
+            df.loc[same_number & same_class, "_match"] += PREFIX_CLASS_BOOST
 
     df = df[df["_match"] >= 80]
     if df.empty:

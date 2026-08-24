@@ -366,3 +366,31 @@ async def test_missing_seed_file_is_not_fatal(monkeypatch):
     clear_geocode_cache()
     from app.services.zoning import _seed
     assert _seed() == {}
+
+
+@respx.mock
+async def test_committed_seed_covers_the_demo_address(monkeypatch):
+    """The real data/geocode-seed.json — not a fixture — must parse and
+    must carry the demo opener, with GeoSearch hard-down.
+
+    This is the one test that exercises the shipped file. Everything else
+    runs with the seed disabled (see conftest), so without this a corrupt
+    or empty seed would pass CI and only fail on stage."""
+    from app import config
+
+    monkeypatch.setenv(
+        "GEOCODE_SEED_PATH", str(config.COMMITTED_DATA_DIR / "geocode-seed.json")
+    )
+    clear_geocode_cache()
+    route = respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(503))
+
+    # A spelling that was never sent upstream, to prove the seed is keyed
+    # by the normalizer rather than by the literal string it was built from.
+    result = await geocode("428 West 26th Street, New York, NY")
+    assert result is not None, "the demo address must resolve from the seed"
+    assert result.borough == "Manhattan"
+    assert 40.7 < result.lat < 40.8 and -74.1 < result.lon < -73.9
+    assert route.call_count == 0
+
+    # And PS 321's address, the zoning fixture used across the suite.
+    assert await geocode("180 7th Ave, Brooklyn") is not None

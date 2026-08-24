@@ -649,3 +649,108 @@ def test_schools_in_district_unknown_district_at_middle_returns_none():
     'district has no schools at this level')."""
     from app.services.analytics import schools_in_district
     assert schools_in_district(99, "middle") is None
+
+
+# ----- numbered-school query tolerance -----
+#
+# Most NYC schools are known by a level prefix and a number, and users
+# type both loosely: spacing, zero-padding and periods vary, and the
+# level prefixes (I.S. / M.S. / J.H.S.) are used interchangeably in
+# speech regardless of what the DOE calls the school.
+
+@pytest.mark.parametrize(
+    "query",
+    ["P.S. 30", "PS 30", "PS 030", "P.S. 030", "ps30", "PS30", "p.s.030"],
+)
+def test_ps_30_spelling_variants_all_find_the_same_schools(query):
+    """Every way of writing 'P.S. 30' returns the P.S. 030 schools. The
+    glued form ('ps30') used to return nothing at all — clean_name left
+    the prefix stuck to the number, so it matched no school name."""
+    dbns = [s.dbn for s in search_schools(query, limit=5)]
+    assert "07X030" in dbns, f"{query!r} lost P.S. 030 Wilton: {dbns}"
+
+
+@pytest.mark.parametrize("query", ["IS 123", "MS 123", "JHS 123", "I.S. 123", "M.S. 123"])
+def test_middle_school_prefixes_are_interchangeable(query):
+    """J.H.S. 123 James M. Kieran is what the DOE calls 08X123, but a
+    parent will say 'IS 123' or 'MS 123'. All three spellings must rank
+    it first. Before the number boost, 'IS 123' returned I.S. 232 and
+    I.S. 237 — schools matching the PREFIX text — and dropped the school
+    the user actually asked for out of the results entirely."""
+    results = search_schools(query, limit=5)
+    assert results, f"{query!r} returned nothing"
+    assert results[0].dbn == "08X123", (
+        f"{query!r} should rank J.H.S. 123 first, got "
+        f"{[(s.dbn, s.school_name) for s in results[:3]]}"
+    )
+
+
+def test_number_outranks_prefix_text_similarity():
+    """The number is the high-signal token. A school whose NUMBER matches
+    must outrank one that merely shares the prefix and fuzzy-matches the
+    digits (123 vs 232 / 237)."""
+    dbns = [s.dbn for s in search_schools("IS 123", limit=5)]
+    assert dbns.index("08X123") == 0
+    for wrong_number in ("09X232", "25Q237"):
+        assert wrong_number not in dbns[:1]
+
+
+def test_double_prefix_schools_match_either_prefix():
+    """'P.S./I.S. 187 Hudson Cliffs' claims both levels. clean_name
+    collapses that to 'psis 187', which is neither prefix — so the class
+    check reads the raw name."""
+    from app.services.schools import _name_prefix_classes
+    assert _name_prefix_classes("P.S./I.S. 187 Hudson Cliffs") == {"elementary", "middle"}
+    # Backslash separator appears in the real data too.
+    assert "middle" in _name_prefix_classes("The Christa McAuliffe School\\I.S. 187")
+
+
+def test_prefix_detection_does_not_fire_on_ordinary_words():
+    """The prefix pattern is guarded on both sides — 'High School' must
+    not read as an 'H.S.' prefix, or every school in the city claims the
+    high-school class."""
+    from app.services.schools import _name_prefix_classes
+    assert _name_prefix_classes("Brooklyn Technical High School") == set()
+    assert _name_prefix_classes("Stuyvesant High School") == set()
+
+
+def test_named_schools_still_rank_correctly():
+    """Regression guard for the boosts: queries with no number must be
+    untouched, and the borough-word-in-the-name cases must survive."""
+    assert search_schools("Bronx Science")[0].dbn == "10X445"
+    assert search_schools("Brooklyn Tech")[0].dbn == "13K430"
+    # Manhattan Beach is a Brooklyn school whose name contains a borough.
+    assert search_schools("Manhattan Beach")[0].dbn == "22K195"
+    assert search_schools("Stuyvesant")[0].dbn == "02M475"
+
+
+def test_numbered_query_with_borough_keeps_the_right_school():
+    """'PS 321 Brooklyn' used to rank P.S. 131 Brooklyn, P.S. 326 and
+    P.S. 36 — the borough word was matched against school NAMES, and
+    P.S. 321 fell out of the top 10. The number boost restores it.
+
+    Note the borough word is still not used as a borough SIGNAL; see
+    test_borough_word_is_not_yet_a_borough_filter."""
+    results = search_schools("PS 321 Brooklyn", limit=5)
+    assert results[0].dbn == "15K321", (
+        f"got {[(s.dbn, s.school_name) for s in results[:3]]}"
+    )
+
+
+def test_borough_word_is_not_yet_a_borough_filter():
+    """Documents what is still broken, so the next fix has a failing
+    baseline to move.
+
+    'PS 33 Manhattan' now returns P.S. 033 schools (the number boost
+    works), but ranks them in an arbitrary borough order — 10X033 is in
+    the Bronx. Making the borough token an actual filter is the open
+    piece; whoever does it must keep test_named_schools_still_rank_correctly
+    passing, since Bronx Science / Brooklyn Tech / Manhattan Beach all
+    carry a borough word as part of the real name."""
+    results = search_schools("PS 33 Manhattan", limit=5)
+    dbns = [s.dbn for s in results]
+    assert "02M033" in dbns, "the Manhattan P.S. 033 should at least be present"
+    assert results[0].dbn != "02M033", (
+        "borough ranking appears fixed — delete this test and tighten "
+        "test_numbered_query_with_borough_keeps_the_right_school instead"
+    )
