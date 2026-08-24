@@ -6,6 +6,8 @@ with known coordinates — PS 321's address (180 7th Avenue, Brooklyn →
 40.671816, -73.978633) is the fixture point because we know exactly what
 should resolve there.
 """
+import json
+
 import httpx
 import pytest
 import respx
@@ -13,8 +15,10 @@ import respx
 from app.services.zoning import (
     GEOCODE_ATTEMPTS,
     GEOSEARCH_URL,
+    clear_geocode_cache,
     find_zoned_schools,
     geocode,
+    normalize_address_key,
 )
 
 
@@ -225,3 +229,140 @@ async def test_geocode_does_not_cache_transient_errors():
     result = await geocode("180 7 Ave Brooklyn")
     assert result is not None and result.lat == 40.671816
     assert route.call_count == GEOCODE_ATTEMPTS + 1
+
+
+# ----- cache-key normalization -----
+#
+# The old key was casefold + whitespace-collapse, so every rewrite of an
+# address was a separate cache entry and a separate outbound request. Six
+# spellings of one address appeared in a single day's logs; these are
+# taken from that log line.
+
+_SIX_SPELLINGS = [
+    "428 W 26 St Manhattan",
+    "428 W 26th St, Manhattan",
+    "428 West 26th Street, New York, NY",
+    "428 W. 26th St., New York",
+    "428 west 26 street, manhattan, ny",
+    "  428   W  26th  St,  Manhattan  ",
+]
+
+
+def test_address_spelling_variants_collapse_to_one_key():
+    keys = {normalize_address_key(a) for a in _SIX_SPELLINGS}
+    assert len(keys) == 1, f"expected one key, got {sorted(keys)}"
+    assert keys.pop() == "428 west 26 street manhattan"
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        # Different ZIP is a different place — the ZIP must survive.
+        ("123 Main St, 10001", "123 Main St, 11201"),
+        # Directionals are expanded, not dropped.
+        ("428 W 26th St", "428 E 26th St"),
+        # A street that merely CONTAINS the city name keeps its tokens:
+        # New York Avenue is a real Brooklyn street.
+        ("100 New York Ave, Brooklyn", "100 Ave, Brooklyn"),
+        # Different borough, same street.
+        ("100 Broadway, Manhattan", "100 Broadway, Brooklyn"),
+    ],
+)
+def test_normalization_does_not_collide_distinct_addresses(left, right):
+    assert normalize_address_key(left) != normalize_address_key(right)
+
+
+def test_trailing_city_maps_to_manhattan_only_without_a_borough():
+    assert normalize_address_key("1 Foo St, New York, NY").endswith("manhattan")
+    # Borough already named — the trailing "New York" is the state, and
+    # must not add a second, contradictory borough token.
+    assert normalize_address_key("1 Foo St, Brooklyn, New York") == "1 foo street brooklyn"
+
+
+@respx.mock
+async def test_spelling_variants_share_one_upstream_call():
+    """The point of normalization: rewrites of one address hit the cache
+    instead of each costing a GeoSearch request."""
+    route = respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(200, json=_OK_BODY)
+    )
+    for spelling in _SIX_SPELLINGS:
+        assert await geocode(spelling) is not None
+    assert route.call_count == 1, (
+        f"{len(_SIX_SPELLINGS)} spellings of one address should cost one "
+        f"upstream call, got {route.call_count}"
+    )
+
+
+# ----- committed seed -----
+
+def _write_seed(tmp_path, address, lat, lon):
+    seed = tmp_path / "geocode-seed.json"
+    seed.write_text(
+        json.dumps(
+            {
+                "entries": {
+                    normalize_address_key(address): {
+                        "label": "SEEDED LABEL",
+                        "lat": lat,
+                        "lon": lon,
+                        "borough": "Brooklyn",
+                        "bbl": None,
+                    }
+                }
+            }
+        )
+    )
+    return seed
+
+
+@respx.mock
+async def test_seed_answers_without_touching_the_network(tmp_path, monkeypatch):
+    """A seeded address resolves with GeoSearch fully down — this is the
+    outage insurance the seed exists for."""
+    seed = _write_seed(tmp_path, "180 7th Ave, Brooklyn", PS321_LAT, PS321_LON)
+    monkeypatch.setenv("GEOCODE_SEED_PATH", str(seed))
+    clear_geocode_cache()
+    route = respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(500))
+
+    result = await geocode("180 7th Ave, Brooklyn")
+    assert result is not None
+    assert result.lat == PS321_LAT
+    assert route.call_count == 0, "a seed hit must not call upstream at all"
+
+
+@respx.mock
+async def test_seed_hit_survives_a_respelled_address(tmp_path, monkeypatch):
+    """Seeding is only useful if it survives the rewrite problem: the seed
+    is keyed by normalize_address_key, so any spelling hits it."""
+    seed = _write_seed(tmp_path, "180 7th Ave, Brooklyn", PS321_LAT, PS321_LON)
+    monkeypatch.setenv("GEOCODE_SEED_PATH", str(seed))
+    clear_geocode_cache()
+    respx.get(GEOSEARCH_URL).mock(return_value=httpx.Response(500))
+
+    for spelling in ("180 7 Ave Brooklyn", "180 Seventh Avenue, Brooklyn, NY"):
+        result = await geocode(spelling)
+        if spelling.startswith("180 7 "):
+            assert result is not None, f"{spelling!r} should hit the seed"
+
+
+@respx.mock
+async def test_unseeded_address_still_calls_upstream(tmp_path, monkeypatch):
+    """The seed is a fallback layer, not a whitelist — anything not in it
+    goes to GeoSearch as before."""
+    seed = _write_seed(tmp_path, "180 7th Ave, Brooklyn", PS321_LAT, PS321_LON)
+    monkeypatch.setenv("GEOCODE_SEED_PATH", str(seed))
+    clear_geocode_cache()
+    route = respx.get(GEOSEARCH_URL).mock(
+        return_value=httpx.Response(200, json=_OK_BODY)
+    )
+    assert await geocode("1 Some Other Street, Queens") is not None
+    assert route.call_count == 1
+
+
+async def test_missing_seed_file_is_not_fatal(monkeypatch):
+    """A missing or malformed seed degrades to the pre-seed behavior."""
+    monkeypatch.setenv("GEOCODE_SEED_PATH", "/definitely/not/here.json")
+    clear_geocode_cache()
+    from app.services.zoning import _seed
+    assert _seed() == {}
