@@ -287,6 +287,21 @@ After CI runs and passes, the deploy workflow picks up the new commit, fetches t
 
 After step 2, the 1.5 GB `school-data/SRC2025_Group3.mdb` can be deleted to reclaim disk — the feathers extracted from it are the working source.
 
+**Refreshing the geocode seed (independent of the annual data refresh).** `data/geocode-seed.json`
+is a committed map of normalized address → coordinates that `geocode()` consults *before* calling
+NYC GeoSearch. It exists because GeoSearch is intermittently unreliable and there is no Fly volume,
+so nothing cached at runtime survives a deploy. Rebuild it with:
+
+```bash
+uv run python scripts/build_geocode_seed.py               # the default landmark list
+uv run python scripts/build_geocode_seed.py addresses.txt # one address per line
+```
+
+It rewrites the file in place — review the diff before committing. Addresses that fail to resolve
+are reported and left **out** of the seed, so a build during a GeoSearch outage can't pin a
+permanent no-match. Keys are `normalize_address_key()` output, not raw addresses, so every spelling
+variant of a seeded address hits.
+
 **Grades 3-8 exams (ELA/math) span two sources, split at the 2023 standards reset — source = standard.** NY replaced the Common Core standards with the Next Generation standards; the last Common Core test was spring 2022 (`ay 2021`), the first Next Gen was spring 2023 (`ay 2022`), and scores aren't comparable across. Common Core years (`ay ≤ 2021`) come from the DOE loaders (`exams.load_ela/load_math`); Next Generation years (`ay ≥ 2022`) are reshaped from the **NYSED SRC** annual grades-3-8 feathers in `build_db.py` (`_nysed_exam_rows`). **Year-convention gotcha:** DOE `ay` is the *fall* year (`ay = test_year − 1`), but NYSED `YEAR` is the *spring* year, so the reshape does `ay = YEAR − 1` to conform; and because the DOE's own last year (`ay 2022` = spring 2023) is *already* Next Gen and would duplicate NYSED's `ay 2022`, `build_exam` drops DOE `ay ≥ 2022` so NYSED is the single Next-Gen source. Resulting series: `ay 2012..2021` (DOE) then `2022, 2023, 2024` (NYSED); newest `ay 2024` = SY2024-25. The display renders separate Old/New Standard blocks — see the standards-split rule in CLAUDE.md. **Quirk:** NYSED packaged SRC2024 as `SRC2024_Group5.mdb` (prior years were `Group3`); upstream `nysed_src.extract_mdb` greps for `Group3`, so a from-scratch SRC2024 fetch needs the extracted `.mdb` renamed to the `Group3` path (or the upstream group-name lookup generalized — fix pending in the `kleinmatic/nycschools` fork).
 
 ### Why we don't use upstream's `python -m nycschools.dataloader -d`
@@ -488,7 +503,9 @@ Available in upstream `nycschools` but not currently wired into the app:
 │   ├── data.sqlite                # ~50 MB; tabular data
 │   ├── school-locations.geojson   # school point locations
 │   ├── school-zones-{es,ms}.geojson  # attendance zone polygons
-│   └── hs-directory.feather       # AY 2021 HS directory (wide format)
+│   ├── hs-directory.feather       # AY 2021 HS directory (wide format)
+│   └── geocode-seed.json          # committed last-known-good geocodes
+│                                  # (plain JSON, not LFS — review the diff)
 ├── school-data/           # gitignored; raw upstream cache for refresh only
 ├── app/
 │   ├── main.py            # FastAPI app, lifespan-loaded data, mounts web + MCP
@@ -517,6 +534,7 @@ Available in upstream `nycschools` but not currently wired into the app:
 ├── scripts/
 │   ├── fetch_data.py      # build-time: pull upstream → school-data/
 │   ├── build_db.py        # build-time: filter → data/data.sqlite + geo
+│   ├── build_geocode_seed.py  # rebuild data/geocode-seed.json from GeoSearch
 │   ├── find_school.py     # ad-hoc: name → DBN lookup (build group)
 │   └── inspect_school.py  # ad-hoc: dump everything we know about a DBN
 ├── CLAUDE.md              # architecture & repo-boundary policy
