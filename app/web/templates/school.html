@@ -1591,13 +1591,21 @@
 {# Two WebMCP imperative tools — both feature-detected and silent on
    non-WebMCP browsers. The split lets an agent pull the SWD-specific
    payload (with cohort comparisons) only when the user identifies as
-   needing special-ed context, instead of paying for it on every page hit. #}
+   needing special-ed context, instead of paying for it on every page hit.
+
+   Behavior verified in Chrome 159 (2026-11-09):
+   - registerTool() accepts `title` and `outputSchema`; getTools() returns both.
+   - execute() may return a plain object; the browser serializes it.
+   - An error thrown from execute() reaches the agent only as
+     "OperationError: Tool execution failed." So a bad argument returns
+     an {error} object the agent can read and correct, never a throw.
+   - Aborting the registration signal is the only way to unregister. #}
 <script>
-(function() {
+(async function() {
   // Chrome 150+ exposes the WebMCP API on document.modelContext; older
   // builds used navigator.modelContext. Feature-detect both.
   const mc = document.modelContext ?? navigator.modelContext;
-  if (!mc || !('registerTool' in mc)) return;
+  if (!mc || typeof mc.registerTool !== 'function') return;
 
   // Tool 1 — always called first on a school page. Identity/headline
   // scalars always return; the six big blocks (peer_ranks,
@@ -1608,9 +1616,10 @@
   const SECTIONS = ["peer_ranks", "peer_neighborhood", "peer_district", "co_located_schools", "staffing", "ms_admission"];
   // annotations: untrustedContentHint deliberately omitted — payloads are
   // our own curated government data, no user-generated content.
-  mc.registerTool({
+  const tools = [{
     name: "get_current_school_details",
-    description: "Call this first on any question about the school on this page. Always returns identity and headline stats; pass sections to add comparison blocks. Pair every stat with its cohort position, in neutral positional language — highest/lowest, above/below the median — never best/worst/better/worse. Sections: peer_ranks = citywide rank vs same-level NYC schools; peer_neighborhood = same-NTA peers; peer_district = same-district peers (null for HS — city-wide choice); co_located_schools = schools sharing this building; staffing = counselor/social-worker FTE; ms_admission = how the school admits — quote the published priority strings verbatim; all = everything.",
+    title: "Current School Details",
+    description: "Call this first for any question about the school on this page. Always returns identity and headline stats; pass sections to add blocks. peer_ranks = citywide rank vs same-level schools; peer_neighborhood = same-NTA peers; peer_district = same-district peers (null for high schools); co_located_schools = same building; staffing = counselor/social-worker FTE; ms_admission = how the school admits — quote the published priority strings verbatim. Give each stat with its cohort position.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1621,18 +1630,45 @@
         }
       }
     },
+    outputSchema: {
+      type: "object",
+      properties: {
+        dbn: { type: "string", description: "School primary key, e.g. 15K321." },
+        school_name: { type: "string" },
+        school_level: { type: "string", description: "Internal level code, e.g. elementary, middle, high." },
+        district: { type: "integer" },
+        borough: { type: "string" },
+        neighborhood_nta: { type: ["string", "null"] },
+        is_d75: { type: "boolean", description: "True for District 75 special-education schools." },
+        latest_year: { type: "integer", description: "Fall year of the school year: 2024 = SY 2024-25." },
+        total_enrollment: { type: ["number", "null"] },
+        swd_enrollment_pct: { type: ["number", "null"], description: "0..1 fraction." },
+        url_path: { type: "string" },
+        peer_ranks: { type: ["object", "null"] },
+        peer_neighborhood: { type: ["object", "null"] },
+        peer_district: { type: ["object", "null"] },
+        co_located_schools: { type: ["array", "null"] },
+        staffing: { type: ["object", "null"] },
+        ms_admission: { type: ["object", "null"] },
+        error: { type: "string", description: "Present only when a requested section name is not valid." }
+      }
+    },
     execute(args) {
       const requested = args && Array.isArray(args.sections) && args.sections.length
         ? args.sections : ["peer_ranks"];
-      const want = new Set(requested);  // unrecognized names fall through silently
+      const unknown = requested.filter((s) => s !== "all" && !SECTIONS.includes(s));
+      if (unknown.length) {
+        return { error: `unknown section: ${unknown.join(", ")}. Valid: ${SECTIONS.join(", ")}, all` };
+      }
+      const want = new Set(requested);
       const payload = {};
       for (const [key, value] of Object.entries(CONTEXT)) {
         if (!SECTIONS.includes(key) || want.has("all") || want.has(key)) payload[key] = value;
       }
-      return JSON.stringify(payload);
+      return payload;
     },
     annotations: { readOnlyHint: true }
-  });
+  }];
 
   {% if agent_swd_context %}
   // Tool 2 — the special-education payload: Students-With-Disabilities
@@ -1640,14 +1676,40 @@
   // per metric — rank/median/extremes vs the same-level NYC SWD cohort,
   // plus a ready-to-quote narrative string. Small payload, no sections.
   const SWD_CONTEXT = {{ agent_swd_context | tojson }};
-  mc.registerTool({
-    name: "get_swd_outcomes_for_current_school",
+  tools.push({
+    name: "get_school_swd_outcomes",
+    title: "Students With Disabilities Outcomes",
     description: "Returns this school's Students-With-Disabilities (SWD) subgroup outcomes — graduation, chronic absenteeism, CCCR, ESSA — each with cohort_context: rank vs the same-level NYC SWD cohort, citywide median, and extremes. Quote cohort_context.narrative verbatim; it uses neutral positional language (highest/lowest quartile, above/below the median). Call this only for special-education questions: IEPs, learning disabilities, autism, speech delays, or how the school serves students with disabilities.",
     inputSchema: { type: "object", properties: {} },
-    execute() { return JSON.stringify(SWD_CONTEXT); },
+    outputSchema: {
+      type: "object",
+      properties: {
+        dbn: { type: "string" },
+        school_name: { type: "string" },
+        is_d75: { type: "boolean" },
+        swd_enrollment_pct: { type: ["number", "null"], description: "0..1 fraction." },
+        essa_status: { type: ["object", "string", "null"] },
+        notes: { type: ["array", "null"], description: "Caveats to pass on, e.g. District 75 placement rules." },
+        chronic_absenteeism: { type: ["object", "null"] },
+        graduation: { type: ["object", "null"] },
+        cccr: { type: ["object", "null"] },
+        cohort_context: { type: ["object", "null"], description: "Per metric: rank, cohort median, extremes, and a narrative string to quote." }
+      }
+    },
+    execute() { return SWD_CONTEXT; },
     annotations: { readOnlyHint: true }
   });
   {% endif %}
+
+  // Register the page's tools as one set. One AbortController owns every
+  // registration, so a failure unregisters the tools that did register.
+  const registration = new AbortController();
+  try {
+    await Promise.all(tools.map((tool) => mc.registerTool(tool, { signal: registration.signal })));
+  } catch (err) {
+    registration.abort();
+    console.warn("WebMCP: tool registration failed; no page tools are exposed.", err);
+  }
 })();
 </script>
 {% endblock %}

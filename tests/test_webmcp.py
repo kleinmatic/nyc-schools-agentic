@@ -4,6 +4,8 @@ Substring-level guard against accidentally dropping the WebMCP attributes
 during a template refactor. Does NOT validate the spec — that's what the
 Chrome DevTools "agentic browsing" Lighthouse audit is for.
 """
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -106,16 +108,14 @@ def test_webmcp_toolname_is_unique_per_page(client, path, toolname):
 # here so the length caps (Chrome WebMCP security guidance: lean tool
 # descriptions) fail loudly if someone fattens them back up.
 SCHOOL_TOOL_DESCRIPTION = (
-    "Call this first on any question about the school on this page. Always "
-    "returns identity and headline stats; pass sections to add comparison "
-    "blocks. Pair every stat with its cohort position, in neutral positional "
-    "language — highest/lowest, above/below the median — never "
-    "best/worst/better/worse. Sections: peer_ranks = citywide rank vs "
-    "same-level NYC schools; peer_neighborhood = same-NTA peers; "
-    "peer_district = same-district peers (null for HS — city-wide choice); "
-    "co_located_schools = schools sharing this building; staffing = "
+    "Call this first for any question about the school on this page. Always "
+    "returns identity and headline stats; pass sections to add blocks. "
+    "peer_ranks = citywide rank vs same-level schools; peer_neighborhood = "
+    "same-NTA peers; peer_district = same-district peers (null for high "
+    "schools); co_located_schools = same building; staffing = "
     "counselor/social-worker FTE; ms_admission = how the school admits — "
-    "quote the published priority strings verbatim; all = everything."
+    "quote the published priority strings verbatim. Give each stat with its "
+    "cohort position."
 )
 SWD_TOOL_DESCRIPTION = (
     "Returns this school's Students-With-Disabilities (SWD) subgroup "
@@ -163,7 +163,7 @@ def test_school_page_registers_swd_specific_tool_when_outcomes_exist(client):
     the tool."""
     r = client.get("/school/15K321")
     assert r.status_code == 200
-    assert 'name: "get_swd_outcomes_for_current_school"' in r.text
+    assert 'name: "get_school_swd_outcomes"' in r.text
     # Tool description must name the IEP / special-ed trigger conditions
     # so the agent knows when this tool applies.
     assert "IEP" in r.text
@@ -172,21 +172,65 @@ def test_school_page_registers_swd_specific_tool_when_outcomes_exist(client):
 
 
 def test_school_page_imperative_tool_descriptions_are_lean(client):
-    """Chrome WebMCP guidance: tool descriptions ≤ 500 chars (our hard cap
-    700), lean outputs. Pin the rendered descriptions verbatim and cap
-    their length so drift or bloat fails here, not in an agent session."""
+    """Chrome WebMCP budgets (secure-tools page): tool description ≤ 500
+    chars, parameter description ≤ 150, tool and parameter names ≤ 30.
+    Pin the rendered descriptions verbatim and cap their length so drift
+    or bloat fails here, not in an agent session."""
     r = client.get("/school/15K321")
     assert r.status_code == 200
     assert SCHOOL_TOOL_DESCRIPTION in r.text
     assert SWD_TOOL_DESCRIPTION in r.text
-    assert len(SCHOOL_TOOL_DESCRIPTION) <= 700
+    assert len(SCHOOL_TOOL_DESCRIPTION) <= 500
     assert len(SWD_TOOL_DESCRIPTION) <= 500
     # Positive-language rule: descriptions say when to call, never "Do NOT".
     assert "Do NOT" not in SCHOOL_TOOL_DESCRIPTION
     assert "Do NOT" not in SWD_TOOL_DESCRIPTION
-    # execute() must return a string, not a raw object (Chrome guidance).
-    assert "return JSON.stringify(payload);" in r.text
-    assert "return JSON.stringify(SWD_CONTEXT);" in r.text
+    script = r.text[r.text.index("const tools = [{"):]
+    names = re.findall(r'\bname: "([^"]+)"', script)
+    assert names == ["get_current_school_details", "get_school_swd_outcomes"]
+    assert all(len(n) <= 30 for n in names)
+    for desc in re.findall(r'description: "([^"]*)"', script):
+        if desc not in (SCHOOL_TOOL_DESCRIPTION, SWD_TOOL_DESCRIPTION):
+            assert len(desc) <= 150, desc
+
+
+def test_school_page_imperative_tools_follow_current_api(client):
+    """Shape of the registration, per the Nov 2026 spec draft and Chrome
+    159 behavior: each tool has a title and an outputSchema; execute()
+    returns an object (the browser serializes it); a bad section returns
+    a readable {error}, because a thrown error is masked from the agent;
+    and one AbortController owns every registration."""
+    r = client.get("/school/15K321")
+    assert r.status_code == 200
+    script = r.text[r.text.index("const tools = [{"):]
+    script = script[:script.index("</script>")]
+    assert script.count("\n    title: ") == 2
+    assert script.count("\n    outputSchema: ") == 2
+    assert "JSON.stringify" not in script
+    assert "return { error: `unknown section:" in script
+    assert "mc.registerTool(tool, { signal: registration.signal })" in script
+    assert "registration.abort();" in script
+
+
+def test_tool_events_listen_on_model_context(client):
+    """From Chrome 156 toolactivated / toolcancel fire only on
+    document.modelContext; a window listener never fires."""
+    r = client.get("/sources")
+    assert "window.addEventListener('toolactivated'" not in r.text
+    assert "window.addEventListener('toolcancel'" not in r.text
+    assert "toolEvents.addEventListener('toolactivated'" in r.text
+    assert "toolEvents.addEventListener('toolcancel'" in r.text
+
+
+@pytest.mark.parametrize("path", ["/", "/zoned", "/sources", "/school/15K321"])
+def test_declarative_tool_inputs_are_required(client, path):
+    """Chrome derives inputSchema.required from the `required` attribute.
+    Without it the live schema said required: [] while the manifest said
+    the parameter was required."""
+    r = client.get(path)
+    fields = re.findall(r"<input\b[^>]*toolparamdescription=[^>]*>", r.text, re.S)
+    assert len(fields) == 3
+    assert all(re.search(r"\brequired\b", f) for f in fields)
 
 
 def test_school_page_renders_swd_cohort_narrative(client):
