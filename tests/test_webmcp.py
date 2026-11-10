@@ -335,3 +335,48 @@ def test_origin_trial_meta_tag_on_every_page(client):
         assert 'http-equiv="origin-trial"' in page, f"{path} missing origin-trial meta"
         # Spot-check it's the WebMCP token (payload tail encodes the feature).
         assert "URqYIF/nYGrU/iJG4J2x3w0" in page, f"{path} has wrong/missing OT token"
+
+
+# ----- /model-home: the WebMCP tour page -----
+
+def test_model_home_page_renders_with_all_form_tools_once(client):
+    """The tour hosts the three form tools inline and turns off the
+    site-wide copy, so each toolname appears exactly once."""
+    r = client.get("/model-home")
+    assert r.status_code == 200
+    assert "The WebMCP Model Home" in r.text
+    assert "By Scott Klein" in r.text
+    for name in (
+        "search-schools-by-name",
+        "find-zoned-schools-by-address",
+        "find-schools-in-neighborhood",
+    ):
+        assert r.text.count(f' toolname="{name}"') == 1
+
+
+def test_model_home_function_tools_meet_chrome_budgets(client):
+    """Names ≤ 30, tool descriptions ≤ 500, parameter descriptions ≤ 150.
+    The clear tool is the site's one consequential tool."""
+    r = client.get("/model-home")
+    script = r.text[r.text.index("const listTool = {"):]
+    script = script[:script.index("</script>")]
+    names = re.findall(r"\bname: '([^']+)'", script)
+    assert names == [
+        "list_shortlisted_schools",
+        "add_school_to_shortlist",
+        "clear_shortlist",
+    ]
+    assert all(len(n) <= 30 for n in names)
+    descs = re.findall(r"description: (?:'([^']*)'|\"([^\"]*)\")", script)
+    assert len(descs) >= 4
+    assert all(len(a or b) <= 500 for a, b in descs)
+    assert script.count("consequentialHint: true") == 1
+    assert script.count("readOnlyHint: true") == 1
+    # Neutral-language rule holds for tool copy too.
+    for word in ("best", "worst", "better", "worse"):
+        assert not re.search(rf"\b{word}\b", script)
+
+
+def test_model_home_is_linked_from_footer_and_llms_txt(client):
+    assert 'href="/model-home"' in client.get("/sources").text
+    assert "/model-home" in client.get("/llms.txt").text

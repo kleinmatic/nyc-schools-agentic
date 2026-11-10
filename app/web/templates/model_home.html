@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+{% block title %}WebMCP Model Home — The Data Tribune{% endblock %}
+{% block meta_description %}A working tour of WebMCP in Chrome: see the tools this site offers to AI agents, run each one, and watch what the browser does.{% endblock %}
+
+{# The three form tools sit inside the tour (section 2), so the site-wide
+   copy at the foot of the page is turned off. WebMCP requires unique
+   toolnames per document. #}
+{% block global_webmcp_forms %}{% endblock %}
+
+{% block content %}
+<style>
+  .mh-step { counter-increment: mh; }
+  .mh-step > h2::before { content: counter(mh) ". "; color: var(--muted); }
+  .mh-badge { display: inline-block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.1rem 0.45rem; border-radius: 0.25rem; border: 1px solid; }
+  .mh-pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; background: #f1f5f9; border-radius: 0.375rem; padding: 0.75rem; max-height: 18rem; overflow: auto; }
+  /* Chrome applies these two states while an agent holds a form tool. */
+  form:tool-form-active { outline: 3px dashed #7c3aed; outline-offset: 6px; }
+  button:tool-submit-active { outline: 3px dashed #db2777; outline-offset: 3px; }
+</style>
+
+<div class="mb-8">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← back to search</a>
+  <p class="eyebrow mt-6 mb-3">How This Site Works With AI Agents</p>
+  <h1 class="display-headline">The WebMCP Model Home</h1>
+  <p class="text-sm text-slate-500 mt-3">By Scott Klein · Updated November 10, 2026</p>
+  <p class="display-deck">
+    WebMCP lets a web page tell an AI agent what it can do there. This page
+    shows every tool it offers, lets you run each one the way an agent does,
+    and shows what Chrome does in response.
+  </p>
+</div>
+
+<div style="counter-reset: mh;">
+
+<section class="mh-step mb-12" id="status">
+  <h2 class="text-xl font-semibold mb-2">Is Your Browser Ready?</h2>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    WebMCP is an experiment in Chrome 149 and later. Where the browser does
+    not have it, this page still works: the Run buttons call the same code
+    and the same addresses directly.
+  </p>
+  <div id="mh-status" class="bg-white border border-slate-200 rounded-lg p-4 text-sm" aria-live="polite">
+    Checking this browser…
+  </div>
+</section>
+
+<section class="mh-step mb-12" id="forms">
+  <h2 class="text-xl font-semibold mb-2">Forms an Agent Can Fill In</h2>
+  <p class="text-sm text-slate-600 mb-2 max-w-2xl">
+    Each form below is an ordinary search form with two extra attributes: a
+    tool name and a description. Chrome turns each one into a tool. When an
+    agent uses a form, Chrome types the values into the fields and outlines
+    the form, so a person can see what the agent did.
+  </p>
+  <p class="text-sm text-slate-600 mb-2 max-w-2xl">
+    These forms answer the agent in place. A person who submits one goes to
+    the results page as usual.
+  </p>
+  <div class="-mx-6">
+    {% include "partials/_webmcp_global_forms.html" %}
+  </div>
+</section>
+
+<section class="mh-step mb-12" id="shortlist">
+  <h2 class="text-xl font-semibold mb-2">Tools That Change the Page</h2>
+  <p class="text-sm text-slate-600 mb-2 max-w-2xl">
+    A script can register a tool as a function. The three shortlist tools
+    here are functions on this page: one reads the list, one adds a school,
+    and one clears it. The list is kept in this browser tab only.
+  </p>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    The tool that clears the list exists only while the list has schools in
+    it. Add a school and the tool list in the next section grows by one. The
+    clear tool is also marked as consequential, which lets a browser ask the
+    person before an agent runs it.
+  </p>
+  <div class="bg-white border border-slate-200 rounded-lg p-4">
+    <div class="flex items-baseline justify-between">
+      <h3 class="text-sm font-semibold">My Shortlist</h3>
+      <span id="mh-shortlist-count" class="text-xs text-slate-500">0 schools</span>
+    </div>
+    <ul id="mh-shortlist" class="mt-2 text-sm divide-y divide-slate-100" aria-live="polite"></ul>
+    <p id="mh-shortlist-empty" class="mt-2 text-sm text-slate-400">No schools yet. Run the add tool in the next section.</p>
+  </div>
+</section>
+
+<section class="mh-step mb-12" id="tools">
+  <h2 class="text-xl font-semibold mb-2">Every Tool on This Page</h2>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    This list comes from the browser, not from us: the page asks Chrome
+    which tools it can see and prints the answer. Each Run button calls the
+    tool through Chrome, which is the same path an agent uses.
+  </p>
+  <div id="mh-tools" class="space-y-4" aria-live="polite"></div>
+</section>
+
+<section class="mh-step mb-12" id="log">
+  <h2 class="text-xl font-semibold mb-2">What the Browser Tells the Page</h2>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    Chrome sends the page an event when the tool list changes, when an agent
+    starts a tool, and when a person cancels. The log below records
+    each event and each tool call.
+  </p>
+  <div id="mh-log" class="mh-pre" style="min-height: 4rem;">Nothing yet.</div>
+</section>
+
+<section class="mh-step mb-12" id="ask">
+  <h2 class="text-xl font-semibold mb-2">Ask the Page</h2>
+  <p class="text-sm text-slate-600 mb-2 max-w-2xl">
+    A page can also be its own agent. This box uses the language model that
+    Chrome runs on your computer. The model reads the tool list, picks one
+    tool, and the page runs it and asks the model to state the result.
+  </p>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    The model is small and can be wrong. Check its answer against the tool
+    result shown under it. Nothing you type here leaves your computer except
+    the tool call to this site.
+  </p>
+  <div class="bg-white border border-slate-200 rounded-lg p-4">
+    <p id="mh-ask-status" class="text-sm text-slate-500 mb-3">Checking for an on-device model…</p>
+    <form id="mh-ask-form" class="flex gap-2">
+      <label class="sr-only" for="mh-ask-input">Question</label>
+      <input id="mh-ask-input" type="text" autocomplete="off" disabled
+             value="Which schools is 180 7th Avenue, Brooklyn zoned for?"
+             class="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-md focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400">
+      <button id="mh-ask-button" type="submit" disabled
+              class="px-4 py-2 text-sm font-semibold rounded-md bg-slate-900 text-white disabled:bg-slate-300">Ask</button>
+    </form>
+    <div id="mh-ask-steps" class="mt-3 space-y-2 text-sm"></div>
+  </div>
+</section>
+
+<section class="mh-step mb-12" id="built">
+  <h2 class="text-xl font-semibold mb-2">How It Is Built</h2>
+  <p class="text-sm text-slate-600 mb-4 max-w-2xl">
+    This site is open source. Each pattern on this page is a few lines.
+  </p>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+    <div><dt class="font-medium">Form tools</dt><dd class="text-slate-600 mt-1">Four HTML attributes on a form and its fields. <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nyc-schools-agentic/blob/main/app/web/templates/partials/_webmcp_global_forms.html">See the forms ↗</a></dd></div>
+    <div><dt class="font-medium">Answering the agent in place</dt><dd class="text-slate-600 mt-1">One submit handler that returns data when an agent sent the form. <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nyc-schools-agentic/blob/main/app/web/templates/base.html">See the handler ↗</a></dd></div>
+    <div><dt class="font-medium">Function tools</dt><dd class="text-slate-600 mt-1">A name, a description, the inputs, and a function. <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="https://github.com/kleinmatic/nyc-schools-agentic/blob/main/app/web/templates/model_home.html">See this page ↗</a></dd></div>
+    <div><dt class="font-medium">Tools that know the page</dt><dd class="text-slate-600 mt-1">Each school page gives an agent that school’s data and its position among similar schools. <a class="text-blue-600 hover:text-blue-800 underline decoration-blue-200" href="/school/15K321">Open a school page</a></dd></div>
+  </dl>
+  <p class="text-sm text-slate-600 mt-4 max-w-2xl">
+    Developers can see the same tool list in Chrome DevTools: open the
+    Application panel and choose WebMCP.
+  </p>
+  <p class="mt-4 text-xs text-slate-400">
+    Sources: <a class="underline" href="https://webmachinelearning.github.io/webmcp/">WebMCP draft specification</a>, W3C Web Machine Learning Community Group;
+    <a class="underline" href="https://developer.chrome.com/docs/ai/webmcp">Chrome for Developers</a>.
+  </p>
+</section>
+
+</div>
+
+<script>
+(async function () {
+  const mc = document.modelContext ?? navigator.modelContext;
+  const live = !!(mc && typeof mc.registerTool === 'function' && typeof mc.getTools === 'function');
+
+  // ---------- small DOM helpers (textContent only; no HTML strings) ----------
+  const el = (tag, attrs = {}, ...kids) => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else node.setAttribute(k, v);
+    }
+    for (const kid of kids) node.append(kid);
+    return node;
+  };
+  const pretty = (value) => {
+    let v = value;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return v; } }
+    return JSON.stringify(v, null, 2);
+  };
+
+  // ---------- event log ----------
+  const logBox = document.getElementById('mh-log');
+  let logEmpty = true;
+  function log(line) {
+    if (logEmpty) { logBox.textContent = ''; logEmpty = false; }
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    logBox.append(`${time}  ${line}\n`);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  // ---------- shortlist state + UI ----------
+  let shortlist = [];
+  try { shortlist = JSON.parse(sessionStorage.getItem('mh-shortlist') || '[]'); } catch (e) { shortlist = []; }
+  if (!Array.isArray(shortlist)) shortlist = [];
+  function renderShortlist() {
+    const list = document.getElementById('mh-shortlist');
+    list.replaceChildren(...shortlist.map((s) => el('li', { class: 'py-1.5 flex justify-between gap-3' },
+      el('a', { href: `/school/${encodeURIComponent(s.dbn)}`, class: 'text-blue-600 hover:text-blue-800 underline decoration-blue-200', text: s.school_name }),
+      el('span', { class: 'text-slate-400 font-mono text-xs', text: s.dbn }))));
+    document.getElementById('mh-shortlist-empty').hidden = shortlist.length > 0;
+    document.getElementById('mh-shortlist-count').textContent =
+      `${shortlist.length} ${shortlist.length === 1 ? 'school' : 'schools'}`;
+    try { sessionStorage.setItem('mh-shortlist', JSON.stringify(shortlist)); } catch (e) { /* private mode */ }
+  }
+
+  // ---------- function tools ----------
+  // Return contract: a plain object. A bad argument returns {error}, never
+  // a throw — a thrown error reaches an agent only as a generic failure.
+  const SHORTLIST_SCHEMA = {
+    type: 'array',
+    items: { type: 'object', properties: { dbn: { type: 'string' }, school_name: { type: 'string' } } },
+  };
+  const listTool = {
+    name: 'list_shortlisted_schools',
+    title: 'List Shortlisted Schools',
+    description: 'Returns the schools on the shortlist shown on this page. Use it to answer what the user has saved.',
+    inputSchema: { type: 'object', properties: {} },
+    outputSchema: { type: 'object', properties: { shortlist: SHORTLIST_SCHEMA } },
+    annotations: { readOnlyHint: true },
+    execute() { return { shortlist }; },
+  };
+  const addTool = {
+    name: 'add_school_to_shortlist',
+    title: 'Add a School to the Shortlist',
+    description: 'Adds one NYC public school to the shortlist shown on this page. Give the school name or its DBN; the closest match is added and returned.',
+    inputSchema: {
+      type: 'object',
+      properties: { school: { type: 'string', description: "School name, short name, or 6-character DBN. Examples: 'Bronx Science', 'PS 321', '15K321'." } },
+      required: ['school'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        added: { type: 'object', properties: { dbn: { type: 'string' }, school_name: { type: 'string' } } },
+        shortlist: SHORTLIST_SCHEMA,
+        error: { type: 'string', description: 'Present only when no school was added.' },
+      },
+    },
+    async execute(args, options) {
+      const query = args && typeof args.school === 'string' ? args.school.trim() : '';
+      if (!query) return { error: 'Missing required parameter: school. Give a school name or DBN.' };
+      // Same endpoint and service call as the search form (format=json).
+      const params = new URLSearchParams({ q: query, format: 'json' });
+      let data;
+      try {
+        const r = await fetch(`/search?${params}`, { signal: options && options.signal });
+        data = await r.json();
+      } catch (e) {
+        return { error: 'The school search did not complete. Try again.' };
+      }
+      const top = data && Array.isArray(data.results) ? data.results[0] : null;
+      if (!top) return { error: `No school matches "${query}". Try a different name or a DBN.` };
+      const entry = { dbn: top.dbn, school_name: top.school_name };
+      if (shortlist.some((s) => s.dbn === entry.dbn)) {
+        return { error: `${entry.school_name} (${entry.dbn}) is already on the shortlist.`, shortlist };
+      }
+      shortlist.push(entry);
+      renderShortlist();          // the page shows the change before the tool answers
+      await syncClearTool();
+      return { added: entry, shortlist };
+    },
+  };
+  const clearTool = {
+    name: 'clear_shortlist',
+    title: 'Clear the Shortlist',
+    description: 'Removes every school from the shortlist shown on this page. The removal is permanent. Use it only when the user asks to clear the list.',
+    inputSchema: { type: 'object', properties: {} },
+    outputSchema: { type: 'object', properties: { removed: { type: 'integer' }, shortlist: SHORTLIST_SCHEMA } },
+    annotations: { consequentialHint: true },
+    async execute() {
+      // Reject a call made against stale state: the list may have been
+      // emptied after the agent last read the tool list.
+      if (!shortlist.length) return { error: 'The shortlist is already empty.', shortlist };
+      const removed = shortlist.length;
+      shortlist = [];
+      renderShortlist();
+      await syncClearTool();
+      return { removed, shortlist };
+    },
+  };
+
+  // ---------- registration ----------
+  // The two fixed tools register as one set under one AbortController.
+  // clear_shortlist is registered only while the list has schools in it,
+  // under its own controller, so the tool list follows the page state.
+  const fixed = new AbortController();
+  let clearReg = null;
+  let fixedRegistered = false;
+  // Some inspector extensions replace registerTool() with a wrapper that
+  // drops the options argument, so the AbortSignal never reaches Chrome
+  // and a tool can never be removed. Say so, because section 3 depends on
+  // it. Checked at each use: an extension can install its wrapper after
+  // this script first runs.
+  let wrapperNoted = false;
+  function noteWrapper() {
+    if (wrapperNoted || !live) return;
+    if (/\[native code\]/.test(Function.prototype.toString.call(mc.registerTool))) return;
+    wrapperNoted = true;
+    document.getElementById('mh-status').append(el('p', { class: 'text-amber-700 mt-2',
+      text: 'An extension in this browser has replaced Chrome’s tool registration function. While it is on, a tool cannot be removed, so the clear tool stays in the list after the shortlist is empty. Turn the extension off to see the list shrink.' }));
+  }
+  async function syncClearTool() {
+    noteWrapper();
+    const wanted = shortlist.length > 0;
+    if (live && fixedRegistered) {
+      if (wanted && !clearReg) {
+        const ac = new AbortController();
+        try { await mc.registerTool(clearTool, { signal: ac.signal }); clearReg = ac; }
+        catch (err) { console.warn('WebMCP: clear_shortlist did not register', err); }
+      } else if (!wanted && clearReg) {
+        clearReg.abort(); clearReg = null;
+      }
+    }
+    await renderTools();
+  }
+  if (live) {
+    try {
+      await Promise.all([listTool, addTool].map((t) => mc.registerTool(t, { signal: fixed.signal })));
+      fixedRegistered = true;
+    } catch (err) {
+      fixed.abort();
+      console.warn('WebMCP: tool registration failed; no page tools are exposed.', err);
+    }
+    mc.addEventListener('toolchange', () => { log('toolchange — the tool list changed'); renderTools(); });
+    mc.addEventListener('toolactivated', (e) => log(`toolactivated — an agent started the tool ${e.toolName}`));
+    mc.addEventListener('toolcancel', (e) => log(`toolcancel — the person cancelled ${e.toolName}`));
+  }
+
+  // ---------- tool list (live from the browser, or read from the page) ----------
+  const LOCAL = [listTool, addTool, clearTool];
+  const EXAMPLES = {
+    'search-schools-by-name': { q: 'PS 321' },
+    'find-zoned-schools-by-address': { address: '180 7th Avenue, Brooklyn' },
+    'find-schools-in-neighborhood': { q: 'Park Slope' },
+    'add_school_to_shortlist': { school: 'Bronx Science' },
+  };
+  const formFor = (name) => document.querySelector(`form[toolname="${CSS.escape(name)}"]`);
+
+  function simulatedTools() {
+    const forms = [...document.querySelectorAll('form[toolname]')].map((form) => {
+      const properties = {};
+      const required = [];
+      for (const input of form.querySelectorAll('[name]')) {
+        properties[input.name] = { type: 'string', description: input.getAttribute('toolparamdescription') || '' };
+        if (input.required) required.push(input.name);
+      }
+      return {
+        name: form.getAttribute('toolname'), title: '',
+        description: form.getAttribute('tooldescription'),
+        inputSchema: { type: 'object', properties, required },
+      };
+    });
+    const fns = LOCAL.filter((t) => t !== clearTool || shortlist.length > 0);
+    return [...forms, ...fns].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async function currentTools() {
+    if (!live) return simulatedTools();
+    try { return await mc.getTools(); } catch (e) { return simulatedTools(); }
+  }
+
+  async function runTool(tool, args) {
+    if (live) return mc.executeTool(tool, args);
+    // No WebMCP in this browser: do the same work directly.
+    const form = formFor(tool.name);
+    if (form) {
+      for (const [k, v] of Object.entries(args)) { if (form.elements[k]) form.elements[k].value = v; }
+      const params = new URLSearchParams(new FormData(form));
+      params.set('format', 'json');
+      return (await fetch(`${form.action}?${params}`)).text();
+    }
+    const local = LOCAL.find((t) => t.name === tool.name);
+    return local.execute(args, {});
+  }
+
+  const toolsBox = document.getElementById('mh-tools');
+  const results = new Map();     // tool name → last result text, kept across re-renders
+  const typed = new Map();       // tool name → {param: value} the visitor typed
+  let renderSeq = 0;
+  async function renderTools() {
+    const seq = ++renderSeq;
+    const tools = await currentTools();
+    if (seq !== renderSeq) return;
+    toolsBox.replaceChildren(...tools.map(toolCard));
+  }
+
+  function toolCard(tool) {
+    const isForm = !!formFor(tool.name);
+    const ann = tool.annotations || {};
+    const badges = el('div', { class: 'flex flex-wrap gap-1.5 mt-1' },
+      el('span', { class: 'mh-badge text-slate-600 border-slate-300', text: isForm ? 'Form tool' : 'Function tool' }));
+    if (ann.readOnlyHint) badges.append(el('span', { class: 'mh-badge text-emerald-700 border-emerald-300', text: 'Reads only' }));
+    if (!isForm && !ann.readOnlyHint) badges.append(el('span', { class: 'mh-badge text-amber-700 border-amber-300', text: 'Changes the page' }));
+    if (ann.consequentialHint) badges.append(el('span', { class: 'mh-badge text-rose-700 border-rose-300', text: 'Consequential' }));
+
+    const card = el('div', { class: 'bg-white border border-slate-200 rounded-lg p-4' });
+    card.append(
+      el('div', { class: 'flex flex-wrap items-baseline gap-x-3' },
+        el('h3', { class: 'text-sm font-semibold', text: tool.title || tool.name }),
+        el('code', { class: 'text-xs text-slate-500', text: tool.name })),
+      badges,
+      el('p', { class: 'text-sm text-slate-600 mt-2', text: tool.description }));
+
+    const props = (tool.inputSchema && tool.inputSchema.properties) || {};
+    const saved = typed.get(tool.name) || EXAMPLES[tool.name] || {};
+    const runForm = el('form', { class: 'mt-3 flex flex-wrap items-end gap-2' });
+    const inputs = {};
+    for (const [key, spec] of Object.entries(props)) {
+      const id = `mh-in-${tool.name}-${key}`;
+      const input = el('input', { id, type: 'text', autocomplete: 'off', value: saved[key] || '',
+        class: 'w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:border-slate-500 focus:outline-none' });
+      inputs[key] = input;
+      input.addEventListener('input', () => {
+        typed.set(tool.name, { ...(typed.get(tool.name) || EXAMPLES[tool.name] || {}), [key]: input.value });
+      });
+      runForm.append(el('div', { class: 'flex-1 min-w-[12rem]' },
+        el('label', { for: id, class: 'block text-xs text-slate-500 mb-1', title: (spec && spec.description) || '' , text: key }), input));
+    }
+    const button = el('button', { type: 'submit', class: 'px-4 py-1.5 text-sm font-semibold rounded-md bg-slate-900 text-white disabled:bg-slate-300', text: 'Run' });
+    runForm.append(button);
+    const out = el('pre', { class: 'mh-pre mt-3' });
+    out.hidden = !results.has(tool.name);
+    out.textContent = results.get(tool.name) || '';
+    runForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const args = {};
+      for (const [key, input] of Object.entries(inputs)) { if (input.value.trim()) args[key] = input.value.trim(); }
+      typed.set(tool.name, args);
+      button.disabled = true;
+      const started = performance.now();
+      log(`call  ${tool.name}(${JSON.stringify(args)})`);
+      let text;
+      try {
+        const result = await runTool(tool, args);
+        text = result === null ? 'The tool started a page navigation and returned no data.' : pretty(result);
+        log(`done  ${tool.name} — ${Math.round(performance.now() - started)} ms, ${text.length} characters`);
+      } catch (err) {
+        text = `${err.name}: ${err.message}`;
+        log(`fail  ${tool.name} — ${text}`);
+      }
+      results.set(tool.name, text);
+      // A tool can change the tool list while it runs, which redraws the
+      // cards. Redraw once more so the result lands on the current card.
+      await renderTools();
+    });
+    card.append(runForm, out);
+
+    const schema = { inputSchema: tool.inputSchema || null };
+    if (tool.outputSchema) schema.outputSchema = tool.outputSchema;
+    if (tool.annotations) schema.annotations = tool.annotations;
+    card.append(el('details', { class: 'mt-3 text-xs text-slate-500' },
+      el('summary', { class: 'cursor-pointer', text: 'What an agent sees' }),
+      el('pre', { class: 'mh-pre mt-2', text: JSON.stringify(schema, null, 2) })));
+    return card;
+  }
+
+  // ---------- status ----------
+  const statusBox = document.getElementById('mh-status');
+  const brand = (navigator.userAgentData && navigator.userAgentData.brands || [])
+    .find((b) => /Chrome|Edge|Chromium/.test(b.brand) && !/Not/.test(b.brand));
+  const browserName = brand ? `${brand.brand} ${brand.version}` : 'This browser';
+  statusBox.replaceChildren(
+    el('p', { class: 'font-semibold ' + (live ? 'text-emerald-700' : 'text-amber-700'),
+      text: live ? `${browserName} has WebMCP turned on.` : `${browserName} does not have WebMCP turned on.` }),
+    el('p', { class: 'text-slate-600 mt-1',
+      text: live
+        ? 'The tool list and the Run buttons on this page use the browser’s real WebMCP functions.'
+        : 'The page is in stand-in mode. The tool list is read from this page, and the Run buttons do the same work without the browser’s help. For the real thing, open this page in Chrome 149 or later.' }));
+
+  renderShortlist();
+  await syncClearTool();
+
+  // ---------- Ask the Page (Chrome's on-device model) ----------
+  const askStatus = document.getElementById('mh-ask-status');
+  const askForm = document.getElementById('mh-ask-form');
+  const askInput = document.getElementById('mh-ask-input');
+  const askButton = document.getElementById('mh-ask-button');
+  const askSteps = document.getElementById('mh-ask-steps');
+  const LM_OPTIONS = {
+    expectedInputs: [{ type: 'text', languages: ['en'] }],
+    expectedOutputs: [{ type: 'text', languages: ['en'] }],
+  };
+  let availability = 'unavailable';
+  if (typeof LanguageModel !== 'undefined') {
+    try { availability = await LanguageModel.availability(LM_OPTIONS); } catch (e) { availability = 'unavailable'; }
+  }
+  if (availability === 'unavailable') {
+    askStatus.textContent = 'This browser has no on-device model, so this box is off. It needs desktop Chrome on a computer that meets Chrome’s requirements for built-in AI.';
+  } else {
+    askStatus.textContent = availability === 'available'
+      ? 'The on-device model is ready.'
+      : 'Chrome must download the on-device model first. The download starts when you press Ask and can take several minutes.';
+    askInput.disabled = false;
+    askButton.disabled = false;
+  }
+  const step = (label, body, mono) => {
+    const node = el('div', {},
+      el('p', { class: 'text-xs uppercase tracking-wide text-slate-500', text: label }),
+      el(mono ? 'pre' : 'p', { class: mono ? 'mh-pre mt-1' : 'mt-1', text: body }));
+    askSteps.append(node);
+    return node;
+  };
+  askForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const question = askInput.value.trim();
+    if (!question) return;
+    askButton.disabled = true;
+    askSteps.replaceChildren();
+    try {
+      const tools = await currentTools();
+      const catalog = tools.map((t) => `- ${t.name}: ${t.description} Inputs: ${JSON.stringify((t.inputSchema && t.inputSchema.properties) || {})}`).join('\n');
+      const session = await LanguageModel.create({
+        ...LM_OPTIONS,
+        initialPrompts: [{ role: 'system', content:
+          'You choose one tool to answer a question about New York City public schools. ' +
+          'Reply with the tool name and its arguments. Copy names and addresses from the question exactly. ' +
+          'If no tool fits, use the tool name "none".\n\nTools:\n' + catalog }],
+        monitor(m) {
+          m.addEventListener('downloadprogress', (ev) => {
+            askStatus.textContent = `Downloading the on-device model: ${Math.round(ev.loaded * 100)}%`;
+          });
+        },
+      });
+      askStatus.textContent = 'The on-device model is ready.';
+      const choices = tools.map((t) => ({
+        type: 'object',
+        properties: { tool: { type: 'string', enum: [t.name] }, arguments: t.inputSchema || { type: 'object', properties: {} } },
+        required: ['tool', 'arguments'],
+      }));
+      choices.push({ type: 'object', properties: { tool: { type: 'string', enum: ['none'] }, arguments: { type: 'object', properties: {} } }, required: ['tool', 'arguments'] });
+      const picked = JSON.parse(await session.prompt(question, { responseConstraint: { anyOf: choices } }));
+      step('The model chose', `${picked.tool}(${JSON.stringify(picked.arguments || {})})`, true);
+      const tool = tools.find((t) => t.name === picked.tool);
+      if (!tool) {
+        step('Answer', 'The model found no tool on this page for that question.');
+      } else {
+        log(`call  ${tool.name}(${JSON.stringify(picked.arguments || {})}) — chosen by the on-device model`);
+        const raw = await runTool(tool, picked.arguments || {});
+        const text = raw === null ? 'The tool returned no data.' : pretty(raw);
+        step('The tool returned', text, true);
+        const answer = await session.prompt(
+          'Tool result:\n' + text.slice(0, 3000) +
+          '\n\nAnswer the question in two or three sentences. Use only this data. ' +
+          'Use neutral words for comparisons: highest, lowest, above the median, below the median.');
+        step('The model’s answer', answer);
+      }
+      session.destroy();
+    } catch (err) {
+      step('The model did not answer', `${err.name}: ${err.message}`);
+    }
+    askButton.disabled = false;
+  });
+})();
+</script>
+{% endblock %}

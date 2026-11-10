@@ -310,6 +310,14 @@ async def sources_page(request: Request):
     return templates.TemplateResponse(request, "sources.html", {})
 
 
+@router.get("/model-home", response_class=HTMLResponse)
+async def model_home_page(request: Request):
+    """WebMCP tour: lists the page's tools live from the browser, runs
+    each one, and shows what Chrome does. All logic is client-side; the
+    tools call the same format=json endpoints as the forms."""
+    return templates.TemplateResponse(request, "model_home.html", {})
+
+
 @router.get("/neighborhood", response_class=HTMLResponse)
 async def neighborhood_query(request: Request, q: str = "", format: str = ""):
     """Query-param entry point for the find-schools-in-neighborhood WebMCP
@@ -549,6 +557,7 @@ Journalism-style accountability and equity data for every NYC public school, key
 - [Neighborhood lookup](https://nycschools.datatribune.io/neighborhood?q=park+slope) — fuzzy NTA match → school roster + neighborhood peer ranks
 - `/search`, `/zoned`, and `/neighborhood` accept `format=json` for structured results (same service-layer payloads the HTML shows) — the WebMCP forms answer agents in place via this.
 - [Sources](https://nycschools.datatribune.io/sources) — every dataset and its vintage
+- [WebMCP Model Home](https://nycschools.datatribune.io/model-home) — a working tour of the in-browser WebMCP tools this site offers to agents
 
 ## Reference
 
