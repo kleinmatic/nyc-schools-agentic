@@ -38,48 +38,48 @@
   html.dt-chat-enabled #dt-chat-launch {
     display: block; position: fixed; right: 0; top: 40%; z-index: 40;
     writing-mode: vertical-rl; padding: 0.9rem 0.5rem;
-    background: #1c1b19; color: #fafaf7; border: 0; border-radius: 0.5rem 0 0 0.5rem;
+    background: #fff; color: #000; border: 1px solid #000; border-right: 0; border-radius: 0.5rem 0 0 0.5rem;
     font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; cursor: pointer;
   }
   html.dt-chat-open #dt-chat-launch { display: none; }
   html.dt-chat-open #dt-chat {
     display: flex; flex-direction: column; position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
-    width: min(24rem, 100vw); background: #1c1b19; color: #ecebe6;
+    width: min(24rem, 100vw); background: #fff; color: #000;
     border-left: 1px solid #000; font-size: 0.875rem; line-height: 1.5;
   }
   @media (min-width: 1024px) {
     html.dt-chat-open body { padding-right: 24rem; }
   }
-  .dt-chat-head { display: flex; justify-content: space-between; gap: 0.75rem; padding: 1rem 1rem 0.75rem; border-bottom: 1px solid #3a3835; }
-  .dt-chat-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.125rem; font-weight: 600; color: #fff; }
-  .dt-chat-sub { font-size: 0.75rem; color: #a8a59d; margin-top: 0.15rem; }
+  .dt-chat-head { display: flex; justify-content: space-between; gap: 0.75rem; padding: 1rem 1rem 0.75rem; border-bottom: 1px solid #e5e5e5; }
+  .dt-chat-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.125rem; font-weight: 600; color: #000; }
+  .dt-chat-sub { font-size: 0.75rem; color: #6b6b6b; margin-top: 0.15rem; }
   .dt-chat-head-buttons { display: flex; align-items: flex-start; gap: 0.25rem; }
-  .dt-chat-head-buttons button { background: transparent; border: 1px solid #4a4844; color: #d6d3cb; border-radius: 0.375rem; padding: 0.15rem 0.5rem; font-size: 0.75rem; cursor: pointer; }
-  .dt-chat-head-buttons button:hover { background: #2d2b28; }
+  .dt-chat-head-buttons button { background: transparent; border: 1px solid #c8c8c8; color: #333; border-radius: 0.375rem; padding: 0.15rem 0.5rem; font-size: 0.75rem; cursor: pointer; }
+  .dt-chat-head-buttons button:hover { background: #f2f2f2; }
   .dt-chat-log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  .dt-chat-user { align-self: flex-end; max-width: 85%; background: #3b3936; color: #fff; padding: 0.5rem 0.75rem; border-radius: 0.75rem 0.75rem 0.15rem 0.75rem; white-space: pre-wrap; }
+  .dt-chat-user { align-self: flex-end; max-width: 85%; background: #efefef; color: #000; padding: 0.5rem 0.75rem; border-radius: 0.75rem 0.75rem 0.15rem 0.75rem; white-space: pre-wrap; }
   .dt-chat-bot { max-width: 95%; white-space: pre-wrap; }
-  .dt-chat-note { font-size: 0.75rem; color: #a8a59d; }
-  .dt-chat-error { color: #fca5a5; }
-  .dt-chat-tool { font-size: 0.75rem; border: 1px solid #4a4844; border-radius: 0.5rem; background: #262422; }
-  .dt-chat-tool summary { cursor: pointer; padding: 0.35rem 0.6rem; color: #c4b5fd; overflow-wrap: anywhere; }
-  .dt-chat-tool pre { margin: 0; padding: 0.5rem 0.6rem; max-height: 14rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #d6d3cb; border-top: 1px solid #3a3835; font-size: 0.7rem; }
+  .dt-chat-note { font-size: 0.75rem; color: #6b6b6b; }
+  .dt-chat-error { color: #b91c1c; }
+  .dt-chat-tool { font-size: 0.75rem; border: 1px solid #c8c8c8; border-radius: 0.5rem; background: #fafafa; }
+  .dt-chat-tool summary { cursor: pointer; padding: 0.35rem 0.6rem; color: #6d28d9; overflow-wrap: anywhere; }
+  .dt-chat-tool pre { margin: 0; padding: 0.5rem 0.6rem; max-height: 14rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #333; border-top: 1px solid #e5e5e5; font-size: 0.7rem; }
   .dt-chat-links { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .dt-chat-links a { font-size: 0.75rem; color: #fff; border: 1px solid #6b6862; border-radius: 999px; padding: 0.15rem 0.6rem; text-decoration: none; }
-  .dt-chat-links a:hover { background: #3b3936; }
+  .dt-chat-links a { font-size: 0.75rem; color: #000; border: 1px solid #9a9a9a; border-radius: 999px; padding: 0.15rem 0.6rem; text-decoration: none; }
+  .dt-chat-links a:hover { background: #efefef; }
   .dt-chat-starters { display: flex; flex-direction: column; gap: 0.35rem; padding: 0 1rem 0.75rem; }
   .dt-chat-starters[hidden] { display: none; }
-  .dt-chat-starters button { text-align: left; background: transparent; color: #d6d3cb; border: 1px dashed #5a5853; border-radius: 0.5rem; padding: 0.35rem 0.6rem; font-size: 0.8rem; cursor: pointer; }
-  .dt-chat-starters button:hover:not(:disabled) { background: #2d2b28; }
+  .dt-chat-starters button { text-align: left; background: transparent; color: #333; border: 1px dashed #bdbdbd; border-radius: 0.5rem; padding: 0.35rem 0.6rem; font-size: 0.8rem; cursor: pointer; }
+  .dt-chat-starters button:hover:not(:disabled) { background: #f2f2f2; }
   .dt-chat-starters button:disabled { opacity: 0.5; cursor: default; }
-  .dt-chat-form { display: flex; gap: 0.5rem; padding: 0.75rem 1rem 0.5rem; border-top: 1px solid #3a3835; }
-  .dt-chat-form textarea { flex: 1; resize: none; background: #2d2b28; color: #fff; border: 1px solid #4a4844; border-radius: 0.5rem; padding: 0.5rem 0.6rem; font: inherit; }
-  .dt-chat-form textarea:focus { outline: none; border-color: #a8a59d; }
+  .dt-chat-form { display: flex; gap: 0.5rem; padding: 0.75rem 1rem 0.5rem; border-top: 1px solid #e5e5e5; }
+  .dt-chat-form textarea { flex: 1; resize: none; background: #fff; color: #000; border: 1px solid #c8c8c8; border-radius: 0.5rem; padding: 0.5rem 0.6rem; font: inherit; }
+  .dt-chat-form textarea:focus { outline: none; border-color: #6b6b6b; }
   .dt-chat-form textarea:disabled { opacity: 0.5; }
-  .dt-chat-form button { align-self: stretch; background: #fafaf7; color: #1c1b19; border: 0; border-radius: 0.5rem; padding: 0 0.9rem; font-weight: 600; cursor: pointer; }
+  .dt-chat-form button { align-self: stretch; background: #000; color: #fff; border: 0; border-radius: 0.5rem; padding: 0 0.9rem; font-weight: 600; cursor: pointer; }
   .dt-chat-form button:disabled { opacity: 0.4; cursor: default; }
-  .dt-chat-foot { padding: 0 1rem 0.75rem; font-size: 0.7rem; color: #8a877f; }
-  .dt-chat-foot a { color: #c9c6be; text-decoration: underline; }
+  .dt-chat-foot { padding: 0 1rem 0.75rem; font-size: 0.7rem; color: #6b6b6b; }
+  .dt-chat-foot a { color: #333; text-decoration: underline; }
 </style>
 <script>
 (async function () {
