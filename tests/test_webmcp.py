@@ -284,10 +284,10 @@ def test_origin_trial_meta_tag_on_every_page(client):
     """The Chrome WebMCP origin trial (149+) is enabled via an
     `origin-trial` meta tag carrying a token scoped to the canonical
     origin. Without it, only flag-enabled Chromes expose our tools.
-    Token expires 2026-11-17 — when this test starts failing after a
+    Token expires 2027-03-30 — when this test starts failing after a
     token swap, update the substring."""
     for path in ("/", "/school/15K321", "/sources"):
         page = client.get(path).text
         assert 'http-equiv="origin-trial"' in page, f"{path} missing origin-trial meta"
         # Spot-check it's the WebMCP token (payload tail encodes the feature).
-        assert "WnStlCKsaZUoeHdo9WhPsw8" in page, f"{path} has wrong/missing OT token"
+        assert "URqYIF/nYGrU/iJG4J2x3w0" in page, f"{path} has wrong/missing OT token"
