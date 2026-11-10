@@ -380,3 +380,22 @@ def test_model_home_function_tools_meet_chrome_budgets(client):
 def test_model_home_is_linked_from_footer_and_llms_txt(client):
     assert 'href="/model-home"' in client.get("/sources").text
     assert "/model-home" in client.get("/llms.txt").text
+
+
+def test_chat_panel_ships_on_every_page_and_is_off_by_default(client):
+    """The chat panel is opt-in (`?chat=on` sets a localStorage flag). Its
+    markup ships on every page but stays hidden without the flag, and it
+    declares no WebMCP tools of its own — it only calls the page's tools."""
+    for path in ("/", "/school/02M475", "/model-home", "/sources"):
+        html = client.get(path).text
+        assert 'id="dt-chat"' in html, path
+        assert "#dt-chat, #dt-chat-launch { display: none; }" in html, path
+        assert "localStorage.setItem('dt-chat', 'open')" in html, path
+    from pathlib import Path
+    partial = (Path(__file__).parent.parent / "app/web/templates/partials/_chat_panel.html").read_text()
+    body = partial.split("#}", 1)[1]
+    assert "toolname=" not in body.split("<script>")[0]
+    assert "registerTool" not in body
+    assert "innerHTML" not in body
+    # No judgment words in the model's instructions beyond the ban itself.
+    assert "Never say best, worst, better or worse." in body

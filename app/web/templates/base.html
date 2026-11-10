@@ -33,6 +33,21 @@
     gtag('js', new Date());
     gtag('config', 'G-KXSN2MX8CR');
   </script>
+  {# Opt-in chat panel (partials/_chat_panel.html). `?chat=on` turns it on
+     for this browser, `?chat=off` turns it off. The classes are set here,
+     before first layout, so charts measure the narrowed page. #}
+  <script>
+    (function () {
+      try {
+        const flag = new URLSearchParams(location.search).get('chat');
+        if (flag === 'on') localStorage.setItem('dt-chat', 'open');
+        if (flag === 'off') localStorage.removeItem('dt-chat');
+        const state = localStorage.getItem('dt-chat');
+        if (state) document.documentElement.classList.add('dt-chat-enabled');
+        if (state === 'open') document.documentElement.classList.add('dt-chat-open');
+      } catch (e) { /* storage is off: the panel stays off */ }
+    })();
+  </script>
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->
   <script src="https://cdn.tailwindcss.com"></script>
   {# Explicit dist path (the bare package URL 302s there anyway) + the
@@ -225,5 +240,6 @@
         .forEach((el) => el.classList.remove('active'));
     });
   </script>
+  {% include "partials/_chat_panel.html" %}
 </body>
 </html>
