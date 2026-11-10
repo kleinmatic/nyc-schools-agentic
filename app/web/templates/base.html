@@ -33,19 +33,32 @@
     gtag('js', new Date());
     gtag('config', 'G-KXSN2MX8CR');
   </script>
-  {# Opt-in chat panel (partials/_chat_panel.html). `?chat=on` turns it on
-     for this browser, `?chat=off` turns it off. The classes are set here,
-     before first layout, so charts measure the narrowed page. #}
+  {# Chat panel (partials/_chat_panel.html). On by default when the browser
+     has WebMCP and the Prompt API; `?chat=off` turns it off for this
+     browser and `?chat=on` forces it on. The origin-trial tag above must
+     come first, or document.modelContext is not there yet. The classes
+     are set here, before first layout, so charts measure the narrowed
+     page. On a narrow screen the default is the launcher tab, because
+     the open panel covers the page. #}
   <script>
     (function () {
+      let state = null;
       try {
         const flag = new URLSearchParams(location.search).get('chat');
         if (flag === 'on') localStorage.setItem('dt-chat', 'open');
-        if (flag === 'off') localStorage.removeItem('dt-chat');
-        const state = localStorage.getItem('dt-chat');
-        if (state) document.documentElement.classList.add('dt-chat-enabled');
-        if (state === 'open') document.documentElement.classList.add('dt-chat-open');
-      } catch (e) { /* storage is off: the panel stays off */ }
+        if (flag === 'off') localStorage.setItem('dt-chat', 'off');
+        state = localStorage.getItem('dt-chat');
+      } catch (e) { /* storage is off: use the default */ }
+      const root = document.documentElement;
+      if (!state) {
+        const capable = !!(document.modelContext ?? navigator.modelContext) && typeof LanguageModel !== 'undefined';
+        if (!capable) return;
+        root.classList.add('dt-chat-auto');
+        state = window.innerWidth >= 1024 ? 'open' : 'closed';
+      }
+      if (state === 'off') return;
+      root.classList.add('dt-chat-enabled');
+      if (state === 'open') root.classList.add('dt-chat-open');
     })();
   </script>
   <!-- Tailwind Play CDN (dev only; replace with built CSS before deploy). -->

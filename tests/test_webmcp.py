@@ -382,15 +382,19 @@ def test_model_home_is_linked_from_footer_and_llms_txt(client):
     assert "/model-home" in client.get("/llms.txt").text
 
 
-def test_chat_panel_ships_on_every_page_and_is_off_by_default(client):
-    """The chat panel is opt-in (`?chat=on` sets a localStorage flag). Its
-    markup ships on every page but stays hidden without the flag, and it
-    declares no WebMCP tools of its own — it only calls the page's tools."""
+def test_chat_panel_ships_on_every_page_and_needs_webmcp_by_default(client):
+    """The chat panel's markup ships on every page, hidden by CSS. A head
+    script shows it by default only when the browser has WebMCP and the
+    Prompt API; `?chat=off` / `?chat=on` override. It declares no WebMCP
+    tools of its own — it only calls the page's tools."""
     for path in ("/", "/school/02M475", "/model-home", "/sources"):
         html = client.get(path).text
         assert 'id="dt-chat"' in html, path
         assert "#dt-chat, #dt-chat-launch { display: none; }" in html, path
-        assert "localStorage.setItem('dt-chat', 'open')" in html, path
+        assert "localStorage.setItem('dt-chat', 'off')" in html, path
+        assert "typeof LanguageModel !== 'undefined'" in html, path
+        # The trial tag must precede the script that checks for WebMCP.
+        assert html.index('http-equiv="origin-trial"') < html.index("dt-chat-auto"), path
     from pathlib import Path
     partial = (Path(__file__).parent.parent / "app/web/templates/partials/_chat_panel.html").read_text()
     body = partial.split("#}", 1)[1]

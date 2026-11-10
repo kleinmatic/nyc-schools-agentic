@@ -1,9 +1,10 @@
-{# Opt-in chat panel, docked on the right of every page.
+{# Chat panel, docked on the right of every page.
 
-   Off by default. `?chat=on` on any URL turns it on for this browser
-   (localStorage key `dt-chat`); `?chat=off` turns it off. The class that
-   opens it is set by a small script in base.html's <head>, so the page
-   lays out at its final width before charts measure their containers.
+   On by default when the browser has WebMCP and the Prompt API.
+   `?chat=off` on any URL turns it off for this browser (localStorage key
+   `dt-chat`); `?chat=on` forces it on. The classes that show it are set
+   by a small script in base.html's <head>, so the page lays out at its
+   final width before charts measure their containers.
 
    The panel is an in-page agent. It runs on Chrome's on-device model
    (Prompt API) and can do only what the page's WebMCP tools can do: it
@@ -200,6 +201,11 @@
     try { availability = await LanguageModel.availability(LM_OPTIONS); } catch (e) { availability = 'unavailable'; }
   }
   const toolSource = live ? 'It uses this page’s WebMCP tools.' : 'WebMCP is off in this browser, so it uses this page’s search forms.';
+  if (availability === 'unavailable' && root.classList.contains('dt-chat-auto')) {
+    // The panel came on by default, and this browser cannot run it.
+    root.classList.remove('dt-chat-enabled', 'dt-chat-open');
+    return;
+  }
   if (availability === 'unavailable') {
     statusLine.textContent = 'This browser has no on-device model. The panel needs desktop Chrome with built-in AI.';
   } else {
