@@ -57,6 +57,26 @@
       const root = document.documentElement;
       const hasTools = !!(document.modelContext ?? navigator.modelContext);
       const hasModel = typeof LanguageModel !== 'undefined';
+      // The one copy of the detection code. The panel and /browser use it.
+      window.dtBrowser = {
+        hasTools, hasModel,
+        modelOptions: {
+          expectedInputs: [{ type: 'text', languages: ['en'] }],
+          expectedOutputs: [{ type: 'text', languages: ['en'] }],
+        },
+        // 'missing' (no Prompt API at all), 'no-answer' (Chrome did not
+        // reply in 5 seconds; this happens in headless runs), or Chrome's
+        // own answer: available / downloadable / downloading / unavailable.
+        async availability() {
+          if (!hasModel) return 'missing';
+          const late = new Promise((resolve) => setTimeout(() => resolve('no-answer'), 5000));
+          try { return await Promise.race([LanguageModel.availability(this.modelOptions), late]); } catch (e) { return 'unavailable'; }
+        },
+        tier(availability) {
+          if (!hasTools) return 'A';
+          return ['missing', 'unavailable', 'no-answer'].includes(availability) ? 'B' : 'C';
+        },
+      };
       if (hasTools) root.classList.add(hasModel ? 'wm-tier-c' : 'wm-tier-b');
       if (state === 'off') { root.classList.add('dt-chat-off'); return; }
       if (!state) {

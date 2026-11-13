@@ -310,6 +310,12 @@ async def sources_page(request: Request):
     return templates.TemplateResponse(request, "sources.html", {})
 
 
+@router.get("/browser", response_class=HTMLResponse)
+async def browser_page(request: Request):
+    """What this browser supports (WebMCP, the Prompt API) and why not."""
+    return templates.TemplateResponse(request, "browser.html", {})
+
+
 @router.get("/model-home", response_class=HTMLResponse)
 async def model_home_page(request: Request):
     """WebMCP tour: lists the page's tools live from the browser, runs

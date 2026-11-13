@@ -428,3 +428,34 @@ def test_homepage_carries_one_webmcp_line_per_browser_tier(client):
         assert hook in line, hook
     assert ".wm-line-b, .wm-line-c, .wm-turn-on, .wm-narrow { display: none; }" in html
     assert "html.wm-tier-b .wm-line-b, html.wm-tier-c .wm-line-c { display: inline; }" in html
+
+
+def test_browser_page_renders_and_shares_the_detection_code(client):
+    """/browser tells a reader what the browser supports and the probable
+    reason when a feature is missing. It must use window.dtBrowser, the
+    one copy of the detection code in base.html, and say what a page
+    cannot know."""
+    r = client.get("/browser")
+    assert r.status_code == 200
+    html = r.text
+    assert "What Your Browser Supports" in html
+    assert "By Scott Klein" in html
+    assert "const dt = window.dtBrowser;" in html
+    assert "window.dtBrowser = {" in html
+    # The page script must not ask Chrome about the model by itself.
+    page_script = html[html.index("const dt = window.dtBrowser;"):]
+    page_script = page_script[: page_script.index("</script>")]
+    assert "LanguageModel.availability" not in page_script
+    assert "innerHTML" not in page_script
+    for text in (
+        "chrome://on-device-internals",
+        "chrome://flags/#enable-webmcp-testing",
+        "window.isSecureContext",
+        "Chromium does not include it",
+        "probable causes",
+    ):
+        assert text in html, text
+    # Linked from the homepage lines for tiers A and B, and from model home.
+    home = client.get("/").text
+    assert home.count('href="/browser"') == 2
+    assert 'href="/browser"' in client.get("/model-home").text

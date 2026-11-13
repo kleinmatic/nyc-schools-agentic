@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}What Your Browser Supports — The Data Tribune{% endblock %}
+{% block meta_description %}A check of this browser: whether it has WebMCP and an on-device AI model, and the probable reason when one is missing.{% endblock %}
+{% block content %}
+{# Every check on this page runs in the reader's browser. Detection comes
+   from window.dtBrowser, the one copy in base.html's <head>, which the
+   side panel also uses. All text is written with textContent. #}
+<section class="mb-8">
+  <p class="eyebrow mb-3">WebMCP</p>
+  <h1 class="display-headline" style="font-size: clamp(1.75rem, 5vw, 2.5rem);">What Your Browser Supports</h1>
+  <p class="text-sm text-slate-500 mt-3">By Scott Klein · Updated November 13, 2026</p>
+  <p class="display-deck">
+    This site gives AI agents tools through WebMCP, and it can answer questions
+    with an AI model that runs on your computer. This page checks which of those
+    your browser has. When one is missing, it gives the probable reason.
+  </p>
+</section>
+
+<noscript>
+  <p class="bg-white border border-slate-200 rounded-lg p-4 text-sm">This page needs JavaScript. It runs its checks in your browser.</p>
+</noscript>
+
+<section class="mb-10">
+  <h2 class="text-xl font-semibold mb-3">The Result</h2>
+  <div id="bw-tier" class="bg-white border border-slate-200 rounded-lg p-4 text-sm" aria-live="polite">Checking this browser…</div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-xl font-semibold mb-3">The Checks</h2>
+  <div id="bw-checks" class="space-y-3"></div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-xl font-semibold mb-2">What This Computer Reports</h2>
+  <p class="text-sm text-slate-600 mb-3 max-w-2xl">
+    Chrome’s on-device model needs one of two things: a graphics card with more
+    than 4 GB of video memory, or 16 GB of memory with 4 or more processor cores.
+    It also needs 22 GB of free disk space, and Windows 10 or 11, macOS 13 or
+    later, Linux, or a Chromebook Plus. A web page can read only part of this.
+  </p>
+  <div id="bw-hardware" class="space-y-3"></div>
+  <p class="text-xs text-slate-500 mt-2">Source: <a class="underline" href="https://developer.chrome.com/docs/ai/prompt-api">Chrome for Developers, the Prompt API</a>, read November 13, 2026.</p>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-xl font-semibold mb-2">What This Page Cannot Tell You</h2>
+  <div class="text-sm text-slate-600 max-w-2xl space-y-2">
+    <p>Chrome tells a web page only that the model is “unavailable”. It does not give the reason. So the reasons on this page are probable causes, worked out from the few hardware facts a page can read.</p>
+    <p>Chrome shows its own reason on an internal page. A link to that page does not work from a website, so copy this address into the address bar:</p>
+    <p class="flex flex-wrap items-center gap-2">
+      <code id="bw-internals" class="px-2 py-1 bg-white border border-slate-300 rounded text-slate-900">chrome://on-device-internals</code>
+      <button id="bw-copy" type="button" class="px-3 py-1 text-xs font-semibold rounded-md bg-slate-900 text-white">Copy</button>
+    </p>
+  </div>
+</section>
+
+<style>
+  .bw-row { background: white; border: 1px solid rgb(226 232 240); border-radius: 0.5rem; padding: 0.75rem 1rem; font-size: 0.875rem; }
+  .bw-row h3 { font-weight: 600; }
+  .bw-mark { display: inline-block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid; border-radius: 999px; padding: 0 0.5rem; margin-left: 0.5rem; vertical-align: middle; }
+  .bw-yes { color: rgb(4 120 87); border-color: rgb(110 231 183); }
+  .bw-no { color: rgb(180 83 9); border-color: rgb(252 211 77); }
+  .bw-unknown { color: rgb(71 85 105); border-color: rgb(203 213 225); }
+  .bw-row p { color: rgb(71 85 105); margin-top: 0.25rem; }
+  .bw-row ul { color: rgb(71 85 105); margin-top: 0.25rem; padding-left: 1.1rem; list-style: disc; }
+</style>
+<script>
+(async function () {
+  // The site-wide tool forms sit below this script. Wait for them, or
+  // getTools() counts none.
+  if (document.readyState === 'loading') await new Promise((done) => document.addEventListener('DOMContentLoaded', done));
+  const dt = window.dtBrowser;
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  const MARKS = { yes: ['bw-yes', 'Yes'], no: ['bw-no', 'No'], pass: ['bw-yes', 'Enough'], fail: ['bw-no', 'Not enough'], unknown: ['bw-unknown', 'Cannot tell'] };
+  // One result row: a heading, a mark, sentences, and an optional list.
+  function row(box, title, mark, lines, bullets) {
+    const node = el('div', 'bw-row');
+    const head = el('h3', null, title);
+    if (mark) head.append(el('span', 'bw-mark ' + MARKS[mark][0], MARKS[mark][1]));
+    node.append(head);
+    for (const line of lines) node.append(el('p', null, line));
+    if (bullets && bullets.length) {
+      const list = el('ul');
+      for (const item of bullets) list.append(el('li', null, item));
+      node.append(list);
+    }
+    box.append(node);
+  }
+  const checks = document.getElementById('bw-checks');
+  const hardware = document.getElementById('bw-hardware');
+
+  // ---------- 1. the browser ----------
+  const uad = navigator.userAgentData;
+  let brandName = '', major = 0, platform = '', isChromeBrand = false, mobile = false;
+  if (uad) {
+    let brands = uad.brands || [];
+    try {
+      const high = await uad.getHighEntropyValues(['fullVersionList', 'platformVersion']);
+      if (high.fullVersionList && high.fullVersionList.length) brands = high.fullVersionList;
+    } catch (e) { /* keep the short list */ }
+    const real = brands.filter((b) => !/Not/i.test(b.brand));
+    const named = real.find((b) => b.brand !== 'Chromium') || real[0];
+    if (named) { brandName = `${named.brand} ${named.version}`; major = parseInt(named.version, 10) || 0; }
+    isChromeBrand = real.some((b) => b.brand === 'Google Chrome');
+    platform = uad.platform || '';
+    mobile = !!uad.mobile;
+    row(checks, 'Browser', null, [
+      `${brandName || 'A Chromium browser'} on ${platform || 'an unnamed system'}${mobile ? ' (mobile)' : ''}.`,
+      `It reports these names: ${real.map((b) => `${b.brand} ${b.version}`).join('; ') || 'none'}.`,
+      isChromeBrand ? 'It is Google Chrome.' : 'It is built on Chromium but is not Google Chrome. The difference matters for the on-device model, below.']);
+  } else {
+    row(checks, 'Browser', null, [
+      'This browser does not report its name and version in the way Chrome does. Firefox and Safari do not.',
+      `It identifies itself as: ${navigator.userAgent}`]);
+  }
+  const onLiveSite = location.hostname === 'nycschools.datatribune.io';
+  row(checks, 'Secure Connection', window.isSecureContext ? 'yes' : 'no', [window.isSecureContext
+    ? 'The page arrived over a secure connection. WebMCP and the model interface need one.'
+    : 'The page did not arrive over a secure connection, so the browser hides WebMCP and the model interface. The fix is to open the site at an https address, or at localhost.']);
+
+  // ---------- 2. WebMCP ----------
+  if (dt.hasTools) {
+    const mc = document.modelContext ?? navigator.modelContext;
+    let count = null;
+    try { count = (await mc.getTools()).length; } catch (e) { /* older build */ }
+    row(checks, 'WebMCP', 'yes', [count === null
+      ? 'The browser has WebMCP, but it did not return a tool list.'
+      : `The browser has WebMCP. This page gives it ${count} tool${count === 1 ? '' : 's'}.`]);
+  } else {
+    const why = [];
+    if (!uad) why.push('This is not Chrome. No other browser has WebMCP turned on for this site.');
+    else if (mobile) why.push('WebMCP works only in Chrome on a computer, not on a phone or tablet.');
+    else {
+      if (!window.isSecureContext) why.push('The connection is not secure. See the row above.');
+      if (major && major < 149) why.push(`This browser is version ${major}. WebMCP starts at version 149 of Chrome and Chromium.`);
+      if (!onLiveSite) why.push('This copy of the site is not at nycschools.datatribune.io. The permission that turns WebMCP on without a setting works only at that address.');
+      if (!isChromeBrand) why.push(`${brandName || 'This browser'} is not Google Chrome. Chromium has WebMCP from version 149, but it stays off until you turn on a setting.`);
+      why.push('To turn WebMCP on yourself, copy chrome://flags/#enable-webmcp-testing into the address bar, turn the setting on, and restart the browser.');
+    }
+    row(checks, 'WebMCP', 'no', ['The browser does not have WebMCP on this page. Probable reason:'], why);
+  }
+
+  // ---------- 3. the on-device model ----------
+  const availability = await dt.availability();
+  const SUPPORTED_OS = ['Windows', 'macOS', 'Linux', 'Chrome OS'];
+  const osFails = !!platform && !SUPPORTED_OS.includes(platform);
+  // Hardware facts, gathered first so the model row can name a cause.
+  const memory = navigator.deviceMemory;            // Chrome only, capped at 8
+  const cores = navigator.hardwareConcurrency;
+  let adapter = null, gpuText = '';
+  if (navigator.gpu) {
+    try { adapter = await navigator.gpu.requestAdapter(); } catch (e) { adapter = null; }
+    if (adapter) {
+      const info = adapter.info || {};
+      gpuText = [info.vendor, info.architecture, info.description].filter(Boolean).join(', ');
+    }
+  }
+  const softwareGpu = !!(adapter && (adapter.isFallbackAdapter || (adapter.info && adapter.info.isFallbackAdapter)));
+  const memoryFails = typeof memory === 'number' && memory < 8;
+  const coresFail = typeof cores === 'number' && cores < 4;
+  const gpuFails = !adapter || softwareGpu;
+  const intelGpu = !!(adapter && adapter.info && /intel/i.test(adapter.info.vendor || ''));
+  // The model has two routes: a strong graphics card, or memory + cores.
+  const causes = [];
+  if (osFails) causes.push(`The system is ${platform}. The model runs on Windows, macOS, Linux and Chromebook Plus only.`);
+  if (memoryFails) causes.push(`The computer reports about ${memory} GB of memory. Without a strong graphics card, the model needs 16 GB.`);
+  if (coresFail) causes.push(`The computer reports ${cores} processor cores. Without a strong graphics card, the model needs 4 or more.`);
+  if (memoryFails || coresFail) {
+    causes.push(!adapter ? 'The browser gave this page no graphics card to use, so the graphics-card route is closed too.'
+      : softwareGpu ? 'The graphics card this page can see is a software one, so the graphics-card route is closed too.'
+      : intelGpu ? 'The graphics card is from Intel. Intel graphics built into the processor share the computer’s memory and usually do not have the “more than 4 GB” of video memory that the other route needs.'
+      : 'That leaves the graphics-card route, which needs more than 4 GB of video memory. A page cannot read that figure.');
+  }
+  const verdict = osFails || ((memoryFails || coresFail) && (gpuFails || intelGpu)) ? 'no' : 'unknown';
+
+  if (availability === 'missing') {
+    const why = [];
+    if (!uad) why.push('This is not Chrome. The on-device model is a Chrome feature.');
+    else if (mobile) why.push('Chrome does not run the on-device model on phones and tablets.');
+    else {
+      if (!window.isSecureContext) why.push('The connection is not secure. See the row above.');
+      if (!isChromeBrand) why.push(`${brandName || 'This browser'} is not Google Chrome. The model interface is only in Google Chrome, version 148 or later. Chromium does not include it. This is a fact about the browser, not about the computer.`);
+      else if (major && major < 148) why.push(`This is Chrome ${major}. The model interface for web pages starts at Chrome 148.`);
+      if (!why.length) why.push('A page cannot see the reason. The feature may be turned off by a setting or a policy.');
+      why.push('Whether this computer could run the model in Google Chrome is a separate question. See “What This Computer Reports”, below.');
+    }
+    row(checks, 'On-Device AI Model', 'no', [
+      'The browser has no interface for an on-device model (LanguageModel is not defined). Chrome was not asked whether the model can run. Probable reason:'], why);
+  } else if (availability === 'unavailable') {
+    row(checks, 'On-Device AI Model', 'no', [
+      'The browser has the model interface, and Chrome answered “unavailable”. That means Chrome will not run the model on this computer. Probable reason:'],
+      causes.length ? causes : ['The facts a page can read all pass. The cause is one a page cannot see: video memory, free disk space, or a setting. Chrome’s own page, named below, gives the reason.']);
+  } else {
+    const text = {
+      available: 'Chrome answered “available”. The model is on this computer and ready.',
+      downloadable: 'Chrome answered “downloadable”. This computer can run the model, but Chrome has not downloaded it. The download starts with your first question in the panel.',
+      downloading: 'Chrome answered “downloading”. This computer can run the model, and the download is in progress.',
+    }[availability];
+    if (text) row(checks, 'On-Device AI Model', 'yes', [text]);
+    else row(checks, 'On-Device AI Model', 'unknown', ['The browser has the model interface, but Chrome did not answer in 5 seconds. Load the page again. This also happens when Chrome runs without a window.']);
+  }
+
+  // ---------- 4. hardware rows ----------
+  // The hardware question is separate from whether the browser has the
+  // interface: on most computers the hardware is what blocks the model.
+  const canRun = ['available', 'downloadable', 'downloading'].includes(availability);
+  row(hardware, 'Can This Computer Run the Model?', canRun ? 'yes' : verdict, canRun
+    ? ['Yes. Chrome says so, and Chrome can see the whole computer.']
+    : verdict === 'no'
+      ? ['Probably not, in any version of Chrome. Reasons:']
+      : causes.length
+        ? ['This page cannot tell. One route is closed:']
+        : ['This page cannot tell. The facts it can read all pass, but it cannot read video memory or free disk space.'],
+    canRun ? [] : causes);
+  if (typeof memory === 'number') {
+    row(hardware, 'Memory', memory >= 8 ? 'unknown' : 'fail', [memory >= 8
+      ? 'The browser reports 8 GB or more. It never reports a figure above 8, so this page cannot confirm the 16 GB that the model needs without a strong graphics card.'
+      : `The browser reports about ${memory} GB. That is below the 16 GB that the model needs without a strong graphics card.`]);
+  } else {
+    row(hardware, 'Memory', 'unknown', ['This browser does not tell a page how much memory the computer has.']);
+  }
+  if (typeof cores === 'number') {
+    row(hardware, 'Processor Cores', cores >= 4 ? 'pass' : 'fail', [`The browser reports ${cores}. The model needs 4 or more when it runs without a strong graphics card.`]);
+  } else {
+    row(hardware, 'Processor Cores', 'unknown', ['This browser does not report a count.']);
+  }
+  if (!navigator.gpu) {
+    row(hardware, 'Graphics Card', 'unknown', ['This browser has no WebGPU, so a page cannot ask about the graphics card.']);
+  } else if (!adapter) {
+    row(hardware, 'Graphics Card', 'fail', ['The browser has WebGPU but gave this page no graphics card. The model cannot use the graphics-card route here.']);
+  } else {
+    row(hardware, 'Graphics Card', softwareGpu ? 'fail' : 'unknown', [
+      gpuText ? `The browser reports: ${gpuText}.` : 'The browser reports a graphics card but gives no details.',
+      softwareGpu ? 'This is a software graphics card, not a real one.'
+        : 'A page cannot read how much video memory it has, so this page cannot confirm the “more than 4 GB” that the model needs.']);
+  }
+  let quotaText = 'This browser does not report a storage figure.';
+  try {
+    const estimate = await navigator.storage.estimate();
+    if (estimate && estimate.quota) quotaText = `The browser lets this site store up to about ${Math.round(estimate.quota / 1e9)} GB. That is a limit for this site, not the free space on the disk, so this page cannot confirm the 22 GB that the model needs.`;
+  } catch (e) { /* keep the default */ }
+  row(hardware, 'Disk Space', 'unknown', [quotaText]);
+  if (platform) {
+    row(hardware, 'Operating System', osFails ? 'fail' : 'pass', [osFails
+      ? `${platform}. The model does not run on this system.`
+      : `${platform}. The model runs on this system${platform === 'Chrome OS' ? ', on Chromebook Plus devices only' : ''}. A page cannot check the exact version.`]);
+  } else {
+    row(hardware, 'Operating System', 'unknown', ['This browser does not report the system in the way Chrome does.']);
+  }
+
+  // ---------- 5. the tier, in plain words ----------
+  const tier = dt.tier(availability);
+  const box = document.getElementById('bw-tier');
+  const words = {
+    A: ['This browser does not have WebMCP on this site.',
+      'You can read every page as usual. The site shows no side panel, and an AI agent in this browser cannot use the site’s tools.'],
+    B: ['This browser has WebMCP, but it cannot run an AI model on this computer.',
+      'The side panel lists the tools this site gives AI agents, and you can run them yourself. You cannot ask questions in the panel.'],
+    C: ['This browser has WebMCP, and it can run an AI model on this computer.',
+      'The side panel takes questions. The model runs on your computer and gets its answers from this site’s tools.'],
+  }[tier];
+  box.replaceChildren(el('p', 'font-semibold ' + (tier === 'A' ? 'text-amber-700' : 'text-emerald-700'), words[0]), el('p', 'text-slate-600 mt-1', words[1]));
+  if (tier === 'A' && dt.hasModel && availability !== 'unavailable') {
+    box.append(el('p', 'text-slate-600 mt-1', 'This browser does have a model interface. Without WebMCP the panel stays off, but you can turn it on by adding ?chat=on to any address on this site.'));
+  }
+  const home = el('a', 'underline', 'Go to the home page');
+  home.href = '/';
+  const last = el('p', 'mt-2');
+  last.append(home);
+  box.append(last);
+
+  // ---------- copy button ----------
+  const copy = document.getElementById('bw-copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('bw-internals').textContent);
+      copy.textContent = 'Copied';
+    } catch (e) {
+      copy.textContent = 'Select the text and copy it';
+    }
+  });
+})();
+</script>
+{% endblock %}

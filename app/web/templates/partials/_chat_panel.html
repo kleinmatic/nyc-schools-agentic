@@ -323,14 +323,9 @@
   }
 
   // ---------- the on-device model ----------
-  const LM_OPTIONS = {
-    expectedInputs: [{ type: 'text', languages: ['en'] }],
-    expectedOutputs: [{ type: 'text', languages: ['en'] }],
-  };
-  let availability = 'unavailable';
-  if (typeof LanguageModel !== 'undefined') {
-    try { availability = await LanguageModel.availability(LM_OPTIONS); } catch (e) { availability = 'unavailable'; }
-  }
+  const LM_OPTIONS = window.dtBrowser.modelOptions;
+  const found = await window.dtBrowser.availability();
+  const availability = found === 'missing' || found === 'no-answer' ? 'unavailable' : found;
   const toolSource = live ? 'It uses this page’s WebMCP tools.' : 'WebMCP is off in this browser, so it uses this page’s search forms.';
   if (live && availability === 'unavailable') {
     // WebMCP without a usable model: tools mode. This also moves a page
