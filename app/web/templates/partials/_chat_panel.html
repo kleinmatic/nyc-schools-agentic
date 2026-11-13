@@ -1,10 +1,14 @@
-{# Chat panel, docked on the right of every page.
+{# Side panel, docked on the right of every page. Two modes, picked by
+   the tier class that base.html's <head> script sets on <html>:
 
-   On by default when the browser has WebMCP and the Prompt API.
-   `?chat=off` on any URL turns it off for this browser (localStorage key
-   `dt-chat`); `?chat=on` forces it on. The classes that show it are set
-   by a small script in base.html's <head>, so the page lays out at its
-   final width before charts measure their containers.
+   - wm-tier-c, chat mode: an in-page agent on Chrome's on-device model.
+   - wm-tier-b, tools mode: the browser has WebMCP but no usable model.
+     The panel lists the page's tools with a Run button for each, and
+     logs calls that an outside agent makes.
+
+   On by default when the browser has WebMCP. `?chat=off` on any URL
+   turns it off for this browser (localStorage key `dt-chat`); `?chat=on`
+   forces it on.
 
    The panel is an in-page agent. It runs on Chrome's on-device model
    (Prompt API) and can do only what the page's WebMCP tools can do: it
@@ -13,29 +17,46 @@
    falls back to the page's tool forms and their format=json endpoints.
 
    All model and tool text is written with textContent, never as HTML. #}
-<button id="dt-chat-launch" type="button" aria-controls="dt-chat">Ask the Data</button>
-<aside id="dt-chat" aria-label="Ask the Data">
+<button id="dt-chat-launch" type="button" aria-controls="dt-chat"><span class="dt-mode-chat">Ask the Data</span><span class="dt-mode-tools">This Page’s Tools</span></button>
+<aside id="dt-chat" aria-label="Site tools and questions">
   <div class="dt-chat-head">
     <div>
-      <p class="dt-chat-title">Ask the Data</p>
-      <p id="dt-chat-status" class="dt-chat-sub">Checking for an on-device model…</p>
+      <p class="dt-chat-title"><span class="dt-mode-chat">Ask the Data</span><span class="dt-mode-tools">This Page’s Tools</span></p>
+      <p id="dt-chat-status" class="dt-chat-sub dt-mode-chat">Checking for an on-device model…</p>
+      <p class="dt-chat-sub dt-mode-tools">An AI agent in your browser can use these tools. To ask questions here, use Chrome with its built-in AI.</p>
     </div>
     <div class="dt-chat-head-buttons">
-      <button id="dt-chat-clear" type="button" title="Clear the conversation">Clear</button>
+      <button id="dt-chat-clear" class="dt-mode-chat" type="button" title="Clear the conversation">Clear</button>
       <button id="dt-chat-close" type="button" title="Hide the panel" aria-label="Hide the panel">→</button>
     </div>
   </div>
   <div id="dt-chat-log" class="dt-chat-log" aria-live="polite"></div>
-  <div id="dt-chat-starters" class="dt-chat-starters"></div>
-  <form id="dt-chat-form" class="dt-chat-form">
+  <div id="dt-chat-starters" class="dt-chat-starters dt-mode-chat"></div>
+  <form id="dt-chat-form" class="dt-chat-form dt-mode-chat">
     <label class="sr-only" for="dt-chat-input">Question</label>
     <textarea id="dt-chat-input" rows="2" disabled placeholder="Ask about a school, an address or a neighborhood"></textarea>
     <button id="dt-chat-send" type="submit" disabled>Ask</button>
   </form>
-  <p class="dt-chat-foot">Answers come from this page’s tools. The model runs in your browser. <a href="/model-home">How it works</a></p>
+  <p class="dt-chat-foot"><span class="dt-mode-chat">Answers come from this page’s tools. The model runs in your browser.</span> <a href="/model-home">How it works</a></p>
 </aside>
 <style>
   #dt-chat, #dt-chat-launch { display: none; }
+  /* Mode switch. `html` in each selector outranks the layout rules below. */
+  html .dt-mode-tools, html.wm-tier-b .dt-mode-chat { display: none; }
+  html.wm-tier-b span.dt-mode-tools { display: inline; }
+  html.wm-tier-b p.dt-mode-tools { display: block; }
+  .dt-tool-card { border: 1px solid #c8c8c8; border-radius: 0.5rem; padding: 0.6rem 0.7rem; }
+  .dt-tool-card h3 { font-size: 0.85rem; font-weight: 600; }
+  .dt-tool-card code { font-size: 0.7rem; color: #6b6b6b; overflow-wrap: anywhere; }
+  .dt-tool-card p { font-size: 0.75rem; color: #333; margin-top: 0.25rem; }
+  .dt-tool-card label { display: block; font-size: 0.7rem; color: #6b6b6b; margin-top: 0.5rem; }
+  .dt-tool-card input { width: 100%; border: 1px solid #c8c8c8; border-radius: 0.375rem; padding: 0.3rem 0.5rem; font: inherit; font-size: 0.8rem; }
+  .dt-tool-card input:focus { outline: none; border-color: #000; }
+  .dt-tool-card button { margin-top: 0.5rem; background: #000; color: #fff; border: 0; border-radius: 0.375rem; padding: 0.25rem 0.9rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+  .dt-tool-card button:disabled { opacity: 0.4; cursor: default; }
+  .dt-tool-result { margin-top: 0.5rem; padding: 0.5rem 0.6rem; max-height: 16rem; overflow: auto; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 0.375rem; font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .dt-tool-card .dt-chat-links { margin-top: 0.5rem; }
+  .dt-agent-line { font-size: 0.75rem; color: #6d28d9; }
   html.dt-chat-enabled #dt-chat-launch {
     display: block; position: fixed; right: 0; top: 40%; z-index: 40;
     writing-mode: vertical-rl; padding: 0.9rem 0.5rem;
@@ -100,7 +121,7 @@
     try { localStorage.setItem('dt-chat', state); } catch (e) { /* storage is off */ }
     root.classList.toggle('dt-chat-open', state === 'open');
   };
-  $('dt-chat-launch').addEventListener('click', () => { setState('open'); input.focus(); });
+  $('dt-chat-launch').addEventListener('click', () => { setState('open'); if (!input.disabled) input.focus(); });
   $('dt-chat-close').addEventListener('click', () => setState('closed'));
 
   // ---------- conversation, kept across page loads in this tab ----------
@@ -133,8 +154,6 @@
     panelLog.append(el('div', 'dt-chat-bot' + (turn.error ? ' dt-chat-error' : ''), turn.text));
     if (turn.links && turn.links.length) panelLog.append(linksNode(turn.links));
   }
-  turns.forEach(draw);
-  scrollDown();
   $('dt-chat-clear').addEventListener('click', () => {
     turns = [];
     save();
@@ -191,6 +210,118 @@
       .filter((link) => link.href !== here).slice(0, 5);
   }
 
+  // ---------- tools mode: list the page's tools, run them by hand ----------
+  // A tool result as indented "label: value" lines, not raw JSON.
+  function readable(value, indent) {
+    const lines = [];
+    const empty = (v) => v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => {
+        if (empty(item)) return;
+        if (typeof item === 'object') { lines.push(`${indent}${i + 1}.`, ...readable(item, indent + '   ')); }
+        else lines.push(`${indent}• ${item}`);
+      });
+      return lines;
+    }
+    for (const [key, v] of Object.entries(value)) {
+      if (empty(v)) continue;
+      const name = key.replace(/_/g, ' ');
+      if (typeof v === 'object') {
+        const inner = readable(v, indent + '   ');
+        if (inner.length) lines.push(`${indent}${name}:`, ...inner);
+      } else lines.push(`${indent}${name}: ${v}`);
+    }
+    return lines;
+  }
+  function resultText(raw) {
+    if (raw == null) return 'The tool returned no data.';
+    let data = raw;
+    if (typeof raw === 'string') { try { data = JSON.parse(raw); } catch (e) { return raw; } }
+    if (data === null || typeof data !== 'object') return String(data);
+    return readable(data, '').join('\n') || 'The tool returned no data.';
+  }
+  function toolsMode() {
+    const typed = new Map();      // tool name → {param: text}, kept across redraws
+    const shown = new Map();      // tool name → {text, links}, the last result
+    const running = new Set();    // tools this panel is running now
+    const agentLog = el('div');
+    let seq = 0;
+    async function drawTools() {
+      const mine = ++seq;
+      const tools = (await pageTools()).map((t) => ({
+        name: t.name, title: t.title, description: t.description, inputSchema: asObject(t.inputSchema), handle: t }));
+      if (mine !== seq) return;
+      panelLog.replaceChildren(...tools.map(card), agentLog);
+    }
+    function card(tool) {
+      const node = el('div', 'dt-tool-card');
+      node.append(el('h3', null, tool.title || tool.name.replace(/[-_]/g, ' ')), el('code', null, tool.name), el('p', null, tool.description));
+      const schema = tool.inputSchema || {};
+      const required = schema.required || [];
+      const saved = typed.get(tool.name) || {};
+      const fields = {};
+      const toolForm = el('form');
+      for (const [key, spec] of Object.entries(schema.properties || {})) {
+        const id = `dt-tool-${tool.name}-${key}`;
+        const list = spec && spec.type === 'array';
+        const label = el('label', null, (key === 'q' ? 'search text' : key.replace(/_/g, ' ')) + (required.includes(key) ? '' : ' (optional)') + (list ? ', separated by commas' : ''));
+        label.htmlFor = id;
+        const field = el('input');
+        field.id = id;
+        field.type = 'text';
+        field.autocomplete = 'off';
+        field.title = (spec && spec.description) || '';
+        field.value = saved[key] || '';
+        const source = formFor(tool.name);
+        if (source && source.elements[key]) field.placeholder = source.elements[key].placeholder || '';
+        field.addEventListener('input', () => typed.set(tool.name, { ...(typed.get(tool.name) || {}), [key]: field.value }));
+        fields[key] = { field, list };
+        toolForm.append(label, field);
+      }
+      const run = el('button', null, 'Run');
+      run.type = 'submit';
+      toolForm.append(run);
+      node.append(toolForm);
+      const last = shown.get(tool.name);
+      if (last) {
+        node.append(el('div', 'dt-tool-result', last.text));
+        if (last.links.length) node.append(linksNode(last.links));
+      }
+      toolForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const args = {};
+        for (const [key, { field, list }] of Object.entries(fields)) {
+          const text = field.value.trim();
+          if (text) args[key] = list ? text.split(',').map((part) => part.trim()).filter(Boolean) : text;
+          else if (required.includes(key)) { field.focus(); return; }
+        }
+        run.disabled = true;
+        running.add(tool.name);
+        let text, links = [];
+        try {
+          const raw = await runTool(tool.handle, args);
+          text = resultText(raw);
+          links = schoolLinks(typeof raw === 'string' ? raw : JSON.stringify(raw));
+        } catch (err) {
+          text = `The tool did not run. ${err.name}: ${err.message}`;
+        }
+        running.delete(tool.name);
+        shown.set(tool.name, { text, links });
+        await drawTools();
+      });
+      return node;
+    }
+    // A call that this panel did not start came from an agent.
+    mc.addEventListener('toolactivated', (e) => {
+      if (running.has(e.toolName)) return;
+      const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      agentLog.append(el('p', 'dt-agent-line', `${time}: an agent called ${e.toolName}.`));
+      scrollDown();
+    });
+    mc.addEventListener('toolchange', drawTools);
+    drawTools();
+  }
+
   // ---------- the on-device model ----------
   const LM_OPTIONS = {
     expectedInputs: [{ type: 'text', languages: ['en'] }],
@@ -201,11 +332,16 @@
     try { availability = await LanguageModel.availability(LM_OPTIONS); } catch (e) { availability = 'unavailable'; }
   }
   const toolSource = live ? 'It uses this page’s WebMCP tools.' : 'WebMCP is off in this browser, so it uses this page’s search forms.';
-  if (availability === 'unavailable' && root.classList.contains('dt-chat-auto')) {
-    // The panel came on by default, and this browser cannot run it.
-    root.classList.remove('dt-chat-enabled', 'dt-chat-open');
+  if (live && availability === 'unavailable') {
+    // WebMCP without a usable model: tools mode. This also moves a page
+    // that started in wm-tier-c, where the model turned out unavailable.
+    root.classList.remove('wm-tier-c');
+    root.classList.add('wm-tier-b');
+    toolsMode();
     return;
   }
+  turns.forEach(draw);
+  scrollDown();
   if (availability === 'unavailable') {
     statusLine.textContent = 'This browser has no on-device model. The panel needs desktop Chrome with built-in AI.';
   } else {

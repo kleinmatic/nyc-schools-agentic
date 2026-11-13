@@ -382,24 +382,49 @@ def test_model_home_is_linked_from_footer_and_llms_txt(client):
     assert "/model-home" in client.get("/llms.txt").text
 
 
-def test_chat_panel_ships_on_every_page_and_needs_webmcp_by_default(client):
-    """The chat panel's markup ships on every page, hidden by CSS. A head
-    script shows it by default only when the browser has WebMCP and the
-    Prompt API; `?chat=off` / `?chat=on` override. It declares no WebMCP
-    tools of its own — it only calls the page's tools."""
+def test_side_panel_ships_on_every_page_and_follows_the_browser_tier(client):
+    """The side panel's markup ships on every page, hidden by CSS. A head
+    script sets a tier class (wm-tier-b: WebMCP only, tools mode;
+    wm-tier-c: WebMCP + Prompt API, chat mode) and shows the panel by
+    default only when the browser has WebMCP; `?chat=off` / `?chat=on`
+    override. The panel declares no WebMCP tools of its own."""
+    from pathlib import Path
+
     for path in ("/", "/school/02M475", "/model-home", "/sources"):
         html = client.get(path).text
         assert 'id="dt-chat"' in html, path
         assert "#dt-chat, #dt-chat-launch { display: none; }" in html, path
         assert "localStorage.setItem('dt-chat', 'off')" in html, path
-        assert "typeof LanguageModel !== 'undefined'" in html, path
+        assert "hasModel ? 'wm-tier-c' : 'wm-tier-b'" in html, path
         # The trial tag must precede the script that checks for WebMCP.
-        assert html.index('http-equiv="origin-trial"') < html.index("dt-chat-auto"), path
-    from pathlib import Path
+        assert html.index('http-equiv="origin-trial"') < html.index("hasModel ? 'wm-tier-c'"), path
     partial = (Path(__file__).parent.parent / "app/web/templates/partials/_chat_panel.html").read_text()
     body = partial.split("#}", 1)[1]
     assert "toolname=" not in body.split("<script>")[0]
     assert "registerTool" not in body
     assert "innerHTML" not in body
-    # No judgment words in the model's instructions beyond the ban itself.
     assert "Never say best, worst, better or worse." in body
+    # Tools mode: its title, its note, and the move from tier C to tier B
+    # when the model turns out to be unavailable.
+    assert "This Page’s Tools" in body
+    assert "To ask questions here, use Chrome with its built-in AI." in body
+    assert "root.classList.add('wm-tier-b')" in body
+
+
+def test_homepage_carries_one_webmcp_line_per_browser_tier(client):
+    """The homepage sends all three WebMCP lines; the tier class picks one
+    with CSS. Line A is the visible default, so readers without JavaScript
+    and agents that fetch the HTML get the accurate one. No em dashes."""
+    html = client.get("/").text
+    line = html[html.index('<p class="wm-line'):]
+    line = line[: line.index("</p>")]
+    assert "If you use a recent version of Chrome on a computer, you can try" in line
+    assert "The panel at the right lists the tools this site gives AI agents" in line
+    assert "can run an AI model on this computer" in line
+    assert line.count('href="/model-home"') == 3
+    assert 'href="?chat=on"' in line
+    assert "—" not in line
+    for hook in ("wm-line-a", "wm-line-b", "wm-line-c", "wm-wide", "wm-narrow", "wm-turn-on"):
+        assert hook in line, hook
+    assert ".wm-line-b, .wm-line-c, .wm-turn-on, .wm-narrow { display: none; }" in html
+    assert "html.wm-tier-b .wm-line-b, html.wm-tier-c .wm-line-c { display: inline; }" in html
