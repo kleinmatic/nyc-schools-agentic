@@ -216,7 +216,8 @@ class SubgroupStatus(BaseModel):
 
 
 class ChronicAbsenteeismRow(BaseModel):
-    year: int
+    year: int  # NYSED's SPRING year: 2025 = SY 2024-25. NOT the fall-year `ay`.
+    school_year: Optional[str] = None  # "2024-25" — use this to name the year
     level: Optional[str] = None  # "EM" | "HS"
     subgroup: str
     enrollment: Optional[int] = None
@@ -292,7 +293,8 @@ class SwdGradOutcome(BaseModel):
 
 
 class SwdChronicOutcome(BaseModel):
-    year: int
+    year: int  # NYSED's SPRING year: 2025 = SY 2024-25. NOT the fall-year `ay`.
+    school_year: Optional[str] = None  # "2024-25"
     enrollment: Optional[int] = None
     absent_count: Optional[int] = None
     absent_rate: Optional[float] = None    # fraction in [0, 1]
@@ -399,6 +401,7 @@ class PeerRank(BaseModel):
     rank: int                # 1-based; #1 = highest in cohort
     total: int               # cohort size (≥ 2)
     cohort_label: str        # "elementary schools"
+    school_year: Optional[str] = None  # "2024-25" — the year the value and rank are from
     extreme_high: Optional[PeerExtreme] = None  # rank #1 in cohort
     extreme_low: Optional[PeerExtreme] = None   # rank #total in cohort
 

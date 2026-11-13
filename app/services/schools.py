@@ -797,6 +797,7 @@ def _chronic_for(beds: str) -> list[ChronicAbsenteeismRow]:
     return [
         ChronicAbsenteeismRow(
             year=_opt_int(r.get("YEAR")) or 0,
+            school_year=_nysed_school_year(r.get("YEAR")),
             level=_opt_str(r.get("LEVEL")),
             subgroup=_opt_str(r.get("SUBGROUP_NAME")) or "Unknown",
             enrollment=_opt_int(r.get("ENROLLMENT")),
@@ -970,10 +971,30 @@ def _rank_in_cohort(
     return idx[0] + 1, len(sorted_), float(val), sorted_.iloc[0], sorted_.iloc[-1]
 
 
+def _nysed_school_year(year) -> Optional[str]:
+    """NYSED's YEAR is the SPRING year: 2025 → '2024-25'. Every other year
+    in this app is the fall-year `ay`, so NYSED rows carry this label."""
+    y = _opt_int(year)
+    return f"{y - 1}-{y % 100:02d}" if y else None
+
+
+def _dbn_for_beds(beds: str) -> str:
+    """DBN for a 12-digit BEDS code; empty when demographics has no match."""
+    df = data.get_store().demographics
+    latest = df[df["ay"] == df["ay"].max()]
+    try:
+        rows = latest[latest["beds"] == int(beds)]
+    except (TypeError, ValueError):
+        return ""
+    return str(rows.iloc[0]["dbn"]) if not rows.empty else ""
+
+
 def _extreme_from_row(row, name_col: str, dbn_col: str, format_value) -> PeerExtreme:
+    key = str(row.get(dbn_col, ""))
     return PeerExtreme(
         school_name=str(row.get(name_col, "")),
-        dbn=str(row.get(dbn_col, "")),
+        # NYSED cohorts are keyed by BEDS code; the field must hold a DBN.
+        dbn=_dbn_for_beds(key) if dbn_col == "ENTITY_CD" else key,
         value_display=format_value(row),
     )
 
@@ -1123,6 +1144,7 @@ def _peer_rank_chronic(dbn: str) -> Optional[PeerRank]:
         rank=rank,
         total=total,
         cohort_label=f"{school_level} schools",
+        school_year=_nysed_school_year(latest_year),
         extreme_high=_extreme_from_row(top, "ENTITY_NAME", "ENTITY_CD", fmt),
         extreme_low=_extreme_from_row(bottom, "ENTITY_NAME", "ENTITY_CD", fmt),
     )
@@ -1240,6 +1262,7 @@ def _swd_chronic_for(beds: str) -> Optional[SwdChronicOutcome]:
     rate = _opt_pct(r.get("ABSENT_RATE"))
     return SwdChronicOutcome(
         year=latest_year,
+        school_year=_nysed_school_year(latest_year),
         enrollment=enrollment,
         absent_count=_opt_int(r.get("ABSENT_COUNT")),
         absent_rate=rate,

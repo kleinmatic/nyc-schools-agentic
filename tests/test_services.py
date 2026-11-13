@@ -1,6 +1,7 @@
 """Smoke tests for the service layer. Hits real cached data."""
 import httpx
 import pytest
+import re
 import respx
 
 from app.services.schools import (
@@ -770,3 +771,27 @@ def test_number_in_dbn_finds_a_school_with_no_number_in_its_name():
     assert "02M114" in [s.dbn for s in search_schools("MS 114", limit=5)]
     assert "84K125" not in [s.dbn for s in search_schools("PS 125", limit=10)]
     assert search_schools("Earth School", limit=5)[0].dbn == "01M364"
+
+
+# ----- NYSED year labels and peer-extreme DBNs (2026-11-13) -----
+
+def test_chronic_rows_carry_a_school_year_label():
+    """NYSED's YEAR is the spring year (2025 = SY 2024-25); everything
+    else here is the fall-year `ay`. An agent read year 2025 as AY 2025.
+    The rows keep `year` and add an unambiguous `school_year`."""
+    from app.services.schools import get_school
+    rows = get_school("84K536").nysed.chronic_absenteeism
+    assert rows
+    for r in rows:
+        assert r.school_year == f"{r.year - 1}-{r.year % 100:02d}"
+
+
+def test_chronic_peer_rank_names_its_year_and_its_extremes_are_dbns():
+    """The rank is for the latest NYSED year only, so it says which. The
+    extremes used to hold 12-digit BEDS codes in `dbn`, which also made a
+    dead /school/<beds> link on the school page."""
+    from app.services.schools import DBN_RE, get_school
+    rank = get_school("84K536").peer_ranks["chronic_absent"]
+    assert rank.school_year and re.fullmatch(r"\d{4}-\d{2}", rank.school_year)
+    for extreme in (rank.extreme_high, rank.extreme_low):
+        assert DBN_RE.match(extreme.dbn) and len(extreme.dbn) == 6, extreme
