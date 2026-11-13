@@ -112,8 +112,43 @@ _NAME_NUMBER_RE = re.compile(r"\b(\d{1,4})\b")
 # feed the fuzzy score.
 _QUERY_NUMBER_RE = re.compile(r"^(?:(ps|is|ms|jhs|hs)\s+)?(\d{1,4})\b")
 
+# The DOE writes a few names long-hand: "Public School 9 The Sarah Smith
+# Garnet School" (13K009), "Middle School 322". Rewritten to the short
+# prefix, in names AND queries, only when a number follows — "Stuyvesant
+# High School" is left alone.
+_LONG_PREFIXES = {
+    "public": "ps",
+    "elementary": "ps",
+    "intermediate": "is",
+    "middle": "ms",
+    "junior high": "jhs",
+    "high": "hs",
+}
+_LONG_PREFIX_RE = re.compile(
+    r"\b(public|elementary|intermediate|middle|junior high|high) school (?=\d)"
+)
+# A borough at the END of a numbered query ("PS 9 Brooklyn", "ps 33 in the
+# bronx"). Only the end, and only on numbered queries: "Bronx Science",
+# "Brooklyn Tech" and "P.S. 195 Manhattan Beach" carry a borough word as
+# part of the name.
+_BOROUGH_WORDS = {
+    "manhattan": "Manhattan",
+    "brooklyn": "Brooklyn",
+    "bklyn": "Brooklyn",
+    "bronx": "Bronx",
+    "queens": "Queens",
+    "staten island": "Staten Island",
+}
+_TRAILING_BOROUGH_RE = re.compile(
+    r"^(.*?\d.*?)(?:\s+in)?(?:\s+the)?\s+(" + "|".join(_BOROUGH_WORDS) + r")$"
+)
+_DIGITS_RE = re.compile(r"\d+")
+
 NUMBER_MATCH_BOOST = 25.0
 PREFIX_CLASS_BOOST = 8.0
+# Smaller than NUMBER_MATCH_BOOST on purpose: the same number in another
+# borough still outranks a different number in the named borough.
+BOROUGH_MATCH_BOOST = 15.0
 
 
 def _search_normalize(name: str) -> str:
@@ -128,7 +163,8 @@ def _search_normalize(name: str) -> str:
     'ps030' has no word boundary in front of the zeros."""
     if not name:
         return ""
-    s = _GLUED_PREFIX_RE.sub(r"\1 \2", _clean_name(name))
+    s = _LONG_PREFIX_RE.sub(lambda m: _LONG_PREFIXES[m.group(1)] + " ", _clean_name(name))
+    s = _GLUED_PREFIX_RE.sub(r"\1 \2", s)
     return _LEADING_ZEROS_RE.sub(r"\1", s)
 
 
@@ -148,6 +184,39 @@ def _name_number(search_name: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def _dbn_number(dbn: str) -> Optional[str]:
+    """The school number the DBN carries ('01M364' → '364'). 256 district
+    schools have no digit in their name ('Earth School'), but people still
+    say 'PS 364'. Charters (district 84) are left out: their DBN numbers
+    are registry numbers that nobody uses as a name."""
+    dbn = dbn or ""
+    if len(dbn) < 4 or dbn.startswith("84"):
+        return None
+    m = _DIGITS_RE.fullmatch(dbn[3:])
+    return m.group(0).lstrip("0") or "0" if m else None
+
+
+def _level_classes(school_level: str) -> set[str]:
+    """Level classes from the grades a school serves ('K-8' → elementary
+    and middle). Used only for a school whose name has no level prefix."""
+    lv = (school_level or "").strip().lower()
+    if lv in ("elementary", "middle", "high"):
+        return {lv}
+    m = re.fullmatch(r"(k|\d+)-(\d+)", lv)
+    if not m:
+        return set()
+    lo = 0 if m.group(1) == "k" else int(m.group(1))
+    hi = int(m.group(2))
+    out = set()
+    if lo <= 5:
+        out.add("elementary")
+    if lo <= 8 and hi >= 6:
+        out.add("middle")
+    if hi >= 9:
+        out.add("high")
+    return out
+
+
 def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
     """Score every school against the query, return the best matches.
 
@@ -160,6 +229,9 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
         (which scores 100 for any token overlap, including "and").
       - Boost +10 for exact clean_name match.
       - Boost +5 for exact short_name match (e.g. "PS 321" → 15K321).
+      - Numbered queries ("ps 9", "is 123 bronx"): a floor of 100 plus
+        NUMBER_MATCH_BOOST for the same school number, PREFIX_CLASS_BOOST
+        for the same level, BOROUGH_MATCH_BOOST for a trailing borough.
       - Secondary tie-breaker: full-string fuzz.ratio against the
         school name. Penalizes length difference, so for queries with
         many partial-100 matches ("Stuyvesant" — Stuyvesant HS,
@@ -177,6 +249,15 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
     q_clean = _clean_name(qry)
     q_search = _search_normalize(qry)
     df = df.copy()
+
+    # "PS 9 Brooklyn": take the borough off the text that is fuzzy-matched
+    # (else it matches every "P.S. NNN Brooklyn" name) and use it as a
+    # borough signal below.
+    q_boro = None
+    trailing = _TRAILING_BOROUGH_RE.match(q_search)
+    if trailing and _QUERY_NUMBER_RE.match(q_search) and "boro" in df.columns:
+        q_search = trailing.group(1).strip()
+        q_boro = _BOROUGH_WORDS[trailing.group(2)]
 
     # Match against the search-normalized name — strips "P.S." → "ps" and
     # leading zeros from any number — so "PS 321" finds "P.S. 321 William
@@ -214,13 +295,29 @@ def _fuzzy_search(df: pd.DataFrame, qry: str, limit: int) -> pd.DataFrame:
     if numbered:
         q_prefix_class = _PREFIX_CLASSES.get(numbered.group(1) or "")
         q_number = numbered.group(2)
-        same_number = df["_search_name"].apply(_name_number) == q_number
-        df.loc[same_number, "_match"] += NUMBER_MATCH_BOOST
+        # The number in the name, or the number in the DBN — the second
+        # one finds schools with no digit in their name.
+        same_number = (df["_search_name"].apply(_name_number) == q_number) | (
+            df["dbn"].apply(_dbn_number) == q_number
+        )
+        # A number match is a floor of 100 as well as a boost: "Earth
+        # School" has no fuzzy likeness to "ps 364" at all.
+        df.loc[same_number, "_match"] = (
+            df.loc[same_number, "_match"].clip(lower=100.0) + NUMBER_MATCH_BOOST
+        )
         if q_prefix_class:
-            same_class = df["school_name"].fillna("").apply(
-                lambda sn: q_prefix_class in _name_prefix_classes(sn)
-            )
+            # The prefix in the name ("public school 9" is "ps 9" once
+            # normalized), else the grades the school serves.
+            def _classes(row) -> set[str]:
+                found = _name_prefix_classes(row["school_name"] or "") | _name_prefix_classes(
+                    row["_search_name"]
+                )
+                return found or _level_classes(row.get("school_level") or "")
+
+            same_class = df.apply(lambda r: q_prefix_class in _classes(r), axis=1)
             df.loc[same_number & same_class, "_match"] += PREFIX_CLASS_BOOST
+        if q_boro:
+            df.loc[df["boro"] == q_boro, "_match"] += BOROUGH_MATCH_BOOST
 
     df = df[df["_match"] >= 80]
     if df.empty:

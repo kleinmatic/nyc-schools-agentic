@@ -729,28 +729,44 @@ def test_numbered_query_with_borough_keeps_the_right_school():
     P.S. 36 — the borough word was matched against school NAMES, and
     P.S. 321 fell out of the top 10. The number boost restores it.
 
-    Note the borough word is still not used as a borough SIGNAL; see
-    test_borough_word_is_not_yet_a_borough_filter."""
+    The trailing borough is also a borough signal now; see
+    test_trailing_borough_ranks_that_boroughs_school_first."""
     results = search_schools("PS 321 Brooklyn", limit=5)
     assert results[0].dbn == "15K321", (
         f"got {[(s.dbn, s.school_name) for s in results[:3]]}"
     )
 
 
-def test_borough_word_is_not_yet_a_borough_filter():
-    """Documents what is still broken, so the next fix has a failing
-    baseline to move.
-
-    'PS 33 Manhattan' now returns P.S. 033 schools (the number boost
-    works), but ranks them in an arbitrary borough order — 10X033 is in
-    the Bronx. Making the borough token an actual filter is the open
-    piece; whoever does it must keep test_named_schools_still_rank_correctly
-    passing, since Bronx Science / Brooklyn Tech / Manhattan Beach all
-    carry a borough word as part of the real name."""
+def test_trailing_borough_ranks_that_boroughs_school_first():
+    """A borough at the end of a numbered query is a borough signal.
+    'PS 33 Manhattan' used to rank 10X033, a Bronx school, first. The
+    same-number schools in other boroughs stay in the list, below."""
     results = search_schools("PS 33 Manhattan", limit=5)
     dbns = [s.dbn for s in results]
-    assert "02M033" in dbns, "the Manhattan P.S. 033 should at least be present"
-    assert results[0].dbn != "02M033", (
-        "borough ranking appears fixed — delete this test and tighten "
-        "test_numbered_query_with_borough_keeps_the_right_school instead"
-    )
+    assert dbns[0] == "02M033", dbns
+    assert "10X033" in dbns
+    assert search_schools("ps 9 in the bronx", limit=5)[0].dbn == "10X009"
+    assert search_schools("PS 1 Staten Island", limit=5)[0].dbn == "31R001"
+
+
+@pytest.mark.parametrize("query", ["PS 9", "P.S. 9", "Public School 9"])
+def test_long_hand_public_school_name_matches_ps_number(query):
+    """13K009 is 'Public School 9 The Sarah Smith Garnet School' — the
+    only name the DOE writes long-hand. It was invisible to 'PS 9'. Found
+    in a real Envoy conversation on 2026-11-12: the agent told the user
+    that Brooklyn has no PS 9."""
+    assert "13K009" in [s.dbn for s in search_schools(query, limit=5)]
+
+
+def test_ps_9_brooklyn_finds_the_brooklyn_ps_9():
+    assert search_schools("PS 9 Brooklyn", limit=5)[0].dbn == "13K009"
+
+
+def test_number_in_dbn_finds_a_school_with_no_number_in_its_name():
+    """256 district schools have no digit in their name. 01M364 is 'Earth
+    School'; 'PS 364' must still find it. Charter DBN numbers do not
+    count: nobody calls 84K125 'PS 125'."""
+    assert search_schools("PS 364", limit=5)[0].dbn == "01M364"
+    assert "02M114" in [s.dbn for s in search_schools("MS 114", limit=5)]
+    assert "84K125" not in [s.dbn for s in search_schools("PS 125", limit=10)]
+    assert search_schools("Earth School", limit=5)[0].dbn == "01M364"
